@@ -1,5 +1,3 @@
-const BASE_URL = 'https://olive-hwaseon.onrender.com';
-
 async function searchByProductName() {
     const keyword = document.getElementById('productSearchInput').value.trim();
     const startDate = document.getElementById('startDate').value;
@@ -17,7 +15,7 @@ async function searchByProductName() {
     try {
         // 서버에 요청 보내기
         const res = await fetch(
-            `${BASE_URL}/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
+            `https://hwaseonad.onrender.com/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
         );
 
         if (!res.ok) {
@@ -67,7 +65,7 @@ function updateSearchTable(results) {
 
 async function fetchRankings(category, date) {
     try {
-        const res = await fetch(`http://olive-hwaseon.onrender.com/api/rankings?category=${category}&date=${date}`);
+        const res = await fetch(`https://hwaseonad.onrender.com/api/rankings?category=${category}&date=${date}`);
         const data = await res.json();
         updateTable(data);
     } catch (err) {
@@ -80,7 +78,7 @@ async function fetchRankings(category, date) {
 async function fetchRankingsByRange(category, startDate, endDate) {
     try {
         const res = await fetch(
-            `${BASE_URL}/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
+            `https://hwaseonad.onrender.com/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
         );
         const data = await res.json();
         updateTable(data);
@@ -132,7 +130,7 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
         return;
     }
 
-    const url = `${BASE_URL}/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
+    const url = `https://hwaseonad.onrender.com/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
 
     fetch(url)
         .then(response => {
@@ -166,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('검색어와 날짜 범위를 모두 입력하세요.');
             return;
         }
-        const url = `${BASE_URL}/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
+        const url = `https://hwaseonad.onrender.com/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
 
         fetch(url)
             .then(response => {
@@ -190,28 +188,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
 document.addEventListener('keydown', async (event) => {
     if (event.ctrlKey && event.key === 'Enter') {
-      const urlToCapture = window.location.href;
-      const filenameInput = prompt('저장할 파일명을 입력하세요 (확장자 제외):');
-  
-      if (!filenameInput) return;
-  
-      try {
-        const res = await fetch(`${BASE_URL}/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}`);
-        const { filename } = await res.json();
-  
-        const img = document.createElement('img');
-        img.src = `${BASE_URL}/${filename}`;
-        img.style.maxWidth = '100%';
-        img.style.border = '1px solid #ccc';
-        img.style.marginTop = '20px';
-        document.body.appendChild(img);
-      } catch (err) {
-        console.error('캡처 실패:', err);
-        alert('캡처 실패');
-      }
+        const urlToCapture = window.location.href;
+        const filenameInput = prompt('저장할 파일명을 입력하세요 (확장자 제외):');
+
+        if (!filenameInput) return;
+
+        try {
+            const res = await fetch(`https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}`);
+            const { filename } = await res.json();
+
+            const img = document.createElement('img');
+            img.src = `https://hwaseonad.onrender.com.onrender.com/${filename}`;
+            img.style.maxWidth = '100%';
+            img.style.border = '1px solid #ccc';
+            img.style.marginTop = '20px';
+            document.body.appendChild(img);
+        } catch (err) {
+            console.error('캡처 실패:', err);
+            alert('캡처 실패');
+        }
     }
-  });
-  
+});
+
 
 
 
@@ -241,35 +239,35 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
     const select = document.getElementById('captureSelect');
     const openBtn = document.getElementById('openCaptureBtn');
-  
+
     // 이미지 목록 불러와서 select에 삽입
-    fetch('${BASE_URL}/api/captures')
-      .then(res => res.json())
-      .then(data => {
-        data.forEach(item => {
-        const option = document.createElement('option');
-          option.value = item.filename || item; // DB 기반 or 파일명만 전달되는 경우 대응
-          option.textContent = item.filename || item;
-          select.appendChild(option);
+    fetch('https://hwaseonad.onrender.com/api/captures')
+        .then(res => res.json())
+        .then(data => {
+            data.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.filename || item; // DB 기반 or 파일명만 전달되는 경우 대응
+            option.textContent = item.filename || item;
+            select.appendChild(option);
+            });
+        })
+        .catch(err => {
+            console.error('캡처 목록 불러오기 실패:', err);
         });
-      })
-      .catch(err => {
-        console.error('캡처 목록 불러오기 실패:', err);
-      });
-  
-    // 선택한 이미지 새 탭 열기
-    openBtn.addEventListener('click', () => {
-      const selected = select.value;
-      if (!selected) {
-        alert('이미지를 선택하세요.');
-        return;
-      }
-  
-      const imageUrl = `${BASE_URL}/${selected}`;
-      window.open(imageUrl, '_blank');
+
+        // 선택한 이미지 새 탭 열기
+        openBtn.addEventListener('click', () => {
+        const selected = select.value;
+        if (!selected) {
+            alert('이미지를 선택하세요.');
+            return;
+        }
+
+        const imageUrl = `https://hwaseonad.onrender.com/${selected}`;
+        window.open(imageUrl, '_blank');
     });
-  });
-  
+});
+
 
 
 
