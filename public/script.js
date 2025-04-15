@@ -1,3 +1,7 @@
+const BASE_URL = location.hostname === 'localhost'
+    ? 'http://localhost:5001'
+    : 'https://olive-hwaseon.onrender.com';
+
 async function searchByProductName() {
     const keyword = document.getElementById('productSearchInput').value.trim();
     const startDate = document.getElementById('startDate').value;
@@ -15,7 +19,7 @@ async function searchByProductName() {
     try {
         // 서버에 요청 보내기
         const res = await fetch(
-            `http://olive-hwaseon.onrender.com/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
+            `${BASE_URL}/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
         );
 
         if (!res.ok) {
@@ -78,7 +82,7 @@ async function fetchRankings(category, date) {
 async function fetchRankingsByRange(category, startDate, endDate) {
     try {
         const res = await fetch(
-            `http://olive-hwaseon.onrender.com/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
+            `${BASE_URL}/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
         );
         const data = await res.json();
         updateTable(data);
@@ -130,7 +134,7 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
         return;
     }
 
-    const url = `http://olive-hwaseon.onrender.com/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
+    const url = `${BASE_URL}/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
 
     fetch(url)
         .then(response => {
@@ -164,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('검색어와 날짜 범위를 모두 입력하세요.');
             return;
         }
-        const url = `http://olive-hwaseon.onrender.com/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
+        const url = `${BASE_URL}/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
 
         fetch(url)
             .then(response => {
@@ -194,11 +198,11 @@ document.addEventListener('keydown', async (event) => {
       if (!filenameInput) return;
   
       try {
-        const res = await fetch(`http://olive-hwaseon.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}`);
+        const res = await fetch(`${BASE_URL}/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}`);
         const { filename } = await res.json();
   
         const img = document.createElement('img');
-        img.src = `http://olive-hwaseon.onrender.com/${filename}`;
+        img.src = `${BASE_URL}/${filename}`;
         img.style.maxWidth = '100%';
         img.style.border = '1px solid #ccc';
         img.style.marginTop = '20px';
@@ -241,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const openBtn = document.getElementById('openCaptureBtn');
   
     // 이미지 목록 불러와서 select에 삽입
-    fetch('http://olive-hwaseon.onrender.com/api/captures')
+    fetch('${BASE_URL}/api/captures')
       .then(res => res.json())
       .then(data => {
         data.forEach(item => {
@@ -263,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
   
-      const imageUrl = `http://olive-hwaseon.onrender.com/${selected}`;
+      const imageUrl = `${BASE_URL}/${selected}`;
       window.open(imageUrl, '_blank');
     });
   });
