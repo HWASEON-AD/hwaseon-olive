@@ -1,6 +1,4 @@
-const BASE_URL = location.hostname === 'localhost'
-    ? 'http://localhost:5001'
-    : 'https://olive-hwaseon.onrender.com';
+const BASE_URL = 'https://olive-hwaseon.onrender.com';
 
 async function searchByProductName() {
     const keyword = document.getElementById('productSearchInput').value.trim();
