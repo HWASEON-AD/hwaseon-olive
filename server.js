@@ -13,19 +13,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-
-process.on('uncaughtException', (err) => {
-    console.error('🔴 Uncaught Exception:', err);
-  });
-  
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('🔴 Unhandled Rejection:', reason);
-  });
-
-
-const db = new sqlite3.Database('rankings.db', (err) => {
-    if (err) console.error('DB error:', err.message);
-    console.log('Connected to SQLite');
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
 
 
@@ -46,7 +35,6 @@ db.serialize(() => {
     `);
 });
 
-
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS captures (
@@ -56,10 +44,6 @@ db.serialize(() => {
         )
     `);
 });
-
-
-
-
 
 // 카테고리 정의
 const oliveYoungCategories = {
@@ -538,9 +522,4 @@ app.listen(port, () => {
             await crawlOliveYoung(category);
         }
     })();
-});
-
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
