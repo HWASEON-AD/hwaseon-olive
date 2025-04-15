@@ -1,0 +1,306 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+
+body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background-color: #f9fafa;
+    margin: 0;
+    padding: 0;
+}
+
+
+.container {
+    max-width: 1600px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 50px;
+    border-radius: 8px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+
+h1 {
+    text-align: center;
+    color: #333;
+    font-size: 2.7rem; 
+    margin-bottom: -2.7%;
+    font-weight: 600;
+}
+
+
+h4{
+    
+    color: #336;
+    font-size: 1.5rem;
+    margin-bottom: -29px;
+    margin-left: 200px;
+    font-weight: 500;
+}
+
+
+h5{
+    color: #336;
+    font-size: 1.5rem;
+    margin-bottom: 70px;
+    margin-left: 1190px;
+    font-weight: 500;
+}
+
+
+.filters {
+    display: flex;
+    gap: 30px;
+    margin: 30px;
+    justify-content: center;
+    align-items: center;
+}
+
+
+label {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #555;
+    white-space: nowrap;
+}
+
+
+.filters select,
+.filters input[type="date"],
+#productSearchInput {
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 14px 12px;
+    font-size: 1.1rem;
+    width: 300px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+
+.filters select:focus,
+.filters input[type="date"]:focus,
+#productSearchInput:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 5px rgba(40, 167, 69, 0.5);
+    outline: none;
+}
+
+
+.filters button,
+#productSearchBtn {
+    background: linear-gradient(45deg, #28a745, #218838);
+    border: none;
+    border-radius: 5px;
+    color: #fff;
+    padding: 14px 25px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    width: 250px;
+    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+
+.filters button,
+#productSearchDownloadBtn {
+    background: linear-gradient(45deg, #28a745, #218838);
+    border: none;
+    border-radius: 5px;
+    color: #fff;
+    padding: 14px 25px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    width: 250px;
+    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+
+.filters button:hover,
+#productSearchBtn:hover {
+    background: linear-gradient(45deg, #218838, #1e7e34);
+    transform: translateY(-2px);
+}
+
+
+.filters button:hover,
+#productSearchDownloadBtn:hover {
+    background: linear-gradient(45deg, #218838, #1e7e34);
+    transform: translateY(-2px);
+}
+
+
+.filters button:active,
+#productSearchBtn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+
+.filters button:active,
+#productSearchDownloadBtn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+
+.chart-container {
+    width: 100%;
+    max-width: 1000px;
+    margin: 30px auto;
+}
+
+
+.table-container {
+    margin-top: 120px;
+}
+
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    border-radius: 8px;
+    background-color: white;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    table-layout: auto;
+}
+
+
+th, td {
+    padding: 18px;
+    text-align: left;
+    font-size: 1.1rem;
+    border-bottom: 1px solid #ddd;
+    word-wrap: break-word;
+    white-space: normal;
+}
+
+
+th:nth-child(1), td:nth-child(1) { 
+    max-width: 100px;
+}
+
+th:nth-child(3), td:nth-child(3) {
+    max-width: 100px;
+}
+
+th:nth-child(4), td:nth-child(4) {
+    max-width: 400px;
+}
+
+th:nth-child(5), td:nth-child(5) {
+    max-width: 100px;
+}
+
+th:nth-child(6), td:nth-child(6) {
+    max-width: 100px;
+}
+
+th:nth-child(7), td:nth-child(7) {
+    max-width: 200px;
+}
+
+
+th {
+    background-color: #f8f9fa;
+    color: #333;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+tbody tr:hover {
+    background-color: #f1f1f1;
+}
+
+
+
+@media (max-width: 768px) {
+    .filters {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    
+    label, select, input[type="date"], button {
+        width: 100%;
+        margin-bottom: 15px; /* 항목들 사이의 간격 증가 */
+    }
+
+
+    h1 {
+        font-size: 2.5rem; /* 헤더 글꼴 크기 약간 키움 */
+    }
+
+
+    table, #productSearchTable {
+        font-size: 1rem; /* 작은 화면에서 테이블 폰트 크기 증가 */
+    }
+
+
+    table th, table td {
+        word-wrap: break-word; /* 긴 텍스트 줄 바꿈 처리 */
+    }
+
+
+    /* 열 너비 자동 조정 */
+    th:nth-child(1), td:nth-child(1), 
+    th:nth-child(4), td:nth-child(4),
+    th:nth-child(7), td:nth-child(7) {
+        width: 100%; /* 좁은 화면에서는 모든 열을 가득 채움 */
+    }
+
+
+    /* 나머지 열들 */
+    th:nth-child(2), td:nth-child(2),
+    th:nth-child(3), td:nth-child(3),
+    th:nth-child(5), td:nth-child(5),
+    th:nth-child(6), td:nth-child(6) {
+        width: 100%;
+    }
+}
+
+#captureSelect,
+#openCaptureBtn {
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 14px 12px;
+    font-size: 1.1rem;
+    width: 300px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    margin-top: 50px; /* 상단과 같은 스타일 */
+}
+
+#captureSelect:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 5px rgba(40, 167, 69, 0.5);
+    outline: none;
+}
+
+#openCaptureBtn {
+    background: linear-gradient(45deg, #28a745, #218838);
+    color: #fff;
+    border: none;
+    width: 250px;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 14px 25px;
+    border-radius: 5px;
+    margin-left: 30px;
+}
+
+#openCaptureBtn:hover {
+    background: linear-gradient(45deg, #218838, #1e7e34);
+    transform: translateY(-2px);
+}
+
+#openCaptureBtn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
