@@ -11,7 +11,6 @@ const port = 5001;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
 
 const db = new sqlite3.Database('rankings.db', (err) => {
@@ -532,6 +531,7 @@ app.listen(port, () => {
 });
 
 
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
-  });
+});
