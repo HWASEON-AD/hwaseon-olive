@@ -13,10 +13,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
 
+
+const db = new sqlite3.Database('rankings.db', (err) => {
+    if (err) console.error('DB error:', err.message);
+    console.log('Connected to SQLite');
+});
 
 
 db.serialize(() => {
@@ -35,6 +41,7 @@ db.serialize(() => {
     `);
 });
 
+
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS captures (
@@ -44,6 +51,8 @@ db.serialize(() => {
         )
     `);
 });
+
+
 
 // 카테고리 정의
 const oliveYoungCategories = {
@@ -79,8 +88,10 @@ async function crawlOliveYoung(category) {
     try {
         browser = await puppeteer.launch({
             headless: true,
+            executablePath: puppeteer.executablePath(),
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
+        
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0');
@@ -142,9 +153,6 @@ async function crawlOliveYoung(category) {
                 }
             });
         });
-
-
-
 
         const stmt = db.prepare(`
             INSERT OR REPLACE INTO rankings (date, rank, brand, product, salePrice, originalPrice, event, category)
@@ -370,6 +378,7 @@ app.get('/api/download', (req, res) => {
 });
 
 
+
 app.get('/api/capture', async (req, res) => {
     const { url, filename: userFilename } = req.query;
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
@@ -381,6 +390,7 @@ app.get('/api/capture', async (req, res) => {
 
         browser = await puppeteer.launch({
             headless: 'new',
+            executablePath: puppeteer.executablePath(),
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -388,6 +398,7 @@ app.get('/api/capture', async (req, res) => {
                 '--allow-file-access-from-files'
             ]
         });
+        
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
@@ -448,8 +459,6 @@ app.get('/api/captures', (req, res) => {
         res.json(validCaptures);
     });
 });
-
-
 
 
 
