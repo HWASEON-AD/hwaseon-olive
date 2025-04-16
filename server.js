@@ -8,21 +8,17 @@ const fs = require('fs');
 const app = express();
 const port = 5001;
 
-
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
 
-
 app.get('/ping', (req, res) => {
     res.send('pong');
 });
-
 
 const db = new sqlite3.Database('rankings.db', (err) => {
     if (err) console.error('DB error:', err.message);
@@ -57,8 +53,6 @@ db.serialize(() => {
     `);
 });
 
-
-
 // 카테고리 정의
 const oliveYoungCategories = {
     스킨케어: '10000010001',
@@ -68,7 +62,7 @@ const oliveYoungCategories = {
     메이크업: '10000010002',
     네일: '10000010012',
     뷰티소품: '10000010006',
-    더모코스메틱: '10000010008',
+    더모_코스메틱: '10000010008',
     맨즈케어: '10000010007',
     향수_디퓨저: '10000010005',
     헤어케어: '10000010004',
@@ -82,7 +76,6 @@ const oliveYoungCategories = {
     리빙_가전: '10000030005',
     취미_팬시: '10000030006'
 };
-
 
 
 db.all("PRAGMA table_info(rankings);", (err, rows) => {
@@ -114,7 +107,7 @@ async function crawlOliveYoung(category) {
             headless: 'new',  // 또는 true
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
             executablePath: puppeteer.executablePath()  // ✅ 꼭 이거
-          });
+        });
         
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0');

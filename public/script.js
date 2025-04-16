@@ -15,12 +15,12 @@ async function searchByProductName() {
     try {
         // 서버에 요청 보내기
         const res = await fetch(
-            `https://hwaseonad.onrender.com/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
+            `http://localhost:5001/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
         );
 
         if (!res.ok) {
             const errorText = await res.text();  // 서버에서 반환한 오류 메시지 확인
-            console.error('서버 오류:', errorText);
+            console.error('서버 오류:', errorText); 
             throw new Error('서버 오류');
         }
 
@@ -65,7 +65,7 @@ function updateSearchTable(results) {
 
 async function fetchRankings(category, date) {
     try {
-        const res = await fetch(`https://hwaseonad.onrender.com/api/rankings?category=${category}&date=${date}`);
+        const res = await fetch(`http://localhost:5001/api/rankings?category=${category}&date=${date}`);
         const data = await res.json();
         updateTable(data);
     } catch (err) {
@@ -78,7 +78,7 @@ async function fetchRankings(category, date) {
 async function fetchRankingsByRange(category, startDate, endDate) {
     try {
         const res = await fetch(
-            `https://hwaseonad.onrender.com/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
+            `http://localhost:5001/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
         );
         const data = await res.json();
         updateTable(data);
@@ -130,7 +130,7 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
         return;
     }
 
-    const url = `https://hwaseonad.onrender.com/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
+    const url = `http://localhost:5001/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
 
     fetch(url)
         .then(response => {
@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('검색어와 날짜 범위를 모두 입력하세요.');
             return;
         }
-        const url = `https://hwaseonad.onrender.com/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
+        const url = `http://localhost:5001/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
 
         fetch(url)
             .then(response => {
@@ -208,7 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-document.getElementById('productSearchBtn').addEventListener('click', searchByProductName);
+document.getElementById('productSearchInput').addEventListener('click', searchByProductName);
 document.getElementById('productSearchInput').addEventListener('keydown', function (event) {
     if (event.key === 'Enter') {
         searchByProductName();

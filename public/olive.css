@@ -35,8 +35,8 @@ h1 {
 h4{
     
     color: #336;
-    font-size: 1.5rem;
-    margin-bottom: -29px;
+    font-size: 2rem;
+    margin-bottom: -40px;
     margin-left: 200px;
     font-weight: 500;
 }
@@ -45,12 +45,18 @@ h4{
 h5{
     color: #336;
     font-size: 1.5rem;
-    margin-bottom: 70px;
-    margin-left: 1190px;
+    margin-bottom: 5px;
+    margin-left: 1230px;
     font-weight: 500;
 }
 
-
+h6{
+    color: #336;
+    font-size: 1.5rem;
+    margin-bottom: 70px;
+    margin-left: 1140px;
+    font-weight: 500;
+}
 
 
 
@@ -58,12 +64,16 @@ h5{
     display: flex;
     gap: 30px;
     margin: 30px;
+    margin-left: 50px;
     justify-content: center;
     align-items: center;
 }
 
 
+
+
 label {
+    margin-left:0px;
     font-size: 1.2rem;
     font-weight: bold;
     color: #555;
@@ -71,15 +81,17 @@ label {
 }
 
 
+
+
 .filters select,
 .filters input[type="date"],
 #productSearchInput {
     background-color: #fff;
     border: 1px solid #ccc;
-    border-radius: 5px;
+    border-radius: 10px;
     padding: 14px 12px;
     font-size: 1.1rem;
-    width: 300px;
+    width: 200px;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -93,8 +105,9 @@ label {
 }
 
 
+
 .filters button,
-#productSearchBtn {
+#searchBtn {
     background: linear-gradient(45deg, #28a745, #218838);
     border: none;
     border-radius: 5px;
@@ -106,6 +119,22 @@ label {
     transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
+
+
+.filters button,
+#downloadExcelBtn {
+    background: linear-gradient(45deg, #28a745, #218838);
+    border: none;
+    border-radius: 5px;
+    color: #fff;
+    padding: 14px 25px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    width: 250px;
+    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
 
 
 .filters button,
@@ -150,12 +179,6 @@ label {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-
-.chart-container {
-    width: 100%;
-    max-width: 1000px;
-    margin: 30px auto;
-}
 
 
 .table-container {
@@ -265,45 +288,4 @@ tbody tr:hover {
     th:nth-child(6), td:nth-child(6) {
         width: 100%;
     }
-}
-
-#captureSelect,
-#openCaptureBtn {
-    background-color: #fff;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    padding: 14px 12px;
-    font-size: 1.1rem;
-    width: 300px;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
-    margin-top: 50px; /* 상단과 같은 스타일 */
-}
-
-#captureSelect:focus {
-    border-color: #28a745;
-    box-shadow: 0 0 5px rgba(40, 167, 69, 0.5);
-    outline: none;
-}
-
-#openCaptureBtn {
-    background: linear-gradient(45deg, #28a745, #218838);
-    color: #fff;
-    border: none;
-    width: 250px;
-    cursor: pointer;
-    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    padding: 14px 25px;
-    border-radius: 5px;
-    margin-left: 30px;
-}
-
-#openCaptureBtn:hover {
-    background: linear-gradient(45deg, #218838, #1e7e34);
-    transform: translateY(-2px);
-}
-
-#openCaptureBtn:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }

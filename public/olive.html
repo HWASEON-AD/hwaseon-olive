@@ -16,7 +16,7 @@
         <h1>올리브영 랭킹
             <h4>Hwaseon</h4>
             <h5>도움주신 분</h5>
-            <h6>JYS,KYJ,PJS,PMK,SJH</h6>
+            <h6>JYS / KYJ / PJS / PMK / SJH</h6>
         </h1>
         
         <div class="filters">
@@ -28,20 +28,20 @@
                 <option value="선케어">선케어</option>
                 <option value="메이크업">메이크업</option>
                 <option value="네일">네일</option>
-                <o  ption value="뷰티소품">뷰티소품</option>
-                <option value="더모 코스메틱">더모 코스메틱</option>
+                <option value="뷰티소품">뷰티소품</option>
+                <option value="더모_코스메틱">더모 코스메틱</option>
                 <option value="맨즈케어">맨즈케어</option>
-                <option value="향수/디퓨저">향수/디퓨저</option>
+                <option value="향수_디퓨저">향수/디퓨저</option>
                 <option value="헤어케어">헤어케어</option>
                 <option value="바디케어">바디케어</option>
                 <option value="건강식품">건강식품</option>
                 <option value="푸드">푸드</option>
                 <option value="구강용품">구강용품</option>
-                <option value="헬스/건강용품">헬스/건강용품</option>
-                <option value="여성/위생용품">여성/위생용품</option>
+                <option value="헬스_건강용품">헬스/건강용품</option>
+                <option value="여성_위생용품">여성/위생용품</option>
                 <option value="패션">패션</option>
-                <option value="리빙/가전">리빙/가전</option>
-                <option value="취미/팬시">취미/팬시</option>
+                <option value="리빙_가전">리빙/가전</option>
+                <option value="취미_팬시">취미/팬시</option>
             </select>
             
 
@@ -49,17 +49,16 @@
             <input type="date" id="startDate">
             <label> ~ </label>
             <input type="date" id="endDate">
-            <button id="searchBtn">랭킹 검색</button>
-            <button id="downloadExcelBtn">랭킹 : Excel</button>
+            <label>제품명 검색 : </label>
+            <input type="text" id="productSearchInput", productSearchBtn, placeholder="예시 : 세럼 , 앰플"/>
             
         </div>
 
-        <div style="text-align: center; margin-top: 50px;">
-            <label>제품명 검색 : </label>
-            <input type="text" id="productSearchInput" placeholder="예시 : 세럼 , 앰플"/>
-            <button id="productSearchBtn" style=margin-left:25px;>제품명 검색</button>
-            <button id="productSearchDownloadBtn" style="margin-left:25px;">제품명 : Excel</button>
-            <h3></h3>
+
+        <div style ="text-align: center; margin-top:60px;">
+            <button id="searchBtn">랭킹 검색</button>
+            <button id="downloadExcelBtn" style="margin-left:100px;"">랭킹 : Excel</button>
+            <button id="productSearchDownloadBtn" style="margin-left:100px;">제품명 : Excel</button>
 
             <table id="productSearchTable" style="margin-left: auto; margin-right: auto; ">
                 <thead>
