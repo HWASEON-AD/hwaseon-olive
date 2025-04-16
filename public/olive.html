@@ -2,91 +2,94 @@
 <html lang="ko">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>올리브영 랭킹</title>
-  <link rel="stylesheet" href="olive.css">
+    <div class ="ranking header">
+        <meta charset="UTF-8">
+        <title>올리브영 랭킹</title>
+        <link rel="stylesheet" href="olive.css">
+    </div>
 </head>
 
+
 <body>
-  <div class="container">
-    <h1>올리브영 랭킹</h1>
-    <h4 style="text-align:center;">Hwaseon</h4>
-    <h5 style="text-align:center; margin-bottom: 40px;">for prmr</h5>
+    <div class="container">
+        
+        <h1>올리브영 랭킹
+            <h4>Hwaseon</h2>
+            <h5>for prmr</h2>
+        </h1>
+        
+        <div class="filters">
+            <label for="category">카테고리 :</label>
+            <select id="category">
+                <option value="스킨케어">스킨케어</option>
+                <option value="메이크업">메이크업</option>
+                <option value="헤어케어">헤어케어</option>
+                <option value="바디케어">바디케어</option>
+            </select>
+            
+            <label for="startDate"> 날짜 선택 :</label>
+            <input type="date" id="startDate">
+            <label> ~ </label>
+            <input type="date" id="endDate">
+            <button id="searchBtn">랭킹 검색</button>
+            <button id="downloadExcelBtn">랭킹 : Excel</button>
+            
+        </div>
 
-    <div class="filters">
-      <label for="category">카테고리</label>
-      <select id="category">
-        <option value="스킨케어">스킨케어</option>
-        <option value="메이크업">메이크업</option>
-        <option value="헤어케어">헤어케어</option>
-        <option value="바디케어">바디케어</option>
-      </select>
 
-      <label for="startDate">시작일</label>
-      <input type="date" id="startDate">
+        <div style="text-align: center; margin-top: 50px;">
+            <label>제품명 검색 : </label>
+            <input type="text" id="productSearchInput" placeholder="예시 : 세럼 , 앰플"/>
+            <button id="productSearchBtn" style=margin-left:25px;>제품명 검색</button>
+            <button id="productSearchDownloadBtn" style="margin-left:25px;">제품명 : Excel</button>
+            <h3></h3>
+            <select id="captureSelect">
+            <option value=""> --- 캡처 파일 선택 --- </option>
+            </select>
+            <button id="openCaptureBtn">이미지 보기</button>
 
-      <label for="endDate">종료일</label>
-      <input type="date" id="endDate">
+            <table id="productSearchTable" style="margin-left: auto; margin-right: auto; ">
+                <thead>
+                    <div style ="margin-top : 70px";> 
+                        <tr>
+                            <th>날짜</th>
+                            <th>순위</th>
+                            <th>브랜드</th>
+                            <th>제품명</th>
+                            <th>소비자가</th>
+                            <th>판매가</th>
+                            <th>행사</th>
+                        </tr>
+                    </div>
+                </thead>
+                <tbody>
+                    <!-- 검색 결과 -->
+                </tbody>
+            </table>
+        </div>
 
-      <button id="searchBtn">랭킹 검색</button>
-      <button id="downloadExcelBtn">랭킹 다운로드</button>
+        <div class="table-container">
+        <div style="margin-top: 30px;"></div>
+            <h2>랭킹 데이터</h2>
+            <table id="rankingTable">
+                <thead>
+                    <tr>
+                        <th>날짜</th>
+                        <th>순위</th>
+                        <th>브랜드</th>
+                        <th>제품명</th>
+                        <th>소비자가</th>
+                        <th>판매가</th>
+                        <th>행사</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- js -->
+                </tbody>
+            </table>
+        </div>
     </div>
-
-    <div class="filters">
-      <label for="productSearchInput">제품명 검색</label>
-      <input type="text" id="productSearchInput" placeholder="예시: 세럼, 앰플">
-      <button id="productSearchBtn">검색</button>
-      <button id="productSearchDownloadBtn">다운로드</button>
-    </div>
-
-    <div class="filters">
-      <select id="captureSelect">
-        <option value="">--- 캡처 파일 선택 ---</option>
-      </select>
-      <button id="openCaptureBtn">이미지 보기</button>
-    </div>
-
-    <div class="table-container">
-      <h2>제품명 검색 결과</h2>
-      <div class="chart-container">
-        <table id="productSearchTable">
-          <thead>
-            <tr>
-              <th>날짜</th>
-              <th>순위</th>
-              <th>브랜드</th>
-              <th>제품명</th>
-              <th>소비자가</th>
-              <th>판매가</th>
-              <th>행사</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="table-container">
-      <h2>전체 랭킹 데이터</h2>
-      <table id="rankingTable">
-        <thead>
-          <tr>
-            <th>날짜</th>
-            <th>순위</th>
-            <th>브랜드</th>
-            <th>제품명</th>
-            <th>소비자가</th>
-            <th>판매가</th>
-            <th>행사</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <script src="script.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+    <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
 </body>
 </html>
