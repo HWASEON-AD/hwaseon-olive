@@ -385,20 +385,14 @@ app.get('/api/capture', async (req, res) => {
     const { url, filename: userFilename } = req.query;
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
 
-    let browser;
     try {
         const captureDir = path.join(__dirname, 'public');
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir, { recursive: true });
 
-
-        // 🟡 로그로 크롬 경로 확인
-        const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
-        console.log('🔍 Chromium 경로:', chromePath);
-
-        browser = await puppeteer.launch({
-            headless: 'new', // 또는 'true'
+        const browser = await puppeteer.launch({
+            headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
+            executablePath: puppeteer.executablePath()  // ← 이걸로 고정
         });
 
         const page = await browser.newPage();
@@ -415,8 +409,7 @@ app.get('/api/capture', async (req, res) => {
 
         await page.screenshot({ path: filePath, fullPage: true });
 
-        // 선택: DB 기록 주석처리 가능
-        // db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
+
 
         console.log('✅ 저장된 파일:', finalFilename);
         res.json({ filename: finalFilename });
