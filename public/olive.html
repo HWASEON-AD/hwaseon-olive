@@ -28,7 +28,7 @@
                 <option value="선케어">선케어</option>
                 <option value="메이크업">메이크업</option>
                 <option value="네일">네일</option>
-                <option value="뷰티소품">뷰티소품</option>
+                <o  ption value="뷰티소품">뷰티소품</option>
                 <option value="더모 코스메틱">더모 코스메틱</option>
                 <option value="맨즈케어">맨즈케어</option>
                 <option value="향수/디퓨저">향수/디퓨저</option>
@@ -49,15 +49,15 @@
             <input type="date" id="startDate">
             <label> ~ </label>
             <input type="date" id="endDate">
-            <label>제품명 검색 : </label>
-            
+            <button id="searchBtn">랭킹 검색</button>
+            <button id="downloadExcelBtn">랭킹 : Excel</button>
             
         </div>
 
-        <div style="margin-top: 50px;">
-            <button id="searchBtn">랭킹 검색</button>
-            <button id="downloadExcelBtn">랭킹 : Excel</button>
+        <div style="text-align: center; margin-top: 50px;">
+            <label>제품명 검색 : </label>
             <input type="text" id="productSearchInput" placeholder="예시 : 세럼 , 앰플"/>
+            <button id="productSearchBtn" style=margin-left:25px;>제품명 검색</button>
             <button id="productSearchDownloadBtn" style="margin-left:25px;">제품명 : Excel</button>
             <h3></h3>
 
