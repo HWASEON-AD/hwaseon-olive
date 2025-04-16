@@ -106,13 +106,15 @@ db.all("PRAGMA table_info(rankings);", (err, rows) => {
 
 // 크롤링 함수
 async function crawlOliveYoung(category) {
+
+    let browser;
     console.log(`크롤링 시작: ${category}`);
     try {
-        const browser = await puppeteer.launch({
+        browser = await puppeteer.launch({
             headless: 'new',  // 또는 true
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
             executablePath: puppeteer.executablePath()  // ✅ 꼭 이거
-        });
+          });
         
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0');
