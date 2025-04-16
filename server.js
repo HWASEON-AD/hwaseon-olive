@@ -14,7 +14,6 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 
-
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
@@ -23,7 +22,6 @@ app.get('/', (req, res) => {
 app.get('/ping', (req, res) => {
     res.send('pong');
 });
-
 
 
 const db = new sqlite3.Database('rankings.db', (err) => {
@@ -528,7 +526,6 @@ app.get('/api/download-search', (req, res) => {
         }
     );
 });
-
 
 
 
