@@ -50,6 +50,15 @@ h5{
     font-weight: 500;
 }
 
+h6{
+    color: #336;
+    font-size: 1.5rem;
+    margin-bottom: 70px;
+    margin-left: 1190px;
+    font-weight: 500;
+}
+
+
 
 .filters {
     display: flex;
