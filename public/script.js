@@ -193,20 +193,24 @@ document.addEventListener('keydown', async (event) => {
 
         try {
             const res = await fetch(`https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}&allowSelf=true`);
+            
+            if (!res.ok) throw new Error(`서버 응답 오류: ${res.status}`);
+            
             const { filename } = await res.json();
 
             const img = document.createElement('img');
-            img.src = `https://hwaseonad.onrender.com.onrender.com/${filename}`;
+            img.src = `https://hwaseonad.onrender.com/${filename}`;  // ✅ 도메인 수정
             img.style.maxWidth = '100%';
             img.style.border = '1px solid #ccc';
             img.style.marginTop = '20px';
             document.body.appendChild(img);
         } catch (err) {
             console.error('캡처 실패:', err);
-            alert('캡처 실패');
+            alert('캡처 실패: ' + err.message);
         }
     }
 });
+
 
 
 
