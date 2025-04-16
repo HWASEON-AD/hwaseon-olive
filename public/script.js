@@ -244,25 +244,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // 이미지 목록 불러와서 select에 삽입
     fetch('https://hwaseonad.onrender.com/api/captures')
     .then(res => res.json())
-      .then(data => {
+    .then(data => {
         data.forEach(item => {
         const option = document.createElement('option');
           option.value = item.filename || item; // DB 기반 or 파일명만 전달되는 경우 대응
-          option.textContent = item.filename || item;
-          select.appendChild(option);
+        option.textContent = item.filename || item;
+        select.appendChild(option);
         });
-      })
-      .catch(err => {
+    })
+    .catch(err => {
         console.error('캡처 목록 불러오기 실패:', err);
-      });
+    });
 
     // 선택한 이미지 새 탭 열기
     openBtn.addEventListener('click', () => {
-      const selected = select.value;
-      if (!selected) {
+    const selected = select.value;
+    if (!selected) {
         alert('이미지를 선택하세요.');
         return;
-      }
+    }
 
     const imageUrl = `https://hwaseonad.onrender.com/${selected}`;
     window.open(imageUrl, '_blank');
