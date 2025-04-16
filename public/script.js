@@ -4,30 +4,29 @@ async function searchByProductName() {
     const endDate = document.getElementById('endDate').value;
     const tbody = document.querySelector('#productSearchTable tbody');
     tbody.innerHTML = '';
-
+  
     if (!keyword) {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="7">검색 결과가 없습니다.</td>`;
-        tbody.appendChild(row);
-        return;
+      const row = document.createElement('tr');
+      row.innerHTML = `<td colspan="7">검색 결과가 없습니다.</td>`;
+      tbody.appendChild(row);
+      return;
     }
-
+  
     try {
-        // 서버에 요청 보내기
-        const res = await fetch(
-        );
-
-        if (!res.ok) {
-            const errorText = await res.text();  // 서버에서 반환한 오류 메시지 확인
-            console.error('서버 오류:', errorText);
-            throw new Error('서버 오류');
-        }
-
-        const data = await res.json();
-        updateSearchTable(data);  // 테이블에 결과 출력
-
+      const res = await fetch(
+        `https://hwaseonad.onrender.com/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
+      );
+  
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('서버 오류:', errorText);
+        throw new Error('서버 오류');
+      }
+  
+      const data = await res.json();
+      updateSearchTable(data);
     } catch (err) {
-        console.error("검색 오류:", err);
+      console.error("검색 오류:", err);
     }
 }
 
@@ -185,40 +184,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
 document.addEventListener('keydown', async (event) => {
     if (event.ctrlKey && event.key === 'Enter') {
-      const urlToCapture = window.location.href;
-      const filenameInput = prompt('저장할 파일명을 입력하세요 (확장자 제외):');
-      if (!filenameInput) return;
-  
-      try {
-        const res = await fetch(`/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}&allowSelf=true`);
-        
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error("❌ 서버 응답 실패:", res.status, errorText);
-          alert(`캡처 실패: ${res.status}\n${errorText}`);
-          return;
+        const urlToCapture = window.location.href;
+        const filenameInput = prompt('저장할 파일명을 입력하세요 (확장자 제외):');
+
+        if (!filenameInput) return;
+
+        try {
+            const res = await fetch(`https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}`);
+            const { filename } = await res.json();
+
+            const img = document.createElement('img');
+            img.src = `http://localhost:5001.onrender.com/${filename}`;
+            img.style.maxWidth = '100%';
+            img.style.border = '1px solid #ccc';
+            img.style.marginTop = '20px';
+            document.body.appendChild(img);
+        } catch (err) {
+            console.error('캡처 실패:', err);
+            alert('캡처 실패');
         }
-  
-        const data = await res.json();
-  
-        if (!data.filename) {
-          alert("파일명이 응답되지 않았습니다.");
-          return;
-        }
-  
-        const img = document.createElement('img');
-        img.src = `/capture-image/${data.filename}`;
-        img.style.maxWidth = '100%';
-        img.style.border = '1px solid #ccc';
-        img.style.marginTop = '20px';
-        document.body.appendChild(img);
-      } catch (err) {
-        console.error('❌ 캡처 실패:', err);
-        alert('캡처 중 오류 발생');
-      }
     }
-  });
-  
+});
+
 
 
 
@@ -250,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const openBtn = document.getElementById('openCaptureBtn');
 
     // 이미지 목록 불러와서 select에 삽입
-    fetch('https://hwaseonad.onrender.com/api/captures')
+    fetch('http://localhost:5001/api/captures')
     .then(res => res.json())
     .then(data => {
         data.forEach(item => {
@@ -272,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    const imageUrl = `https://hwaseonad.onrender.com/${selected}`;
+    const imageUrl = `http://localhost:5001/${selected}`;
     window.open(imageUrl, '_blank');
     });
 });

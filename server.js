@@ -18,16 +18,10 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
 
+
 app.get('/ping', (req, res) => {
     res.send('pong');
 });
-
-app.get('/capture-image/:filename', (req, res) => {
-    const filePath = path.join(__dirname, 'public', req.params.filename);
-    if (!fs.existsSync(filePath)) return res.status(404).send('파일 없음');
-    res.sendFile(filePath);
-});
-
 
 
 
