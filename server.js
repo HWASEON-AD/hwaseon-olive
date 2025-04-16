@@ -382,6 +382,8 @@ app.get('/api/download', (req, res) => {
     );
 });
 
+
+
 app.get('/api/capture', async (req, res) => {
     const { url, filename: userFilename } = req.query;
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
