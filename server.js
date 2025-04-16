@@ -390,7 +390,7 @@ app.get('/api/capture', async (req, res) => {
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir, { recursive: true });
 
         browser = await puppeteer.launch({
-            headless: 'new',
+            headless: 'new', // 또는 'true'
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
