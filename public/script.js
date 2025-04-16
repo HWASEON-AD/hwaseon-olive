@@ -152,8 +152,6 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
 });
 
 
-
-
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('productSearchDownloadBtn')?.addEventListener('click', () => {
         const keyword = document.getElementById('productSearchInput').value.trim();

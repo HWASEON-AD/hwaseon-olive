@@ -20,8 +20,6 @@ app.get('/', (req, res) => {
 
 
 
-
-
 const db = new sqlite3.Database('rankings.db', (err) => {
     if (err) console.error('DB error:', err.message);
     console.log('Connected to SQLite');
@@ -392,8 +390,8 @@ app.get('/api/capture', async (req, res) => {
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
 
         browser = await puppeteer.launch({
-            headless: true,
-            executablePath: '/usr/bin/chromium-browser',
+            headless: 'new',
+            executablePath: puppeteer.executablePath(),
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
