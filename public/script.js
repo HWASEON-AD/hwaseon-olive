@@ -191,7 +191,7 @@ document.addEventListener('keydown', async (event) => {
   
       try {
         const res = await fetch(`https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}&allowSelf=true`);
-        
+  
         if (!res.ok) {
           const errorText = await res.text();
           console.error("❌ 서버 응답 실패:", res.status, errorText);
@@ -199,7 +199,10 @@ document.addEventListener('keydown', async (event) => {
           return;
         }
   
+        // ❗❗ 여기서 data 정의
         const data = await res.json();
+  
+        // ❗❗ 이제 검사 가능
         if (!data.filename) {
           console.error("filename이 undefined입니다.", data);
           alert("캡처 실패: 서버 응답에 파일명이 없습니다.");
@@ -207,14 +210,14 @@ document.addEventListener('keydown', async (event) => {
         }
   
         const img = document.createElement('img');
-        img.src = `/capture-image/${data.filename}`;  // ✅ 경로 수정됨 (.onrender.com 중복 제거)
+        img.src = `/capture-image/${data.filename}`;
         img.style.maxWidth = '100%';
         img.style.border = '1px solid #ccc';
         img.style.marginTop = '20px';
         document.body.appendChild(img);
       } catch (err) {
         console.error('캡처 실패:', err);
-        alert('캡처 실패');
+        alert('캡처 중 에러 발생');
       }
     }
   });
