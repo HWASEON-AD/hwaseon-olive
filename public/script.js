@@ -184,6 +184,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+document.addEventListener('DOMContentLoaded', () => {
+    const categoryEl = document.getElementById('category');
+    const startDateEl = document.getElementById('startDate');
+    const endDateEl = document.getElementById('endDate');
+    const searchBtn = document.getElementById('searchBtn');
+
+    const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (!startDateEl.value) startDateEl.value = today;
+    if (!endDateEl.value) endDateEl.value = today;
+
+    searchBtn.addEventListener('click', () => {
+        const category = categoryEl.value;
+        const startDate = startDateEl.value;
+        const endDate = endDateEl.value;
+
+        fetchRankingsByRange(category, startDate, endDate);
+    });
+// 당일 랭킹 업데이트
+    fetchRankings(categoryEl.value, startDateEl.value);
+});
+
+
+
+
+/*
+
+
 document.addEventListener('keydown', async (event) => {
     if (event.ctrlKey && event.key === 'Enter') {
         const urlToCapture = window.location.href;
@@ -215,26 +243,6 @@ document.addEventListener('keydown', async (event) => {
 
 
 
-document.addEventListener('DOMContentLoaded', () => {
-    const categoryEl = document.getElementById('category');
-    const startDateEl = document.getElementById('startDate');
-    const endDateEl = document.getElementById('endDate');
-    const searchBtn = document.getElementById('searchBtn');
-
-    const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    if (!startDateEl.value) startDateEl.value = today;
-    if (!endDateEl.value) endDateEl.value = today;
-
-    searchBtn.addEventListener('click', () => {
-        const category = categoryEl.value;
-        const startDate = startDateEl.value;
-        const endDate = endDateEl.value;
-
-        fetchRankingsByRange(category, startDate, endDate);
-    });
-// 당일 랭킹 업데이트
-    fetchRankings(categoryEl.value, startDateEl.value);
-});
 
 
 
@@ -270,6 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+*/
 
 
 
