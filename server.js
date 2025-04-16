@@ -13,10 +13,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-console.log('캡처 요청 URL:', req.query.url);
-console.log('파일명:', req.query.filename);
-
-
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
@@ -384,37 +380,51 @@ app.get('/api/download', (req, res) => {
 
 
 
-
 app.get('/api/capture', async (req, res) => {
-    const { url, filename, allowSelf } = req.query;
+    const { url, filename: userFilename } = req.query;
+    if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
 
+    let browser;
     try {
-        // 필수 값 체크
-        if (!url || !filename) {
-            return res.status(400).json({ error: 'Missing url or filename' });
-        }
+        const captureDir = path.join(__dirname, 'public');
+        if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
 
         const browser = await puppeteer.launch({
+            headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: puppeteer.executablePath(),
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
+        
 
         const page = await browser.newPage();
-        await page.goto(url, { waitUntil: 'networkidle2' });
+        await page.setViewport({ width: 1920, height: 1080 });
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        const filePath = path.join(__dirname, 'public', `${filename}.png`);
+        // 안전한 파일명 생성
+        const rawName = typeof userFilename === 'string' && userFilename.trim() !== ''
+        ? userFilename.trim()
+        : `capture_${Date.now()}`;
+
+        // 한글 포함 허용
+        const safeFilename = rawName.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
+        const finalFilename = `${safeFilename}.png`;
+
+        const filePath = path.join(captureDir, finalFilename);
+
         await page.screenshot({ path: filePath, fullPage: true });
 
-        await browser.close();
+        // DB에 기록
+        db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
 
-        res.json({ filename: `${filename}.png` });
-    } catch (error) {
-        console.error('스크린샷 캡처 에러:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        console.log('✅ 저장된 파일:', finalFilename);
+        res.json({ filename: finalFilename });
+    } catch (err) {
+        console.error('캡처 오류:', err.message);
+        res.status(500).json({ error: '캡처 실패', details: err.message });
+    } finally {
+        if (browser) await browser.close();
     }
 });
-
-
 
 
 
