@@ -195,6 +195,7 @@ document.addEventListener('keydown', async (event) => {
         }
 
 
+
         if (!filenameInput) return;
 
         try {
@@ -202,7 +203,7 @@ document.addEventListener('keydown', async (event) => {
             const { filename } = await res.json();
 
             const img = document.createElement('img');
-            img.src = `https://hwaseonad.onrender.com/${filename}`;
+            img.src = `https://hwaseonad.onrender.com.onrender.com/${filename}`;
             img.style.maxWidth = '100%';
             img.style.border = '1px solid #ccc';
             img.style.marginTop = '20px';
