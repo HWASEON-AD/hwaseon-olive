@@ -4,8 +4,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "postinstall": "puppeteer install",
-    "build": "echo 'no build needed'"
+    "postinstall": "puppeteer install"
   },
   "keywords": [],
   "author": "",
