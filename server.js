@@ -393,16 +393,12 @@ app.get('/api/capture', async (req, res) => {
         const captureDir = path.join(__dirname, 'public');
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
 
-        browser = await puppeteer.launch({
+        const browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: puppeteer.executablePath(),
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-web-security',
-                '--allow-file-access-from-files'
-            ]
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
+        
         
 
         const page = await browser.newPage();
