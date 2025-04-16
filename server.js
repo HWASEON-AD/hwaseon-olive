@@ -385,14 +385,16 @@ app.get('/api/capture', async (req, res) => {
     const { url, filename: userFilename } = req.query;
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
 
+    let browser;
+
     try {
         const captureDir = path.join(__dirname, 'public');
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir, { recursive: true });
 
-        const browser = await puppeteer.launch({
+        browser = await puppeteer.launch({
             headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: puppeteer.executablePath()  // ← 이걸로 고정
+            executablePath: puppeteer.executablePath()  // ✅ 이걸로!
         });
 
         const page = await browser.newPage();
