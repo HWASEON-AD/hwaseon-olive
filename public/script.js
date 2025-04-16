@@ -192,7 +192,7 @@ document.addEventListener('keydown', async (event) => {
         if (!filenameInput) return;
 
         try {
-            const res = await fetch(`https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}`);
+            const res = await fetch(`https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}&allowSelf=true`);
             const { filename } = await res.json();
 
             const img = document.createElement('img');

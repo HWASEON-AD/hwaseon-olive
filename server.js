@@ -97,7 +97,6 @@ async function crawlOliveYoung(category) {
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
         
-
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0');
         const baseUrl = 'https://www.oliveyoung.co.kr/store/main/getBestList.do';
@@ -140,11 +139,8 @@ async function crawlOliveYoung(category) {
                     event: eventFlags
                 });
             });
-        
             return result;
         });
-
-
         const date = new Date().toISOString().split('T')[0];
 
         // 오늘 날짜 + 해당 카테고리 데이터 삭제
@@ -158,7 +154,6 @@ async function crawlOliveYoung(category) {
                 }
             });
         });
-
         const stmt = db.prepare(`
             INSERT OR REPLACE INTO rankings (date, rank, brand, product, salePrice, originalPrice, event, category)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -169,7 +164,6 @@ async function crawlOliveYoung(category) {
         });
 
         stmt.finalize();
-
         console.log(`${category} 크롤링 완료`);
         return products;
 
@@ -194,6 +188,7 @@ app.get('/api/crawl', async (req, res) => {
 });
 
 
+
 // 날짜별 랭킹 조회
 app.get('/api/rankings', (req, res) => {
     const { category, date } = req.query;
@@ -209,6 +204,7 @@ app.get('/api/rankings', (req, res) => {
         }
     );
 });
+
 
 
 function updateTable(rankings) {
@@ -384,41 +380,48 @@ app.get('/api/download', (req, res) => {
 
 
 
+
 app.get('/api/capture', async (req, res) => {
-    const { url, filename: userFilename } = req.query;
-    if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
+    const { url, filename: userFilename, allowSelf } = req.query;
+
+    if (!url) {
+        return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
+    }
+
+    // ✅ 자기 자신 캡처 방지
+    try {
+        const requestedHost = new URL(url).hostname;
+        if (requestedHost === 'hwaseonad.onrender.com' && allowSelf !== 'true') {
+            return res.status(400).json({ error: '자기 자신 캡처는 금지되어 있습니다.' });
+        }
+    } catch (e) {
+        return res.status(400).json({ error: '잘못된 URL 형식입니다.' });
+    }
 
     let browser;
     try {
         const captureDir = path.join(__dirname, 'public');
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
 
-        const browser = await puppeteer.launch({
+        browser = await puppeteer.launch({
             headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
 
-        
-
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        // 안전한 파일명 생성
         const rawName = typeof userFilename === 'string' && userFilename.trim() !== ''
-        ? userFilename.trim()
-        : `capture_${Date.now()}`;
-
-        // 한글 포함 허용
+            ? userFilename.trim()
+            : `capture_${Date.now()}`;
         const safeFilename = rawName.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
         const finalFilename = `${safeFilename}.png`;
-
         const filePath = path.join(captureDir, finalFilename);
 
         await page.screenshot({ path: filePath, fullPage: true });
 
-        // DB에 기록
         db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
 
         console.log('✅ 저장된 파일:', finalFilename);
@@ -430,6 +433,7 @@ app.get('/api/capture', async (req, res) => {
         if (browser) await browser.close();
     }
 });
+
 
 
 
