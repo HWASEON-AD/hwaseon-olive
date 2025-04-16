@@ -24,14 +24,6 @@ app.get('/ping', (req, res) => {
     res.send('pong');
 });
 
-app.get('/capture-image/:filename', (req, res) => {
-    const filePath = path.join('/tmp', req.params.filename);
-    if (!fs.existsSync(filePath)) {
-        return res.status(404).send('파일 없음');
-    }
-    res.sendFile(filePath);
-});
-
 
 
 const db = new sqlite3.Database('rankings.db', (err) => {
@@ -393,20 +385,14 @@ app.get('/api/download', (req, res) => {
 });
 
 
+
 app.get('/api/capture', async (req, res) => {
-    const { url, filename: userFilename, allowSelf } = req.query;
-
+    const { url, filename: userFilename } = req.query;
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
-
-    // 자기 자신 캡처 기본 차단 (예외 파라미터 허용)
-    const hostname = new URL(url).hostname;
-    if (hostname === 'hwaseonad.onrender.com' && allowSelf !== 'true') {
-        return res.status(400).json({ error: '자기 자신을 캡처하는 요청은 허용되지 않습니다.' });
-    }
 
     let browser;
     try {
-        const captureDir = '/tmp';
+        const captureDir = path.join(__dirname, 'public');
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
 
         browser = await puppeteer.launch({
@@ -419,14 +405,18 @@ app.get('/api/capture', async (req, res) => {
                 '--allow-file-access-from-files'
             ]
         });
+        
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
+        // 안전한 파일명 생성
         const rawName = typeof userFilename === 'string' && userFilename.trim() !== ''
-            ? userFilename.trim()
-            : `capture_${Date.now()}`;
+        ? userFilename.trim()
+        : `capture_${Date.now()}`;
+
+        // 한글 포함 허용
         const safeFilename = rawName.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
         const finalFilename = `${safeFilename}.png`;
 
@@ -434,11 +424,11 @@ app.get('/api/capture', async (req, res) => {
 
         await page.screenshot({ path: filePath, fullPage: true });
 
+        // DB에 기록
         db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
 
         console.log('✅ 저장된 파일:', finalFilename);
         res.json({ filename: finalFilename });
-
     } catch (err) {
         console.error('캡처 오류:', err.message);
         res.status(500).json({ error: '캡처 실패', details: err.message });
@@ -446,6 +436,7 @@ app.get('/api/capture', async (req, res) => {
         if (browser) await browser.close();
     }
 });
+
 
 
 app.get('/api/captures', (req, res) => {
