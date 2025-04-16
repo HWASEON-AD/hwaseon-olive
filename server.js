@@ -387,44 +387,42 @@ app.get('/api/capture', async (req, res) => {
     let browser;
     try {
         const captureDir = path.join(__dirname, 'public');
-        if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
+        if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir, { recursive: true });
 
-        const browser = await puppeteer.launch({
+        browser = await puppeteer.launch({
             headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
-        
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        // 안전한 파일명 생성
         const rawName = typeof userFilename === 'string' && userFilename.trim() !== ''
-        ? userFilename.trim()
-        : `capture_${Date.now()}`;
+            ? userFilename.trim()
+            : `capture_${Date.now()}`;
 
-        // 한글 포함 허용
         const safeFilename = rawName.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
         const finalFilename = `${safeFilename}.png`;
-
         const filePath = path.join(captureDir, finalFilename);
 
         await page.screenshot({ path: filePath, fullPage: true });
 
-        // DB에 기록
-        db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
+        // 선택: DB 기록 주석처리 가능
+        // db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
 
         console.log('✅ 저장된 파일:', finalFilename);
         res.json({ filename: finalFilename });
+
     } catch (err) {
         console.error('캡처 오류:', err.message);
         res.status(500).json({ error: '캡처 실패', details: err.message });
     } finally {
-        if (browser) await browser.close();
+        if (browser) await browser.close();  // 이제 정상 작동함
     }
 });
+
 
 
 

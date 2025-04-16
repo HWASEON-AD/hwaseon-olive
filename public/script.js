@@ -184,6 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
 document.addEventListener('keydown', async (event) => {
     if (event.ctrlKey && event.key === 'Enter') {
         const urlToCapture = window.location.href;
@@ -199,7 +200,7 @@ document.addEventListener('keydown', async (event) => {
             const { filename } = await res.json();
 
             const img = document.createElement('img');
-            img.src = `https://hwaseonad.onrender.com/${filename}`;  // ✅ 도메인 수정
+            img.src = `https://hwaseonad.onrender.com/${filename}`;  // ✅ 백틱으로 템플릿 리터럴 사용
             img.style.maxWidth = '100%';
             img.style.border = '1px solid #ccc';
             img.style.marginTop = '20px';
