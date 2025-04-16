@@ -19,13 +19,18 @@ async function searchByProductName() {
         );
 
         if (!res.ok) {
-            const errorText = await res.text();  // 서버에서 반환한 오류 메시지 확인
-            console.error('서버 오류:', errorText);
-            throw new Error('서버 오류');
-        }
-
-        const data = await res.json();
-        updateSearchTable(data);  // 테이블에 결과 출력
+            const errorText = await res.text();
+            console.error("❌ 서버 응답 실패:", res.status, errorText);
+            alert(`캡처 실패: ${res.status}`);
+            return;
+          }
+          
+          const data = await res.json();
+          if (!data.filename) {
+            console.error("❌ filename이 응답에 없습니다.", data);
+            alert("파일 생성에 실패했습니다.");
+            return;
+          }
 
     } catch (err) {
         console.error("검색 오류:", err);
