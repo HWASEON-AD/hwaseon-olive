@@ -91,6 +91,7 @@ async function crawlOliveYoung(category) {
     console.log(`크롤링 시작: ${category}`);
     let browser;
     try {
+        
         browser = await puppeteer.launch({
             headless: true,
             executablePath: puppeteer.executablePath(),
@@ -388,6 +389,11 @@ app.get('/api/capture', async (req, res) => {
     try {
         const captureDir = path.join(__dirname, 'public');
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir, { recursive: true });
+
+
+        // 🟡 로그로 크롬 경로 확인
+        const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
+        console.log('🔍 Chromium 경로:', chromePath);
 
         browser = await puppeteer.launch({
             headless: 'new', // 또는 'true'
