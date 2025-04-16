@@ -13,6 +13,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+console.log('캡처 요청 URL:', req.query.url);
+console.log('파일명:', req.query.filename);
+
+
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
@@ -380,15 +384,15 @@ app.get('/api/download', (req, res) => {
 
 
 
-
 app.get('/api/capture', async (req, res) => {
-    const { url, filename, allowSelf } = req.query;
-
     try {
-        // 필수 값 체크
+        const { url, filename } = req.query;
         if (!url || !filename) {
             return res.status(400).json({ error: 'Missing url or filename' });
         }
+
+        // 파일명 깨짐 방지
+        const safeFilename = filename.replace(/[^\w\-]/g, '_');
 
         const browser = await puppeteer.launch({
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -398,18 +402,17 @@ app.get('/api/capture', async (req, res) => {
         const page = await browser.newPage();
         await page.goto(url, { waitUntil: 'networkidle2' });
 
-        const filePath = path.join(__dirname, 'public', `${filename}.png`);
-        await page.screenshot({ path: filePath, fullPage: true });
+        const screenshotPath = path.join(__dirname, 'public', `${safeFilename}.png`);
+        await page.screenshot({ path: screenshotPath, fullPage: true });
 
         await browser.close();
 
-        res.json({ filename: `${filename}.png` });
+        res.json({ filename: `${safeFilename}.png` });
     } catch (error) {
-        console.error('스크린샷 캡처 에러:', error);
+        console.error('스크린샷 캡처 중 오류 발생:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
-
 
 
 
