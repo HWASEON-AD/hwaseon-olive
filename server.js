@@ -20,6 +20,11 @@ app.get('/', (req, res) => {
 });
 
 
+app.get('/ping', (req, res) => {
+    res.send('pong');
+});
+
+
 
 const db = new sqlite3.Database('rankings.db', (err) => {
     if (err) console.error('DB error:', err.message);
@@ -383,11 +388,17 @@ app.get('/api/download', (req, res) => {
 
 app.get('/api/capture', async (req, res) => {
     const { url, filename: userFilename } = req.query;
+
+    // ✅ 1. URL 검증: 자기 자신 URL 막기
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
+    if (url.includes('hwaseonad.onrender.com')) {
+        return res.status(400).json({ error: '자기 자신을 캡처하는 요청은 허용되지 않습니다.' });
+    }
 
     let browser;
     try {
-        const captureDir = path.join(__dirname, 'public');
+        // ✅ 2. 안전한 저장 경로: /tmp
+        const captureDir = '/tmp';
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
 
         browser = await puppeteer.launch({
@@ -400,18 +411,15 @@ app.get('/api/capture', async (req, res) => {
                 '--allow-file-access-from-files'
             ]
         });
-        
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        // 안전한 파일명 생성
+        // ✅ 3. 안전한 파일 이름 생성
         const rawName = typeof userFilename === 'string' && userFilename.trim() !== ''
-        ? userFilename.trim()
-        : `capture_${Date.now()}`;
-
-        // 한글 포함 허용
+            ? userFilename.trim()
+            : `capture_${Date.now()}`;
         const safeFilename = rawName.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
         const finalFilename = `${safeFilename}.png`;
 
@@ -419,11 +427,12 @@ app.get('/api/capture', async (req, res) => {
 
         await page.screenshot({ path: filePath, fullPage: true });
 
-        // DB에 기록
+        // ✅ 4. DB 저장은 그대로 유지 (sqlite 경로만 유의)
         db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
 
         console.log('✅ 저장된 파일:', finalFilename);
         res.json({ filename: finalFilename });
+
     } catch (err) {
         console.error('캡처 오류:', err.message);
         res.status(500).json({ error: '캡처 실패', details: err.message });
@@ -431,6 +440,8 @@ app.get('/api/capture', async (req, res) => {
         if (browser) await browser.close();
     }
 });
+
+
 
 
 
