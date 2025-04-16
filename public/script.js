@@ -185,41 +185,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
 document.addEventListener('keydown', async (event) => {
     if (event.ctrlKey && event.key === 'Enter') {
-      const urlToCapture = window.location.href;
-      const filenameInput = prompt('저장할 파일명을 입력하세요 (확장자 제외):');
-      if (!filenameInput) return;
-  
-      try {
-        const res = await fetch(`/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}&allowSelf=true`);
-  
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error("❌ 서버 응답 실패:", res.status, errorText);
-          alert(`캡처 실패: ${res.status}\n${errorText}`);
-          return;
-        }
-  
-        // ✅ 여기에 넣으면 된다
-        const data = await res.json();
+        const urlToCapture = window.location.href;
+        const filenameInput = prompt('저장할 파일명을 입력하세요 (확장자 제외):');
+
         if (!data.filename) {
-          alert("파일명이 응답되지 않았습니다.");
-          return;
+            console.error("filename이 undefined입니다.", data);
+            alert("캡처 실패: 서버 응답에 파일명이 없습니다.");
+            return;
         }
-  
-        const img = document.createElement('img');
-        img.src = `/capture-image/${data.filename}`;  // ← 서버에 이미지 요청
-        img.style.maxWidth = '100%';
-        img.style.border = '1px solid #ccc';
-        img.style.marginTop = '20px';
-        document.body.appendChild(img);
-  
-      } catch (err) {
-        console.error('❌ 캡처 실패:', err);
-        alert('캡처 중 오류 발생');
-      }
+
+
+        if (!filenameInput) return;
+
+        try {
+            const res = await fetch(`https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}`);
+            const { filename } = await res.json();
+
+            const img = document.createElement('img');
+            img.src = `https://hwaseonad.onrender.com/${filename}`;
+            img.style.maxWidth = '100%';
+            img.style.border = '1px solid #ccc';
+            img.style.marginTop = '20px';
+            document.body.appendChild(img);
+        } catch (err) {
+            console.error('캡처 실패:', err);
+            alert('캡처 실패');
+        }
     }
-  });
-  
+});
 
 
 
