@@ -1,3 +1,6 @@
+const filename = encodeURIComponent("아아");
+const url = `https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(targetUrl)}&filename=${filename}`;
+
 async function searchByProductName() {
     const keyword = document.getElementById('productSearchInput').value.trim();
     const startDate = document.getElementById('startDate').value;
