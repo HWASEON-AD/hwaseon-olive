@@ -24,6 +24,14 @@ app.get('/ping', (req, res) => {
     res.send('pong');
 });
 
+app.get('/capture-image/:filename', (req, res) => {
+    const filePath = path.join('/tmp', req.params.filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).send('파일 없음');
+    }
+    res.sendFile(filePath);
+});
+
 
 
 const db = new sqlite3.Database('rankings.db', (err) => {

@@ -183,6 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
+
+
 document.addEventListener('keydown', async (event) => {
     if (event.ctrlKey && event.key === 'Enter') {
       const urlToCapture = window.location.href;
@@ -206,8 +208,9 @@ document.addEventListener('keydown', async (event) => {
           return;
         }
   
+        // ✅ 여기에 넣어야 한다
         const img = document.createElement('img');
-        img.src = `https://hwaseonad.onrender.com/${data.filename}`;
+        img.src = `https://hwaseonad.onrender.com/capture-image/${data.filename}`;
         img.style.maxWidth = '100%';
         img.style.border = '1px solid #ccc';
         img.style.marginTop = '20px';
