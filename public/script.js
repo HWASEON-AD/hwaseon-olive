@@ -194,8 +194,6 @@ document.addEventListener('keydown', async (event) => {
             return;
         }
 
-
-
         if (!filenameInput) return;
 
         try {

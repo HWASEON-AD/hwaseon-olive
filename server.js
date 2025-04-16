@@ -382,43 +382,34 @@ app.get('/api/download', (req, res) => {
     );
 });
 
-
-
 app.get('/api/capture', async (req, res) => {
     const { url, filename: userFilename } = req.query;
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
 
-    let browser;
+    let browser;  // 여기에 선언하고
     try {
         const captureDir = path.join(__dirname, 'public');
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
 
-        const browser = await puppeteer.launch({
+        browser = await puppeteer.launch({  // ❗ const 제거
             headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
-        
-        
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        // 안전한 파일명 생성
         const rawName = typeof userFilename === 'string' && userFilename.trim() !== ''
-        ? userFilename.trim()
-        : `capture_${Date.now()}`;
+            ? userFilename.trim()
+            : `capture_${Date.now()}`;
 
-        // 한글 포함 허용
         const safeFilename = rawName.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
         const finalFilename = `${safeFilename}.png`;
-
         const filePath = path.join(captureDir, finalFilename);
 
         await page.screenshot({ path: filePath, fullPage: true });
-
-        // DB에 기록
         db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
 
         console.log('✅ 저장된 파일:', finalFilename);
