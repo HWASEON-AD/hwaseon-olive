@@ -382,47 +382,28 @@ app.get('/api/download', (req, res) => {
 
 
 app.get('/api/capture', async (req, res) => {
-    const { url, filename: userFilename } = req.query;
-    if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
-
     let browser;
-
     try {
-        const captureDir = path.join(__dirname, 'public');
-        if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir, { recursive: true });
-
-        browser = await puppeteer.launch({
-            headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: puppeteer.executablePath()  // ✅ 이걸로!
-        });
-
-        const page = await browser.newPage();
-        await page.setViewport({ width: 1920, height: 1080 });
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-
-        const rawName = typeof userFilename === 'string' && userFilename.trim() !== ''
-            ? userFilename.trim()
-            : `capture_${Date.now()}`;
-
-        const safeFilename = rawName.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
-        const finalFilename = `${safeFilename}.png`;
-        const filePath = path.join(captureDir, finalFilename);
-
-        await page.screenshot({ path: filePath, fullPage: true });
-
-
-
-        console.log('✅ 저장된 파일:', finalFilename);
-        res.json({ filename: finalFilename });
-
+      console.log('🔍 Chromium 경로:', puppeteer.executablePath());
+  
+      browser = await puppeteer.launch({
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        executablePath: puppeteer.executablePath()
+      });
+  
+      const page = await browser.newPage();
+      await page.goto('https://example.com');
+      await page.screenshot({ path: 'example.png' });
+  
+      res.json({ message: '캡처 완료' });
     } catch (err) {
-        console.error('캡처 오류:', err.message);
-        res.status(500).json({ error: '캡처 실패', details: err.message });
+      console.error('캡처 실패:', err);
+      res.status(500).json({ error: err.message });
     } finally {
-        if (browser) await browser.close();  // 이제 정상 작동함
+      if (browser) await browser.close();
     }
-});
+  });
 
 
 
