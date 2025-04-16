@@ -385,18 +385,20 @@ app.get('/api/download', (req, res) => {
 });
 
 
-
 app.get('/api/capture', async (req, res) => {
-    const { url, filename: userFilename } = req.query;
+    const { url, filename: userFilename, allowSelf } = req.query;
 
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
-    if (url.includes('hwaseonad.onrender.com')) {
+
+    // 자기 자신 캡처 기본 차단 (예외 파라미터 허용)
+    const hostname = new URL(url).hostname;
+    if (hostname === 'hwaseonad.onrender.com' && allowSelf !== 'true') {
         return res.status(400).json({ error: '자기 자신을 캡처하는 요청은 허용되지 않습니다.' });
     }
 
     let browser;
     try {
-        const captureDir = '/tmp';  // ✅ 둘 다 /tmp로 통일
+        const captureDir = '/tmp';
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
 
         browser = await puppeteer.launch({
@@ -437,8 +439,9 @@ app.get('/api/capture', async (req, res) => {
     }
 });
 
+
 app.get('/api/captures', (req, res) => {
-    const captureDir = '/tmp';  // ✅ 여기서도 동일하게
+    const captureDir = path.join(__dirname, 'public');
 
     db.all(`SELECT id, filename, created_at FROM captures ORDER BY created_at DESC`, (err, rows) => {
         if (err) {
@@ -448,11 +451,13 @@ app.get('/api/captures', (req, res) => {
 
         const validCaptures = [];
 
+        // 파일 존재 여부 확인하고, 없으면 DB에서도 삭제
         rows.forEach(row => {
             const filePath = path.join(captureDir, row.filename);
             if (fs.existsSync(filePath)) {
                 validCaptures.push(row);
             } else {
+                // 파일이 없으면 DB에서 삭제
                 db.run(`DELETE FROM captures WHERE id = ?`, [row.id], (err) => {
                     if (err) console.error(`DB 삭제 실패 (id=${row.id}):`, err);
                 });
@@ -462,8 +467,6 @@ app.get('/api/captures', (req, res) => {
         res.json(validCaptures);
     });
 });
-
-
 
 
 
