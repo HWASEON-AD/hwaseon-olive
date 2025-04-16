@@ -386,15 +386,15 @@ app.get('/api/capture', async (req, res) => {
     if (!url) return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
 
     let browser;
-
     try {
         const captureDir = path.join(__dirname, 'public');
         if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir, { recursive: true });
 
+
         browser = await puppeteer.launch({
-            headless: 'new',
+            headless: 'new', // 또는 'true'
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: puppeteer.executablePath()
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
 
         const page = await browser.newPage();
@@ -411,7 +411,8 @@ app.get('/api/capture', async (req, res) => {
 
         await page.screenshot({ path: filePath, fullPage: true });
 
-
+        // 선택: DB 기록 주석처리 가능
+        // db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
 
         console.log('✅ 저장된 파일:', finalFilename);
         res.json({ filename: finalFilename });
