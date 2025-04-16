@@ -382,57 +382,34 @@ app.get('/api/download', (req, res) => {
 
 
 app.get('/api/capture', async (req, res) => {
-    const { url, filename: userFilename, allowSelf } = req.query;
+    const { url, filename, allowSelf } = req.query;
 
-    if (!url) {
-        return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
-    }
-
-    // ✅ 자기 자신 캡처 방지
     try {
-        const requestedHost = new URL(url).hostname;
-        if (requestedHost === 'hwaseonad.onrender.com' && allowSelf !== 'true') {
-            return res.status(400).json({ error: '자기 자신 캡처는 금지되어 있습니다.' });
+        // 필수 값 체크
+        if (!url || !filename) {
+            return res.status(400).json({ error: 'Missing url or filename' });
         }
-    } catch (e) {
-        return res.status(400).json({ error: '잘못된 URL 형식입니다.' });
-    }
 
-    let browser;
-    try {
-        const captureDir = path.join(__dirname, 'public');
-        if (!fs.existsSync(captureDir)) fs.mkdirSync(captureDir);
-
-        browser = await puppeteer.launch({
-            headless: 'new',
+        const browser = await puppeteer.launch({
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
+            executablePath: puppeteer.executablePath(),
         });
 
         const page = await browser.newPage();
-        await page.setViewport({ width: 1920, height: 1080 });
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.goto(url, { waitUntil: 'networkidle2' });
 
-        const rawName = typeof userFilename === 'string' && userFilename.trim() !== ''
-            ? userFilename.trim()
-            : `capture_${Date.now()}`;
-        const safeFilename = rawName.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
-        const finalFilename = `${safeFilename}.png`;
-        const filePath = path.join(captureDir, finalFilename);
-
+        const filePath = path.join(__dirname, 'public', `${filename}.png`);
         await page.screenshot({ path: filePath, fullPage: true });
 
-        db.run(`INSERT INTO captures (filename) VALUES (?)`, [finalFilename]);
+        await browser.close();
 
-        console.log('✅ 저장된 파일:', finalFilename);
-        res.json({ filename: finalFilename });
-    } catch (err) {
-        console.error('캡처 오류:', err.message);
-        res.status(500).json({ error: '캡처 실패', details: err.message });
-    } finally {
-        if (browser) await browser.close();
+        res.json({ filename: `${filename}.png` });
+    } catch (error) {
+        console.error('스크린샷 캡처 에러:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
+
 
 
 

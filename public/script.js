@@ -192,14 +192,17 @@ document.addEventListener('keydown', async (event) => {
         if (!filenameInput) return;
 
         try {
-            const res = await fetch(`https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}&allowSelf=true`);
-            
+            const apiUrl = `https://hwaseonad.onrender.com/api/capture?url=${encodeURIComponent(urlToCapture)}&filename=${encodeURIComponent(filenameInput)}&allowSelf=true`;
+
+            const res = await fetch(apiUrl);
             if (!res.ok) throw new Error(`서버 응답 오류: ${res.status}`);
-            
-            const { filename } = await res.json();
+
+            const data = await res.json();
+
+            if (!data.filename) throw new Error('서버에서 파일명이 반환되지 않았습니다');
 
             const img = document.createElement('img');
-            img.src = `https://hwaseonad.onrender.com/${filename}`;  // ✅ 도메인 수정
+            img.src = `https://hwaseonad.onrender.com/${data.filename}`; // 올바른 주소
             img.style.maxWidth = '100%';
             img.style.border = '1px solid #ccc';
             img.style.marginTop = '20px';
