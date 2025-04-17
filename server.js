@@ -117,7 +117,11 @@ async function crawlOliveYoung(category) {
         const baseUrl = 'https://www.oliveyoung.co.kr/store/main/getBestList.do';
         const categoryCode = oliveYoungCategories[category];
         const url = `${baseUrl}?dispCatNo=900000100100001&fltDispCatNo=${categoryCode}&pageIdx=1&rowsPerPage=100`;
+        
         await page.goto(url, { waitUntil: 'networkidle2' });
+        await page.waitForSelector('.prd_info', { timeout: 10000 });
+        console.log('🌍 페이지 이동 완료, HTML 길이:', (await page.content()).length);
+
 
 
         const products = await page.evaluate(() => {
