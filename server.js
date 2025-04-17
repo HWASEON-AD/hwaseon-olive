@@ -107,9 +107,11 @@ async function crawlOliveYoung(category) {
     console.log(`크롤링 시작: ${category}`);
     try {
         browser = await puppeteer.launch({
-            headless: 'new',  // 또는 true
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            // executablePath 생략!
         });
+        
         
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0');
