@@ -5,6 +5,8 @@ const cors = require('cors');
 const path = require('path');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
+process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
+
 const app = express();
 const port = 5001;
 
