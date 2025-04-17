@@ -110,10 +110,9 @@ async function crawlOliveYoung(category) {
     try {
         browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: path.join(__dirname, 'chromium', 'linux-135.0.7049.84', 'chrome-linux64', 'chrome'),
+            executablePath: '/opt/render/.cache/puppeteer/chrome/linux-135.0.7049.84/chrome-linux64/chrome',
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
-        
         
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0');
