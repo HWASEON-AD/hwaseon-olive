@@ -114,16 +114,21 @@ async function crawlOliveYoung(category) {
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
         
-        
+
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0');
         const baseUrl = 'https://www.oliveyoung.co.kr/store/main/getBestList.do';
         const categoryCode = oliveYoungCategories[category];
         const url = `${baseUrl}?dispCatNo=900000100100001&fltDispCatNo=${categoryCode}&pageIdx=1&rowsPerPage=100`;
         
-        await page.goto(url, { waitUntil: 'networkidle2' });
-        await page.waitForSelector('.prd_info', { timeout: 10000 });
-        console.log('🌍 페이지 이동 완료, HTML 길이:', (await page.content()).length);
+        await page.setUserAgent('Mozilla/5.0 ...');
+        await page.setJavaScriptEnabled(true);
+        await page.setExtraHTTPHeaders({ 'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7' });
+
+        await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
+        });
 
 
 
