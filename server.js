@@ -12,6 +12,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
@@ -19,6 +20,8 @@ app.get('/', (req, res) => {
 app.get('/ping', (req, res) => {
     res.send('pong');
 });
+
+
 
 const db = new sqlite3.Database('rankings.db', (err) => {
     if (err) console.error('DB error:', err.message);
@@ -53,7 +56,7 @@ db.serialize(() => {
     `);
 });
 
-// 카테고리 정의
+
 const oliveYoungCategories = {
     스킨케어: '10000010001',
     마스크팩: '10000010009',
