@@ -3,6 +3,7 @@ const puppeteer = require('puppeteer');
 const sqlite3 = require('sqlite3')
 const cors = require('cors');
 const path = require('path');
+const cron = require('node-cron');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
@@ -22,7 +23,6 @@ app.get('/', (req, res) => {
 app.get('/ping', (req, res) => {
     res.send('pong');
 });
-
 
 
 const db = new sqlite3.Database('rankings.db', (err) => {
@@ -480,4 +480,11 @@ app.listen(port, () => {
             await crawlOliveYoung(category);
         }
     })();
+});
+
+cron.schedule('0 */5 * * *', async () => {
+    console.log(`[⏰ 자동 크롤링] ${new Date().toISOString().slice(0, 19)} 실행`);
+    for (const category of Object.keys(oliveYoungCategories)) {
+        await crawlOliveYoung(category);
+    }
 });
