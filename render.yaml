@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: olive-hwaseon
+    name: hwaseonad
     env: node
     plan: free
     buildCommand: npm install
