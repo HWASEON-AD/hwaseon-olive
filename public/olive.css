@@ -27,7 +27,7 @@ h1 {
     text-align: center;
     color: #333;
     font-size: 2.7rem; 
-    margin-bottom: -2.7%;
+    margin-bottom: -2.5%;
     font-weight: 600;
 }
 
@@ -35,26 +35,9 @@ h1 {
 h4{
     
     color: #336;
-    font-size: 2rem;
-    margin-bottom: -40px;
-    margin-left: 200px;
-    font-weight: 500;
-}
-
-
-h5{
-    color: #336;
-    font-size: 1.5rem;
-    margin-bottom: 5px;
-    margin-left: 1230px;
-    font-weight: 500;
-}
-
-h6{
-    color: #336;
-    font-size: 1.5rem;
+    font-size: 1.7rem;
     margin-bottom: 70px;
-    margin-left: 1140px;
+    margin-left: 1100px;
     font-weight: 500;
 }
 

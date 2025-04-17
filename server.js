@@ -283,7 +283,6 @@ app.get('/api/search', (req, res) => {
 });
 
 
-
 app.get('/api/search-range', (req, res) => {
     const { keyword, startDate, endDate } = req.query;
 
@@ -407,9 +406,6 @@ app.get('/api/download', (req, res) => {
 
 
 
-
-
-
 app.get('/api/download-search', (req, res) => {
     const { keyword, startDate, endDate } = req.query;
     if (!keyword || !startDate || !endDate) {
@@ -482,8 +478,27 @@ app.listen(port, () => {
     })();
 });
 
-cron.schedule('0 */5 * * *', async () => {
-    console.log(`[⏰ 자동 크롤링] ${new Date().toISOString().slice(0, 19)} 실행`);
+
+
+// 오전 9시
+cron.schedule('0 9 * * *', async () => {
+    console.log(`[⏰ 오전 9시 자동 크롤링] ${new Date().toISOString().slice(0, 19)} 실행`);
+    for (const category of Object.keys(oliveYoungCategories)) {
+        await crawlOliveYoung(category);
+    }
+});
+
+// 오후 1시
+cron.schedule('0 13 * * *', async () => {
+    console.log(`[⏰ 오후 1시 자동 크롤링] ${new Date().toISOString().slice(0, 19)} 실행`);
+    for (const category of Object.keys(oliveYoungCategories)) {
+        await crawlOliveYoung(category);
+    }
+});
+
+// 오후 6시
+cron.schedule('0 18 * * *', async () => {
+    console.log(`[⏰ 오후 6시 자동 크롤링] ${new Date().toISOString().slice(0, 19)} 실행`);
     for (const category of Object.keys(oliveYoungCategories)) {
         await crawlOliveYoung(category);
     }

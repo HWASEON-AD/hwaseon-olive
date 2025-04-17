@@ -184,7 +184,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-
 document.addEventListener('DOMContentLoaded', () => {
     const categoryEl = document.getElementById('category');
     const startDateEl = document.getElementById('startDate');
