@@ -109,7 +109,6 @@ async function crawlOliveYoung(category) {
         browser = await puppeteer.launch({
             headless: 'new',  // 또는 true
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: puppeteer.executablePath()  // ✅ 꼭 이거
         });
         
         const page = await browser.newPage();
@@ -117,8 +116,8 @@ async function crawlOliveYoung(category) {
         const baseUrl = 'https://www.oliveyoung.co.kr/store/main/getBestList.do';
         const categoryCode = oliveYoungCategories[category];
         const url = `${baseUrl}?dispCatNo=900000100100001&fltDispCatNo=${categoryCode}&pageIdx=1&rowsPerPage=100`;
-
         await page.goto(url, { waitUntil: 'networkidle2' });
+
 
         const products = await page.evaluate(() => {
             const result = [];
