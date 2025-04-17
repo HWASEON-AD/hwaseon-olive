@@ -3,15 +3,13 @@
   "description": "",
   "version": "1.0.0",
   "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "postinstall": "npx puppeteer browsers install chrome && mkdir -p ./chromium && cp -r /opt/render/.cache/puppeteer/chrome/* ./chromium"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
-
-  "scripts": {
-    "start": "node server.js",
-    "postinstall": "npx puppeteer browsers install chrome && mkdir -p ./chromium && cp -r $PUPPETEER_CACHE_DIR/chrome/* ./chromium"
-  },
-  
   "dependencies": {
     "axios": "^1.8.4",
     "cheerio": "^1.0.0",
