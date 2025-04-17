@@ -9,7 +9,7 @@
 
   "scripts": {
     "start": "node server.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "postinstall": "npx puppeteer browsers install chrome && mkdir -p ./chromium && cp -r $PUPPETEER_CACHE_DIR/chrome/* ./chromium"
   },
   
   "dependencies": {
