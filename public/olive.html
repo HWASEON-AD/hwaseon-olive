@@ -9,12 +9,10 @@
     </div>
 </head>
 
-
 <body>
     <div class="container">
-        
         <h1>올리브영 랭킹
-            <h4>Hwaseon</h4>
+            <h4>HWASEON</h4>
         </h1>
         
         <div class="filters">
@@ -42,26 +40,41 @@
                 <option value="취미_팬시">취미/팬시</option>
             </select>
 
+            <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
             <label for="startDate"> 날짜 선택 :</label>
-            <input type="date" id="startDate">
-            <label> ~ </label>
-            <input type="date" id="endDate">
+            <input type="date" id="startDate" min="2025-04-17">
+            <label>~</label>
+            <input type="date" id="endDate" min="2025-04-17">
+            <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
             <label>제품명 검색 : </label>
-            <input type="text" id="productSearchInput", productSearchBtn, placeholder="예시 : 세럼 , 앰플"/>
-            
+            <input type="text" id="productSearchInput" productSearchBtn, placeholder="예시 : 세럼 , 앰플"/>
+            <button id="productSearchBtn">🔍</button>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: center; height: 32px; margin-top: -15px;">
+            <span style="color: rgba(0, 0, 0, 0.6); font-size: 17px;">
+            ※ 25.04.17 부터 데이터 조회 가능
+            </span>
         </div>
 
 
-        <div style ="text-align: center; margin-top:60px;">
-            <button id="searchBtn">랭킹 검색</button>
-            <button id="downloadExcelBtn" style="margin-left:100px;"">랭킹 : Excel</button>
-            <button id="productSearchDownloadBtn" style="margin-left:100px;">제품명 : Excel</button>
-
-            <table id="productSearchTable" style="margin-left: auto; margin-right: auto; ">
+        <div style ="text-align: center; margin-top:50px;">
+            <button id="searchBtn">랭킹 데이터 검색</button>
+            <button id="productSearchDownloadBtn" style="margin-left:100px;">제품명 : Excel 다운로드</button>
+            <button id="downloadExcelBtn" style="margin-left:100px;">랭킹 : Excel 다운로드</button>
+        
+        </div>
+        <div style = margin-top:100px;">
+            <table id="productSearchTable" style="margin-left: auto; margin-right: auto;">
+                <div id="lastUpdatedText" style="margin-top: -25px; margin-bottom: 15px; font-size: 1.1rem; color: #555;">
+                </div>
+                
+                <h2>제품명 데이터</h2>
                 <thead>
-                    <div style ="margin-top : 70px";> 
+                    <div style ="margin-top : 10px";> 
                         <tr>
                             <th>날짜</th>
+                            <th>카테고리</th>
                             <th>순위</th>
                             <th>브랜드</th>
                             <th>제품명</th>
@@ -84,6 +97,7 @@
                 <thead>
                     <tr>
                         <th>날짜</th>
+                        <th>카테고리</th>
                         <th>순위</th>
                         <th>브랜드</th>
                         <th>제품명</th>
@@ -102,3 +116,4 @@
     <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
 </body>
 </html>
+

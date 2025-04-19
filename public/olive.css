@@ -32,6 +32,7 @@ h1 {
 }
 
 
+
 h4{
     
     color: #336;
@@ -45,7 +46,7 @@ h4{
 
 .filters {
     display: flex;
-    gap: 30px;
+    gap: 15px;
     margin: 30px;
     margin-left: 100px;
     justify-content: center;
@@ -87,6 +88,28 @@ label {
     outline: none;
 }
 
+
+.filters button,
+#productSearchBtn {
+    background: linear-gradient(45deg, #28a745, #218838);
+    border: none;
+    border-radius: 100px;
+    color: #fff;
+    padding: 15px 25px;
+    font-size: 0.8rem;
+    cursor: pointer;
+
+    /* ❌ 너무 좁아서 글자가 깨짐 */
+    /* width: 30px; */
+
+    /* ✅ 아래 중 택1 */
+    width: auto;           /* 글자만큼 너비 */
+    /* min-width: 80px; */ /* 최소 너비 확보 */
+
+    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;    /* 혹시 모르니 명시적으로 */
+}
 
 
 .filters button,
@@ -133,6 +156,8 @@ label {
     transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
+
+
 
 
 .filters button:hover,
@@ -271,4 +296,102 @@ tbody tr:hover {
     th:nth-child(6), td:nth-child(6) {
         width: 100%;
     }
+}
+
+#rankingTable th:nth-child(3), #productSearchTable th:nth-child(3) {  /* 순위 열 */
+    width: 5%;
+    min-width: 50px;
+}
+
+#rankingTable th:nth-child(5), #productSearchTable th:nth-child(5) {  /* 제품명 열 */
+    width: 40%;
+    min-width: 300px;
+}
+
+#rankingTable td:nth-child(3), #productSearchTable td:nth-child(3) {  /* 순위 데이터 */
+    text-align: center;
+}
+
+#rankingTable td:nth-child(5), #productSearchTable td:nth-child(5) {  /* 제품명 데이터 */
+    text-align: left;
+    word-break: break-word;
+}
+
+#rankingTable td:nth-child(8), #productSearchTable td:nth-child(8) {  /* 이벤트 데이터 */
+    text-align: left;
+    word-break: break-word;
+    color: #28a745;
+    font-weight: 500;
+}
+
+#rankingTable td:nth-child(8) span, #productSearchTable td:nth-child(8) span {
+    display: inline-block;
+    margin-right: 5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background-color: #e8f5e9;
+    color: #28a745;
+    font-size: 0.9rem;
+}
+
+#searchBtn, #downloadExcelBtn {
+    background: linear-gradient(45deg, #28a745, #218838);
+    border: none;
+    border-radius: 5px;
+    color: #fff;
+    padding: 14px 25px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    width: 250px;
+    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+#searchBtn:hover, #downloadExcelBtn:hover {
+    background: linear-gradient(45deg, #218838, #1e7e34);
+    transform: translateY(-2px);
+}
+
+#searchBtn:active, #downloadExcelBtn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#productSearchTable th:nth-child(2) {  /* 카테고리 열 */
+    width: 8%;
+    min-width: 80px;
+}
+
+#productSearchTable td:nth-child(2) {  /* 카테고리 데이터 */
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#productSearchTable th:nth-child(4) {  /* 브랜드명 열 */
+    width: 8%;
+    min-width: 80px;
+}
+
+#productSearchTable td:nth-child(4) {  /* 브랜드명 데이터 */
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
+}
+
+#productSearchTable td:nth-child(6), 
+#productSearchTable td:nth-child(7) {  /* 소비자가, 판매가 데이터 */
+    text-align: left;
+    white-space: nowrap;
+    min-width: 90px;
+    width: auto;
+}
+
+#productSearchTable th:nth-child(6),
+#productSearchTable th:nth-child(7) {  /* 소비자가, 판매가 헤더 */
+    min-width: 90px;
+    width: auto;
 }

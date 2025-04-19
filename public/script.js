@@ -11,51 +11,80 @@ async function searchByProductName() {
         tbody.appendChild(row);
         return;
     }
-
     try {
         // 서버에 요청 보내기
         const res = await fetch(
             `https://hwaseonad.onrender.com/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
         );
-
         if (!res.ok) {
             const errorText = await res.text();  // 서버에서 반환한 오류 메시지 확인
             console.error('서버 오류:', errorText); 
             throw new Error('서버 오류');
         }
-
         const data = await res.json();
         updateSearchTable(data);  // 테이블에 결과 출력
-
     } catch (err) {
         console.error("검색 오류:", err);
     }
 }
 
 
+async function showLastUpdatedTime() {
+    try {
+        const res = await fetch('https://hwaseonad.onrender.com/api/last-updated');
+        const data = await res.json();
 
+        const updatedAt = new Date(data.last_updated);
+        const now = new Date();
+
+        const diffMs = now - updatedAt;
+        const diffMin = Math.floor(diffMs / 1000 / 60);
+
+        const diffHours = Math.floor(diffMin / 60);
+        const remainingMinutes = diffMin % 60;
+
+        const hh = updatedAt.getHours().toString().padStart(2, '0');
+        const mm = updatedAt.getMinutes().toString().padStart(2, '0');
+
+        let message = '';
+        if (diffHours > 0) {
+            message = `${diffHours}시간 ${remainingMinutes}분 전 업데이트 (${hh}:${mm})`;
+        } else {
+            message = `${remainingMinutes}분 전 업데이트 (${hh}:${mm})`;
+        }
+
+        document.getElementById('lastUpdatedText').textContent = message;
+    } catch (err) {
+        console.error('업데이트 시간 불러오기 실패:', err);
+        document.getElementById('lastUpdatedText').textContent = '정보 없음';
+    }
+}
+
+
+
+// 제품명 검색 테이블
 function updateSearchTable(results) {
     const tbody = document.querySelector('#productSearchTable tbody');
     tbody.innerHTML = '';
 
     if (!Array.isArray(results) || results.length === 0) {
         const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="7">검색 결과가 없습니다.</td>`;
+        row.innerHTML = `<td colspan="8">검색 결과가 없습니다.</td>`;
         tbody.appendChild(row);
         return;
     }
 
-    
     results.forEach(item => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${item.date}</td>
-            <td>${item.rank}</td>
-            <td>${item.brand}</td>
+            <td>${formatDate(item.date)}</td>
+            <td>${item.category || '미분류'}</td>
+            <td>${item.rank || '-'}</td>
+            <td>${item.brand || '-'}</td>
             <td>${item.product}</td>
-            <td>${item.originalPrice}</td>
-            <td>${item.salePrice}</td>
-            <td>${item.event}</td>
+            <td>${item.originalPrice || '-'}</td>
+            <td>${item.salePrice || '-'}</td>
+            <td>${item.event || '-'}</td>
         `;
         tbody.appendChild(row);
     });
@@ -63,6 +92,7 @@ function updateSearchTable(results) {
 
 
 
+// 랭킹 업데이트
 async function fetchRankings(category, date) {
     try {
         const res = await fetch(`https://hwaseonad.onrender.com/api/rankings?category=${category}&date=${date}`);
@@ -74,13 +104,15 @@ async function fetchRankings(category, date) {
 }   
 
 
-
+// ... existing code ...
 async function fetchRankingsByRange(category, startDate, endDate) {
+    console.log('카테고리 값:', category); // 디버깅 로그 추가
     try {
         const res = await fetch(
             `https://hwaseonad.onrender.com/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
         );
         const data = await res.json();
+        console.log('서버 응답 데이터:', data); // 디버깅 로그 추가
         updateTable(data);
     } catch (err) {
         console.error("날짜 범위 검색 오류:", err);
@@ -89,24 +121,32 @@ async function fetchRankingsByRange(category, startDate, endDate) {
 
 
 
+// 랭킹 테이블
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}.<br>${month}.${day}`;
+}
+
 function updateTable(rankings) {
+    console.log("업데이트할 랭킹 데이터:", rankings);
     const tbody = document.querySelector('#rankingTable tbody');
     tbody.innerHTML = '';
 
     if (!Array.isArray(rankings) || rankings.length === 0) {
         const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="7">데이터가 없습니다.</td>`;
+        row.innerHTML = `<td colspan="8">데이터가 없습니다.</td>`;
         tbody.appendChild(row);
         return;
     }
 
-    // 날짜 오름차순 정렬
-    rankings.sort((a, b) => new Date(a.date) - new Date(b.date));
-
     rankings.forEach(item => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${item.date}</td>
+            <td>${formatDate(item.date)}</td>
+            <td>${item.category}</td>
             <td>${item.rank}</td>
             <td>${item.brand}</td>
             <td>${item.product}</td>
@@ -117,6 +157,7 @@ function updateTable(rankings) {
         tbody.appendChild(row);
     });
 }
+
 
 
 
@@ -150,6 +191,7 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
             alert('엑셀 다운로드 실패');
         });
 });
+
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -201,17 +243,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         fetchRankingsByRange(category, startDate, endDate);
     });
-// 당일 랭킹 업데이트
+
     fetchRankings(categoryEl.value, startDateEl.value);
+    showLastUpdatedTime();
 });
 
 
 
-document.getElementById('productSearchInput').addEventListener('click', searchByProductName);
+
+document.getElementById('productSearchBtn').addEventListener('click', searchByProductName);
 document.getElementById('productSearchInput').addEventListener('keydown', function (event) {
     if (event.key === 'Enter') {
         searchByProductName();
     }
 });
-
-

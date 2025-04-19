@@ -8,6 +8,7 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
 
+
 const app = express();
 const port = 5001;
 
@@ -31,11 +32,13 @@ const db = new sqlite3.Database('rankings.db', (err) => {
 });
 
 
+// rankings 테이블 (기존 구조 유지)
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS rankings (
             date TEXT,
             rank INTEGER,
+            
             brand TEXT,
             product TEXT,
             salePrice TEXT,
@@ -43,8 +46,25 @@ db.serialize(() => {
             event TEXT,
             category TEXT,
             PRIMARY KEY (date, category, rank)
-        )
+        );
     `);
+});
+
+
+// update_logs 테이블 (최종 업데이트 기록용 - 따로)
+db.serialize(() => {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS update_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+    `, (err) => {
+        if (err) {
+            console.error('update_logs 테이블 생성 실패:', err.message);
+        } else {
+            console.log('update_logs 테이블 생성 완료');
+        }
+    });
 });
 
 
@@ -54,7 +74,7 @@ db.serialize(() => {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT NOT NULL,
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
-        )
+        );
     `);
 });
 
@@ -102,63 +122,60 @@ db.all("PRAGMA table_info(rankings);", (err, rows) => {
 });
 
 
+
 // 크롤링 함수
 async function crawlOliveYoung(category) {
-
+    let products = [];
     let browser;
+
     console.log(`크롤링 시작: ${category}`);
+
     try {
         browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: path.join(__dirname, 'chromium', 'linux-135.0.7049.84', 'chrome-linux64', 'chrome'),
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
-        
 
         const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0');
-        const baseUrl = 'https://www.oliveyoung.co.kr/store/main/getBestList.do';
-        const categoryCode = oliveYoungCategories[category];
-        const url = `${baseUrl}?dispCatNo=900000100100001&fltDispCatNo=${categoryCode}&pageIdx=1&rowsPerPage=100`;
-        
         await page.setUserAgent('Mozilla/5.0 ...');
         await page.setJavaScriptEnabled(true);
         await page.setExtraHTTPHeaders({ 'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7' });
 
+        const baseUrl = 'https://www.oliveyoung.co.kr/store/main/getBestList.do';
+        const categoryCode = oliveYoungCategories[category];
+        const url = `${baseUrl}?dispCatNo=900000100100001&fltDispCatNo=${categoryCode}&pageIdx=1&rowsPerPage=100`;
+
         await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000
+            waitUntil: 'domcontentloaded',
+            timeout: 60000
         });
 
-
-
-        const products = await page.evaluate(() => {
+        products = await page.evaluate((cat) => {
             const result = [];
             const items = document.querySelectorAll('.prd_info');
         
             items.forEach((el, index) => {
                 const brand = el.querySelector('.tx_brand')?.innerText.trim() || '';
                 const product = el.querySelector('.tx_name')?.innerText.trim() || '';
-                
-                // 판매가와 소비자가 추출, 없으면 'X' 처리
                 let salePrice = el.querySelector('.prd_price .tx_cur .tx_num')?.innerText.trim() || 'X';
                 let originalPrice = el.querySelector('.tx_org .tx_num')?.innerText.trim() || 'X';
-
+        
                 salePrice = salePrice !== 'X' ? salePrice.replace('원', '').trim() + '원' : salePrice;
                 originalPrice = originalPrice !== 'X' ? originalPrice.replace('원', '').trim() + '원' : originalPrice;
-                
+        
                 if (salePrice === 'X' && originalPrice !== 'X') {
                     salePrice = originalPrice;
                 } else if (originalPrice === 'X' && salePrice !== 'X') {
                     originalPrice = salePrice;
                 }
-
+        
                 const eventFlags = Array.from(el.querySelectorAll('.icon_flag'))
                     .map(flag => flag.textContent.trim())
                     .join(' / ') || 'X';
         
                 result.push({
                     rank: index + 1,
+                    category: cat,
                     brand,
                     product,
                     salePrice,
@@ -166,8 +183,14 @@ async function crawlOliveYoung(category) {
                     event: eventFlags
                 });
             });
+        
             return result;
-        });
+        }, category);
+        
+        
+
+
+
         const date = new Date().toISOString().split('T')[0];
 
         // 오늘 날짜 + 해당 카테고리 데이터 삭제
@@ -181,18 +204,41 @@ async function crawlOliveYoung(category) {
                 }
             });
         });
+
+        // 크롤링한 데이터를 삽입
         const stmt = db.prepare(`
-            INSERT OR REPLACE INTO rankings (date, rank, brand, product, salePrice, originalPrice, event, category)
+            INSERT OR REPLACE INTO rankings (date, category, rank, brand, product, salePrice, originalPrice, event)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
-
+        
         products.forEach(item => {
-            stmt.run(date, item.rank, item.brand, item.product, item.salePrice, item.originalPrice, item.event, category);
+            stmt.run(
+                date,
+                item.category,
+                item.rank,
+                item.brand,
+                item.product,
+                item.salePrice,
+                item.originalPrice,
+                item.event
+            );
         });
 
         stmt.finalize();
+
+        // 최종 업데이트 시간 기록
+        await new Promise((resolve, reject) => {
+            db.run(`INSERT INTO update_logs (updated_at) VALUES (datetime('now', 'localtime'))`, (err) => {
+                if (err) {
+                    console.error('업데이트 기록 실패:', err.message);
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            });
+        });
+
         console.log(`${category} 크롤링 완료`);
-        return products;
 
     } catch (err) {
         console.error(`${category} 크롤링 실패:`, err.message);
@@ -200,6 +246,8 @@ async function crawlOliveYoung(category) {
     } finally {
         if (browser) await browser.close();
     }
+
+    return products;
 }
 
 
@@ -220,7 +268,7 @@ app.get('/api/crawl', async (req, res) => {
 app.get('/api/rankings', (req, res) => {
     const { category, date } = req.query;
     db.all(
-        `SELECT date, rank, brand, product, salePrice, originalPrice, event FROM rankings WHERE category = ? AND date = ? ORDER BY rank ASC`,
+        `SELECT date, rank, brand, product, salePrice, originalPrice, event, category FROM rankings WHERE category = ? AND date = ? ORDER BY rank ASC`,
         [category, date],
         (err, rows) => {
             if (err) {
@@ -250,17 +298,18 @@ function updateTable(rankings) {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${item.date}</td>
+            <td>${item.category}</td>
             <td>${item.rank}</td>
             <td>${item.brand}</td>
             <td>${item.product}</td>
             <td>${item.originalPrice}</td>
             <td>${item.salePrice}</td>
             <td>${item.event}</td>
+            
         `;
         tbody.appendChild(row);
     });
 }
-
 
 
 
@@ -283,37 +332,71 @@ app.get('/api/search', (req, res) => {
 });
 
 
+
 app.get('/api/search-range', (req, res) => {
     const { keyword, startDate, endDate } = req.query;
 
-    // 필수 파라미터가 없으면 400 오류 반환
     if (!keyword || !startDate || !endDate) {
         return res.status(400).json({ message: '제품명과 날짜 범위를 모두 선택하세요.' });
     }
 
-    // 유효한 날짜인지 확인
     const start = new Date(startDate);
     const end = new Date(endDate);
     if (isNaN(start) || isNaN(end)) {
         return res.status(400).json({ message: '유효한 날짜를 입력하세요.' });
     }
 
-    // 날짜를 YYYY-MM-DD 형식으로 변환
     const formattedStartDate = start.toISOString().split('T')[0];
     const formattedEndDate = end.toISOString().split('T')[0];
 
-    // 수정된 쿼리문: 날짜 범위와 제품명으로 필터링
+    // 중복 제거 및 데이터 순서 정렬
     db.all(`
-        SELECT * FROM rankings 
-        WHERE product LIKE ? 
-        AND date BETWEEN ? AND ? 
-        ORDER BY date ASC, rank ASC
+        WITH RankedResults AS (
+            SELECT 
+                date,
+                category,
+                CAST(rank AS INTEGER) as rank,
+                brand,
+                product,
+                originalPrice,
+                salePrice,
+                event,
+                ROW_NUMBER() OVER (
+                    PARTITION BY date, product 
+                    ORDER BY 
+                        CASE 
+                            WHEN category IN (
+                                '스킨케어', '마스크팩', '클렌징', '선케어', '메이크업',
+                                '네일', '뷰티소품', '더모_코스메틱', '맨즈케어', '향수_디퓨저',
+                                '헤어케어', '바디케어', '건강식품', '푸드', '구강용품',
+                                '헬스_건강용품', '여성_위생용품', '패션', '리빙_가전', '취미_팬시'
+                            ) THEN 0
+                            ELSE 1
+                        END,
+                        CAST(rank AS INTEGER)
+                ) as rn
+            FROM rankings
+            WHERE product LIKE ? 
+            AND date BETWEEN ? AND ?
+        )
+        SELECT 
+            date,
+            category,
+            rank,
+            brand,
+            product,
+            originalPrice,
+            salePrice,
+            event
+        FROM RankedResults
+        WHERE rn = 1
+        ORDER BY date ASC, CAST(rank AS INTEGER) ASC
     `, [`%${keyword}%`, formattedStartDate, formattedEndDate], (err, rows) => {
         if (err) {
             console.error("서버 오류:", err);
             return res.status(500).json({ error: '서버 오류' });
         }
-        res.json(rows);  // 결과 반환
+        res.json(rows);
     });
 });
 
@@ -321,13 +404,15 @@ app.get('/api/search-range', (req, res) => {
 
 app.get('/api/rankings-range', (req, res) => {
     const { category, startDate, endDate } = req.query;
+    console.log('서버에서 받은 카테고리:', category);
 
     if (!category || !startDate || !endDate) {
+        console.log('필수 파라미터 누락:', { category, startDate, endDate });
         return res.status(400).json({ error: '카테고리와 날짜를 모두 선택하세요.' });
     }
 
     db.all(`
-        SELECT date, rank, brand, product, salePrice, originalPrice, event
+        SELECT date, rank, brand, product, salePrice, originalPrice, event, category
         FROM rankings
         WHERE category = ?
         AND date BETWEEN ? AND ?
@@ -337,6 +422,7 @@ app.get('/api/rankings-range', (req, res) => {
             console.error("DB 오류:", err);
             return res.status(500).json({ error: '서버 오류' });
         }
+        console.log('DB 쿼리 결과:', rows);
         res.json(rows);
     });
 });
@@ -351,11 +437,19 @@ app.get('/api/download', (req, res) => {
     }
 
     db.all(
-        `SELECT date, rank, brand, product, salePrice, originalPrice, event 
+        `SELECT 
+            date,
+            ? as category,
+            CAST(rank AS INTEGER) as rank,
+            brand,
+            product,
+            originalPrice,
+            salePrice,
+            event
         FROM rankings 
         WHERE category = ? AND date BETWEEN ? AND ?
-        ORDER BY date ASC, rank ASC`,
-        [category, startDate, endDate],
+        ORDER BY date ASC, CAST(rank AS INTEGER) ASC`,
+        [category, category, startDate, endDate],
         (err, rows) => {
             if (err) {
                 console.error('DB 에러:', err);
@@ -367,15 +461,25 @@ app.get('/api/download', (req, res) => {
 
             worksheet.columns = [
                 { header: '날짜', key: 'date', width: 15 },
+                { header: '카테고리', key: 'category', width: 15 },
                 { header: '순위', key: 'rank', width: 6 },
                 { header: '브랜드', key: 'brand', width: 15 },
-                { header: '제품명', key: 'product', width: 40 },
+                { header: '제품명', key: 'product', width: 60 },
                 { header: '소비자가', key: 'originalPrice', width: 12 },
                 { header: '판매가', key: 'salePrice', width: 12 },
-                { header: '행사', key: 'event', width: 25 }
+                { header: '행사', key: 'event', width: 40 }
             ];
 
-            worksheet.addRows(rows);
+            // null 처리 및 데이터 정리
+            const processedRows = rows.map(row => ({
+                ...row,
+                brand: row.brand || '-',
+                originalPrice: row.originalPrice || '-',
+                salePrice: row.salePrice || '-',
+                event: row.event || '-'
+            }));
+
+            worksheet.addRows(processedRows);
 
             // 헤더 스타일
             worksheet.getRow(1).eachCell((cell) => {
@@ -411,13 +515,47 @@ app.get('/api/download-search', (req, res) => {
     if (!keyword || !startDate || !endDate) {
         return res.status(400).json({ error: '검색어와 날짜 범위를 모두 입력해야 합니다.' });
     }
-
     db.all(
-        `SELECT date, rank, brand, product, salePrice, originalPrice, event 
-        FROM rankings 
-        WHERE product LIKE ? 
-        AND date BETWEEN ? AND ?
-        ORDER BY date ASC, rank ASC`,
+        `WITH RankedResults AS (
+            SELECT 
+                date,
+                category,
+                CAST(rank AS INTEGER) as rank,
+                brand,
+                product,
+                originalPrice,
+                salePrice,
+                event,
+                ROW_NUMBER() OVER (
+                    PARTITION BY date, product 
+                    ORDER BY 
+                        CASE 
+                            WHEN category IN (
+                                '스킨케어', '마스크팩', '클렌징', '선케어', '메이크업',
+                                '네일', '뷰티소품', '더모_코스메틱', '맨즈케어', '향수_디퓨저',
+                                '헤어케어', '바디케어', '건강식품', '푸드', '구강용품',
+                                '헬스_건강용품', '여성_위생용품', '패션', '리빙_가전', '취미_팬시'
+                            ) THEN 0
+                            ELSE 1
+                        END,
+                        CAST(rank AS INTEGER)
+                ) as rn
+            FROM rankings
+            WHERE product LIKE ? 
+            AND date BETWEEN ? AND ?
+        )
+        SELECT 
+            date,
+            category,
+            rank,
+            brand,
+            product,
+            originalPrice,
+            salePrice,
+            event
+        FROM RankedResults
+        WHERE rn = 1
+        ORDER BY date ASC, CAST(rank AS INTEGER) ASC`,
         [`%${keyword}%`, startDate, endDate],
         (err, rows) => {
             if (err) {
@@ -430,16 +568,28 @@ app.get('/api/download-search', (req, res) => {
 
             worksheet.columns = [
                 { header: '날짜', key: 'date', width: 15 },
+                { header: '카테고리', key: 'category', width: 15 },
                 { header: '순위', key: 'rank', width: 6 },
                 { header: '브랜드', key: 'brand', width: 15 },
-                { header: '제품명', key: 'product', width: 40 },
+                { header: '제품명', key: 'product', width: 60 },
                 { header: '소비자가', key: 'originalPrice', width: 12 },
                 { header: '판매가', key: 'salePrice', width: 12 },
-                { header: '행사', key: 'event', width: 25 }
+                { header: '행사', key: 'event', width: 40 }
             ];
 
-            worksheet.addRows(rows);
+            // null 값 처리 및 데이터 정리
+            const processedRows = rows.map(row => ({
+                ...row,
+                category: row.category || '미분류',
+                brand: row.brand || '-',
+                originalPrice: row.originalPrice || '-',
+                salePrice: row.salePrice || '-',
+                event: row.event || '-'
+            }));
 
+            worksheet.addRows(processedRows);
+
+            // 헤더 스타일
             worksheet.getRow(1).eachCell((cell) => {
                 cell.font = { bold: true };
                 cell.fill = {
@@ -468,6 +618,24 @@ app.get('/api/download-search', (req, res) => {
 
 
 
+app.get('/api/last-updated', (req, res) => {
+    db.get(`SELECT updated_at FROM update_logs ORDER BY updated_at DESC LIMIT 1`, (err, row) => {
+        if (err) {
+            console.error("최신 업데이트 시간 조회 오류:", err);
+            return res.status(500).json({ error: 'DB 오류' });
+        }
+        if (!row) {
+            return res.status(404).json({ error: '업데이트 기록 없음' });
+        }
+
+        res.json({
+            last_updated: row.updated_at  // 예: "2025-04-18 16:15:00"
+        });
+    });
+});
+
+
+
 // 서버 시작 시 오늘자 크롤링
 app.listen(port, () => {
     console.log(`서버 실행됨: http://localhost:${port}`);
@@ -480,26 +648,12 @@ app.listen(port, () => {
 
 
 
-// 오전 9시
-cron.schedule('0 9 * * *', async () => {
-    console.log(`[⏰ 오전 9시 자동 크롤링] ${new Date().toISOString().slice(0, 19)} 실행`);
-    for (const category of Object.keys(oliveYoungCategories)) {
-        await crawlOliveYoung(category);
-    }
-});
+cron.schedule('15 1-23/3 * * *', async () => {
+    console.log('[크론작업] 3시간 주기 자동 크롤링 시작됨');
 
-// 오후 1시
-cron.schedule('0 13 * * *', async () => {
-    console.log(`[⏰ 오후 1시 자동 크롤링] ${new Date().toISOString().slice(0, 19)} 실행`);
     for (const category of Object.keys(oliveYoungCategories)) {
         await crawlOliveYoung(category);
     }
-});
 
-// 오후 6시
-cron.schedule('0 18 * * *', async () => {
-    console.log(`[⏰ 오후 6시 자동 크롤링] ${new Date().toISOString().slice(0, 19)} 실행`);
-    for (const category of Object.keys(oliveYoungCategories)) {
-        await crawlOliveYoung(category);
-    }
+    console.log('[크론작업] 3시간 주기 자동 크롤링 완료됨');
 });
