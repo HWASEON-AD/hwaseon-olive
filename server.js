@@ -8,7 +8,6 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
 
-
 const app = express();
 const port = 5001;
 
@@ -183,15 +182,14 @@ async function crawlOliveYoung(category) {
                     event: eventFlags
                 });
             });
-        
             return result;
         }, category);
         
-        
+    
+        const now = new Date();
+        const koreaTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const date = koreaTime.toISOString().split('T')[0];
 
-
-
-        const date = new Date().toISOString().split('T')[0];
 
         // 오늘 날짜 + 해당 카테고리 데이터 삭제
         await new Promise((resolve, reject) => {
@@ -237,9 +235,7 @@ async function crawlOliveYoung(category) {
                 }
             });
         });
-
         console.log(`${category} 크롤링 완료`);
-
     } catch (err) {
         console.error(`${category} 크롤링 실패:`, err.message);
         return [];
@@ -629,7 +625,7 @@ app.get('/api/last-updated', (req, res) => {
         }
 
         res.json({
-            last_updated: row.updated_at  // 예: "2025-04-18 16:15:00"
+            last_updated: row.updated_at
         });
     });
 });
@@ -649,11 +645,11 @@ app.listen(port, () => {
 
 
 cron.schedule('15 1-23/3 * * *', async () => {
-    console.log('[크론작업] 3시간 주기 자동 크롤링 시작됨');
+    console.log('3시간 주기 자동 크롤링 시작됨');
 
     for (const category of Object.keys(oliveYoungCategories)) {
         await crawlOliveYoung(category);
     }
 
-    console.log('[크론작업] 3시간 주기 자동 크롤링 완료됨');
+    console.log('3시간 주기 자동 크롤링 완료됨');
 });

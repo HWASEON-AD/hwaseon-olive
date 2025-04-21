@@ -250,7 +250,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-
 document.getElementById('productSearchBtn').addEventListener('click', searchByProductName);
 document.getElementById('productSearchInput').addEventListener('keydown', function (event) {
     if (event.key === 'Enter') {
