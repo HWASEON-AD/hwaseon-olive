@@ -93,14 +93,11 @@ label {
 #productSearchBtn {
     background: linear-gradient(45deg, #28a745, #218838);
     border: none;
-    border-radius: 100px;
+    border-radius: 500px;
     color: #fff;
     padding: 15px 25px;
     font-size: 0.8rem;
     cursor: pointer;
-
-    /* ❌ 너무 좁아서 글자가 깨짐 */
-    /* width: 30px; */
 
     /* ✅ 아래 중 택1 */
     width: auto;           /* 글자만큼 너비 */
