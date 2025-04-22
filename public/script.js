@@ -14,7 +14,7 @@ async function searchByProductName() {
     try {
         // 서버에 요청 보내기
         const res = await fetch(
-            `https://hwaseonad.onrender.com/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
+            `http://localhost:5001/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
         );
         if (!res.ok) {
             const errorText = await res.text();  // 서버에서 반환한 오류 메시지 확인
@@ -31,7 +31,7 @@ async function searchByProductName() {
 
 async function showLastUpdatedTime() {
     try {
-        const res = await fetch('https://hwaseonad.onrender.com/api/last-updated');
+        const res = await fetch('http://localhost:5001/api/last-updated');
         const data = await res.json();
 
         const updatedAt = new Date(data.last_updated);
@@ -93,15 +93,19 @@ function updateSearchTable(results) {
 // 가격 포맷팅 함수 추가
 function formatPrice(price) {
     if (!price || price === '-' || price === 'X') return '-';
-    // 줄바꿈 제거, 공백 제거
-    return price.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
+    // 숫자만 추출
+    const numStr = price.toString().replace(/\D/g, '');
+    if (!numStr) return '-';
+    // 천 단위 콤마 추가
+    const formatted = numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return `${formatted}원`;
 }
 
 // 행사 정보 포맷팅 함수 추가
 function formatEvent(event) {
     if (!event || event === '-' || event === 'X') return '-';
     
-    // 슬래시(/)나 줄바꿈이나 쉼표로 구분된 항목을 분리
+    // 슬래시(/), 줄바꿈, 쉼표, 슬래시로 구분된 항목들을 분리
     const items = event
         .split(/[,\n\/]+/)  // 쉼표, 줄바꿈, 슬래시로 분리
         .map(item => item.trim())
@@ -109,18 +113,14 @@ function formatEvent(event) {
     
     if (items.length === 0) return '-';
     
-    if (items.length === 1) return items[0];
-    
-    // 여러 행사 항목을 HTML로 포맷팅
-    return items.map(item => 
-        `<span class="event-item">${item}</span>`
-    ).join(' ');  // 줄바꿈 대신 공백으로 구분하여 한 줄에 여러 항목 표시
+    // 단일 또는 다중 행사 항목 모두에 스타일된 span을 적용
+    return items.map(item => `<span class="event-item">${item}</span>`).join(' ');
 }
 
 // 랭킹 업데이트
 async function fetchRankings(category, date) {
     try {
-        const res = await fetch(`https://hwaseonad.onrender.com/api/rankings?category=${category}&date=${date}`);
+        const res = await fetch(`http://localhost:5001/api/rankings?category=${category}&date=${date}`);
         const data = await res.json();
         updateTable(data);
     } catch (err) {
@@ -134,7 +134,7 @@ async function fetchRankingsByRange(category, startDate, endDate) {
     console.log('카테고리 값:', category); // 디버깅 로그 추가
     try {
         const res = await fetch(
-            `https://hwaseonad.onrender.com/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
+            `http://localhost:5001/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
         );
         const data = await res.json();
         console.log('서버 응답 데이터:', data); // 디버깅 로그 추가
@@ -196,7 +196,7 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
         return;
     }
 
-    const url = `https://hwaseonad.onrender.com/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
+    const url = `http://localhost:5001/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
 
     fetch(url)
         .then(response => {
@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('검색어와 날짜 범위를 모두 입력하세요.');
             return;
         }
-        const url = `https://hwaseonad.onrender.com/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
+        const url = `http://localhost:5001/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
 
         fetch(url)
             .then(response => {
@@ -269,7 +269,8 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchRankingsByRange(category, startDate, endDate);
     });
 
-    fetchRankings(categoryEl.value, startDateEl.value);
+    // 초기 로드 시 모바일 앱의 실시간 랭킹 표시
+    fetchLiveRanking();
     showLastUpdatedTime();
 });
 
@@ -325,18 +326,25 @@ document.addEventListener('DOMContentLoaded', function() {
             display: inline-block;
             background-color: #f8f4ff;
             color: #5f2eea;
-            padding: 5px 12px;
+            padding: 4px 8px;
             border-radius: 5px;
-            margin: 4px 3px;
+            margin: 4px 6px;
             font-size: 1.1em;
             font-weight: 600;
             border: 1.5px solid #e0d3ff;
+            min-width: 60px;
+            text-align: center;
         }
     `;
     document.head.appendChild(style);
     
     // IndexedDB 초기화
     initIndexedDB().catch(error => console.error('IndexedDB 초기화 오류:', error));
+
+    const liveBtn = document.getElementById('liveRankingBtn');
+    if (liveBtn) {
+        liveBtn.addEventListener('click', fetchLiveRanking);
+    }
 });
 
 // 타임스탬프를 사용자 친화적인 형식으로 포맷팅하는 함수
@@ -482,7 +490,7 @@ function showCaptureList() {
         headerDiv.style.borderBottom = '1px solid #ddd';
         
         headerDiv.innerHTML = `
-            <h3 style="margin: 0; font-size: 18px;">캡처 목록</h3>
+            <h3 style="margin: 0; font-size: 18px;"></h3>
             <button onclick="resetCaptureData()" style="background-color: #ff4444; color: white; border: none; border-radius: 4px; padding: 8px 15px; cursor: pointer;">전체 삭제</button>
         `;
         container.appendChild(headerDiv);
@@ -1023,11 +1031,8 @@ function deleteCapture(captureId) {
             console.log('화면에서 요소를 찾지 못했습니다. 목록을 새로고침합니다.');
             showCaptureList();
         }
-        
-        showNotification('캡처가 삭제되었습니다.');
     } catch (error) {
         console.error('캡처 삭제 중 오류 발생:', error);
-        showNotification('삭제 중 오류가 발생했습니다.');
     }
 }
 
@@ -1106,14 +1111,12 @@ function captureScreen() {
         try {
             localStorage.setItem('captures', JSON.stringify(captures));
             console.log('캡처가 저장되었습니다:', fileName);
-            showNotification(`"${fileName}" 파일이 캡처되었습니다.`);
         } catch (e) {
             console.error('캡처 저장 오류:', e);
             alert('캡처 저장 중 오류가 발생했습니다: ' + e.message);
         }
     }).catch(function(err) {
         console.error('화면 캡처 오류:', err);
-        showNotification('화면 캡처 중 오류가 발생했습니다.');
         if (typeof html2canvas === 'undefined') {
             console.error('html2canvas 라이브러리가 로드되지 않았습니다.');
         }
@@ -1160,7 +1163,6 @@ function resetCaptureData() {
         localStorage.setItem('captures', JSON.stringify([]));
         
         console.log('모든 캡처 데이터가 초기화되었습니다');
-        showNotification('모든 캡처 데이터가 삭제되었습니다.');
         return true;
     } catch (error) {
         console.error('캡처 데이터 초기화 중 오류:', error);
@@ -1174,3 +1176,32 @@ window.resetCaptureData = resetCaptureData;
 window.closeCaptureListModal = closeCaptureListModal;
 window.deleteCapture = deleteCapture;
 window.downloadCapture = downloadCapture;
+
+// 모바일 앱 API용 카테고리 코드 매핑
+const mobileCategoryCodes = {
+    '스킨케어': '10000010001',
+    '마스크팩': '10000010009',
+    '클렌징': '10000010010',
+    '선케어': '10000010011',
+    '메이크업': '10000010002',
+    '네일': '10000010012',
+    '뷰티소품': '10000010006',
+    '더모_코스메틱': '10000010008',
+    '맨즈케어': '10000010007',
+    '향수_디퓨저': '10000010005',
+    '헤어케어': '10000010004',
+    '바디케어': '10000010003',
+    '건강식품': '10000020001',
+    '푸드': '10000020002',
+    '구강용품': '10000020003',
+    '헬스_건강용품': '10000020005',
+    '여성_위생용품': '10000020004',
+    '패션': '10000030007',
+    '리빙_가전': '10000030005',
+    '취미_팬시': '10000030006'
+};
+
+
+
+
+

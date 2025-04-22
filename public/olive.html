@@ -49,6 +49,8 @@
             <label>제품명 검색 : </label>
             <input type="text" id="productSearchInput" placeholder="예시 : 세럼 , 앰플"/>
             <button id="productSearchBtn">🔍</button>
+            
+            
         </div>
 
         <div style="display: flex; align-items: center; justify-content: center; height: 32px; margin-top: -15px;">
@@ -59,7 +61,7 @@
 
 
         <div style="text-align: center; margin-top:50px;">
-            <button id="searchBtn">랭킹 데이터 검색</button>
+            <button id="searchBtn">실시간 랭킹</button>
             <button id="productSearchDownloadBtn" style="margin-left:80px;">제품명 : Excel 다운로드</button>
             <button id="downloadExcelBtn" style="margin-left:80px;">랭킹 : Excel 다운로드</button>
             <button id="captureBtn" style="margin-left:80px;">캡처</button>
@@ -78,9 +80,6 @@
                         <div id="captureListContainer">
                             <!-- 캡처 목록이 여기에 동적으로 로드됩니다 -->
                         </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn-reset-data" onclick="if(confirm('모든 캡처 데이터를 삭제하시겠습니까?')) { resetCaptureData(); showCaptureList(); }">전체 삭제</button>
                     </div>
                 </div>
             </div>

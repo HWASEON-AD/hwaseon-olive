@@ -692,3 +692,13 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
     text-overflow: ellipsis;
     text-align: left;
 }
+
+/* 제품명 데이터 테이블 행사 항목 크기 조정 */
+#productSearchTable td:nth-child(8) .event-item {
+    padding: 2px 4px;
+    margin: 2px 3px;
+    font-size: 0.9rem;
+    border-radius: 4px;
+    min-width: auto;
+    word-break: keep-all;
+}

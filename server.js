@@ -7,7 +7,7 @@ const cron = require('node-cron');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const app = express();
-const port = 5001;
+const port = process.env.PORT || 5001;
 process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
 
 // Dropbox 모듈 추가
@@ -24,6 +24,13 @@ const DROPBOX_CAPTURES_PATH = '/olive_rankings/captures';
 // Render 배포 감지 및 환경 설정
 const IS_RENDER = process.env.RENDER === 'true';
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
+
+// Ensure Puppeteer cache directory exists (Render 환경 대비)
+const puppeteerCacheDir = process.env.PUPPETEER_CACHE_DIR;
+if (puppeteerCacheDir && !fs.existsSync(puppeteerCacheDir)) {
+    fs.mkdirSync(puppeteerCacheDir, { recursive: true });
+    console.log(`🚀 Created Puppeteer cache directory: ${puppeteerCacheDir}`);
+}
 
 // Render 환경 정보 로깅
 if (IS_RENDER) {
@@ -584,7 +591,7 @@ async function crawlAllCategories() {
     console.log(`📊 ${today} - 모든 카테고리 크롤링 시작`);
     
     // 병렬 처리를 위한 설정
-    const MAX_CONCURRENT = 3; // 동시에 처리할 카테고리 수
+    const MAX_CONCURRENT = 1; // 동시 처리를 1로 줄여 트랜잭션 오류 방지
     const categories = Object.keys(oliveYoungCategories);
     const results = [];
     
@@ -1152,7 +1159,13 @@ async function uploadImageToDropbox(localFilePath, fileName, category) {
         const response = await dropboxClient.filesUpload({
             path: dropboxFilePath,
             contents: fileContent,
-            mode: {'.tag': 'overwrite'}
+            mode: {'.tag': 'overwrite'},
+            headers: {
+                'User-Agent': 'OliveYoung/7.8.0 (Android 11; Nexus 5X)',
+                'Accept-Language': 'ko-KR,ko;q=0.9',
+                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                'Referer': 'https://www.oliveyoung.co.kr'
+            }
         });
         
         console.log(`✅ Dropbox 이미지 업로드 완료: ${dropboxFilePath}`);
@@ -1584,6 +1597,8 @@ const setupAntiSleepPing = () => {
     
     console.log(`⏰ 서버 슬립 방지 기능 활성화: ${PING_INTERVAL/1000}초 간격`);
 };
+
+
 
 // 서버 시작 시 cron 작업에서 외부 핑 요청을 받도록 설정
 app.get('/api/wake-up', async (req, res) => {
