@@ -21,6 +21,16 @@ const DB_BACKUP_DIR = path.join(__dirname, 'backups');
 const DROPBOX_TOKEN = process.env.DROPBOX_TOKEN;
 const DROPBOX_CAPTURES_PATH = '/olive_rankings/captures';
 
+// Render 배포 감지 및 환경 설정
+const IS_RENDER = process.env.RENDER === 'true';
+const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
+
+// Render 환경 정보 로깅
+if (IS_RENDER) {
+    console.log('🚀 Render 환경에서 실행 중입니다.');
+    console.log(`🌐 외부 URL: ${RENDER_EXTERNAL_URL || '설정되지 않음'}`);
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -106,6 +116,21 @@ db.serialize(() => {
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
     `);
+});
+
+// captures 테이블 마이그레이션: dropbox_path 컬럼이 없으면 추가
+db.all("PRAGMA table_info(captures);", (err, rows) => {
+    if (err) {
+        console.error("captures 테이블 구조 확인 오류:", err);
+        return;
+    }
+    const columnNames = rows.map(row => row.name);
+    if (!columnNames.includes("dropbox_path")) {
+        db.run("ALTER TABLE captures ADD COLUMN dropbox_path TEXT;", (err) => {
+            if (err) console.error("dropbox_path 컬럼 추가 실패:", err);
+            else console.log("✅ captures 테이블에 dropbox_path 컬럼이 추가되었습니다.");
+        });
+    }
 });
 
 // 백업 로그 테이블 추가
@@ -362,6 +387,7 @@ async function crawlOliveYoung(category, retryCount = 0) {
     try {
         browser = await puppeteer.launch({
             headless: 'new',
+            executablePath: puppeteer.executablePath(),
             args: [
                 '--no-sandbox', 
                 '--disable-setuid-sandbox',
@@ -427,34 +453,34 @@ async function crawlOliveYoung(category, retryCount = 0) {
         
             items.forEach((el, index) => {
                 try {
-                    const brand = el.querySelector('.tx_brand')?.innerText.trim() || '';
-                    const product = el.querySelector('.tx_name')?.innerText.trim() || '';
-                    let salePrice = el.querySelector('.prd_price .tx_cur .tx_num')?.innerText.trim() || 'X';
-                    let originalPrice = el.querySelector('.tx_org .tx_num')?.innerText.trim() || 'X';
-            
+                const brand = el.querySelector('.tx_brand')?.innerText.trim() || '';
+                const product = el.querySelector('.tx_name')?.innerText.trim() || '';
+                let salePrice = el.querySelector('.prd_price .tx_cur .tx_num')?.innerText.trim() || 'X';
+                let originalPrice = el.querySelector('.tx_org .tx_num')?.innerText.trim() || 'X';
+        
                     // 줄바꿈 및 공백 정리
                     salePrice = salePrice !== 'X' ? salePrice.replace(/\n/g, '').replace(/\s+/g, ' ').replace('원', '').trim() + '원' : salePrice;
                     originalPrice = originalPrice !== 'X' ? originalPrice.replace(/\n/g, '').replace(/\s+/g, ' ').replace('원', '').trim() + '원' : originalPrice;
-            
-                    if (salePrice === 'X' && originalPrice !== 'X') {
-                        salePrice = originalPrice;
-                    } else if (originalPrice === 'X' && salePrice !== 'X') {
-                        originalPrice = salePrice;
-                    }
-            
-                    const eventFlags = Array.from(el.querySelectorAll('.icon_flag'))
-                        .map(flag => flag.textContent.trim())
-                        .join(' / ') || 'X';
-            
-                    result.push({
-                        rank: index + 1,
-                        category: cat,
-                        brand,
-                        product,
-                        salePrice,
-                        originalPrice,
-                        event: eventFlags
-                    });
+        
+                if (salePrice === 'X' && originalPrice !== 'X') {
+                    salePrice = originalPrice;
+                } else if (originalPrice === 'X' && salePrice !== 'X') {
+                    originalPrice = salePrice;
+                }
+        
+                const eventFlags = Array.from(el.querySelectorAll('.icon_flag'))
+                    .map(flag => flag.textContent.trim())
+                    .join(' / ') || 'X';
+        
+                result.push({
+                    rank: index + 1,
+                    category: cat,
+                    brand,
+                    product,
+                    salePrice,
+                    originalPrice,
+                    event: eventFlags
+                });
                 } catch (error) {
                     console.error(`상품 정보 추출 중 오류(${index+1}번째): ${error.message}`);
                 }
@@ -466,7 +492,7 @@ async function crawlOliveYoung(category, retryCount = 0) {
         if (products.length === 0) {
             throw new Error(`${category} 상품 데이터를 찾을 수 없습니다.`);
         }
-
+    
         const now = new Date();
         const koreaTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const date = koreaTime.toISOString().split('T')[0];
@@ -934,9 +960,20 @@ app.get('/api/last-updated', (req, res) => {
 
 
 
-// 서버 구동 설정
+// 서버 URL 가져오는 함수
+const getServerUrl = () => {
+    if (IS_RENDER && RENDER_EXTERNAL_URL) {
+        return RENDER_EXTERNAL_URL;
+    }
+    return `http://localhost:${port}`;
+};
+
+// 서버 구동 설정 - 수정된 부분
 app.listen(port, () => {
     console.log(`📡 서버가 http://localhost:${port} 에서 실행 중입니다.`);
+    
+    // 슬립 방지 ping 설정
+    setupAntiSleepPing();
     
     // 서버 시작 시 모든 카테고리 크롤링 실행
     console.log('🔄 서버 시작 시 자동 크롤링 실행 중...');
@@ -958,10 +995,12 @@ app.listen(port, () => {
         if (result && result[0] && result[0].count > 0) {
             console.log(`🔄 미업로드 캡처 이미지 ${result[0].count}개 발견. 자동 업로드 시작...`);
             
+            // 서버 URL 구성
+            const serverUrl = getServerUrl();
+            
             // 백그라운드에서 실행 (응답을 기다리지 않음)
-            fetch(`http://localhost:${port}/api/captures/upload-to-dropbox`, {
-                method: 'POST'
-            }).catch(err => console.error('캡처 자동 업로드 요청 실패:', err));
+            axios.post(`${serverUrl}/api/captures/upload-to-dropbox`)
+                .catch(err => console.error('캡처 자동 업로드 요청 실패:', err));
         }
     }).catch(err => {
         console.error('❌ 초기 처리 중 오류:', err);
@@ -971,6 +1010,10 @@ app.listen(port, () => {
     cron.schedule('0 9 * * *', async () => {
         console.log('⏰ 예약된 크롤링 작업 시작 - 오전 9시');
         try {
+            // 자기 자신 깨우기
+            const serverUrl = getServerUrl();
+            await axios.get(`${serverUrl}/api/wake-up?run_tasks=true`);
+            
             await crawlAllCategories();
             console.log('✅ 예약된 크롤링 작업 완료');
             
@@ -988,6 +1031,10 @@ app.listen(port, () => {
     cron.schedule('0 0 * * *', async () => {
         console.log('⏰ 예약된 백업 작업 시작 - 밤 12시');
         try {
+            // 자기 자신 깨우기
+            const serverUrl = getServerUrl();
+            await axios.get(`${serverUrl}/api/wake-up`);
+            
             const backupResult = await backupDatabase();
             if (backupResult) {
                 console.log('✅ 예약된 DB 백업 완료');
@@ -1002,13 +1049,25 @@ app.listen(port, () => {
                     console.log(`🔄 미업로드 캡처 이미지 ${result[0].count}개 발견. 자동 업로드 시작...`);
                     
                     // 백그라운드에서 실행
-                    fetch(`http://localhost:${port}/api/captures/upload-to-dropbox`, {
-                        method: 'POST'
-                    }).catch(err => console.error('캡처 자동 업로드 요청 실패:', err));
+                    axios.post(`${serverUrl}/api/captures/upload-to-dropbox`)
+                        .catch(err => console.error('캡처 자동 업로드 요청 실패:', err));
                 }
             }
         } catch (error) {
             console.error('❌ 예약된 백업 작업 중 오류:', error);
+        }
+    });
+    
+    // 추가: 서버 활성화 유지를 위한 스케줄 (12시간마다)
+    cron.schedule('0 */12 * * *', async () => {
+        const serverUrl = getServerUrl();
+        console.log(`⏰ 12시간 주기 서버 활성화 확인 중...`);
+        
+        try {
+            await axios.get(`${serverUrl}/ping`);
+            console.log('✅ 서버 활성화 확인 완료');
+        } catch (error) {
+            console.error('❌ 서버 활성화 확인 실패:', error.message);
         }
     });
 });
@@ -1064,6 +1123,7 @@ app.post('/api/capture', async (req, res) => {
     try {
         const browser = await puppeteer.launch({
             headless: 'new',
+            executablePath: puppeteer.executablePath(),
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
         const page = await browser.newPage();
@@ -1456,4 +1516,59 @@ app.get('/api/captures', (req, res) => {
         }
         res.json(rows);
     });
+});
+
+// Render 서버 슬립 방지를 위한 자동 핑 설정 (5분마다)
+const setupAntiSleepPing = () => {
+    const PING_INTERVAL = 5 * 60 * 1000; // 5분
+    
+    setInterval(async () => {
+        const serverUrl = getServerUrl();
+        try {
+            console.log(`🔄 서버 슬립 방지 ping 실행... (${new Date().toISOString()})`);
+            const response = await axios.get(`${serverUrl}/ping`);
+            console.log(`✅ Ping 성공: ${response?.data || 'OK'}`);
+        } catch (error) {
+            console.error(`❌ Ping 실패 (${serverUrl}/ping):`, error.message);
+        }
+    }, PING_INTERVAL);
+    
+    console.log(`⏰ 서버 슬립 방지 기능 활성화: ${PING_INTERVAL/1000}초 간격`);
+};
+
+// 서버 시작 시 cron 작업에서 외부 핑 요청을 받도록 설정
+app.get('/api/wake-up', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`🔔 Wake-up 요청 받음: ${timestamp}`);
+    
+    try {
+        // 서버 상태 정보 수집
+        const serverStatus = {
+            timestamp,
+            uptime: process.uptime() + '초',
+            memory: process.memoryUsage()
+        };
+        
+        // 핑 후 상태 반환
+        res.json({
+            success: true,
+            message: '서버가 활성화되었습니다.',
+            status: serverStatus
+        });
+        
+        // 서버가 깨어났을 때 자동으로 크롤링 등 필요한 작업 수행
+        if (req.query.run_tasks === 'true') {
+            console.log('🔄 Wake-up 요청으로 인한 자동 작업 수행 중...');
+            // 필요한 경우 크롤링 등 실행 (백그라운드로)
+            setTimeout(() => {
+                backupDatabase().catch(err => console.error('자동 백업 오류:', err));
+            }, 5000);
+        }
+    } catch (error) {
+        console.error('Wake-up 처리 중 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: '서버 상태 확인 중 오류가 발생했습니다.'
+        });
+    }
 });
