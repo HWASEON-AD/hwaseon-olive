@@ -252,7 +252,13 @@ async function backupDatabase() {
                 dropboxPath = dropboxFilePath;
                 
             } catch (error) {
-                console.error('❌ Dropbox 백업 실패:', error);
+                // Handle expired access token
+                if (error.error && error.error['.tag'] === 'expired_access_token') {
+                    console.error('❌ Dropbox access token expired. Please renew DROPBOX_TOKEN. Disabling Dropbox backups.');
+                    dropboxClient = null;
+                } else {
+                    console.error('❌ Dropbox 백업 실패:', error);
+                }
                 // 오류 메시지를 로그에 기록
                 await dbRun(
                     `INSERT INTO backup_logs (backup_file, backup_date, dropbox_path, is_success, error_message)
@@ -431,7 +437,8 @@ function getChromeBinaryPath() {
     // 3) fallback to Puppeteer default
     return puppeteer.executablePath();
 }
-const CHROME_PATH = getChromeBinaryPath();
+// Chrome executable path: prefer environment override, then local cache, then Puppeteer default
+const CHROME_PATH = process.env.CHROME_PATH || getChromeBinaryPath();
 console.log('▶️ Using Chrome executable:', CHROME_PATH);
 
 // 크롤링 함수
@@ -444,6 +451,7 @@ async function crawlOliveYoung(category, retryCount = 0) {
 
     try {
         browser = await puppeteer.launch({
+            executablePath: CHROME_PATH,
             headless: 'new',
             args: [
                 '--no-sandbox', 
@@ -1185,6 +1193,7 @@ app.post('/api/capture', async (req, res) => {
 
     try {
         const browser = await puppeteer.launch({
+            executablePath: CHROME_PATH,
             headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });

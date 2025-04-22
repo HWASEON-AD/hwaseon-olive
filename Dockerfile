@@ -5,6 +5,7 @@ WORKDIR /app
 
 # Install Chrome dependencies for Puppeteer
 RUN apt-get update && apt-get install -y \
+    chromium \
     gconf-service libasound2 libatk1.0-0 libc6 libgconf-2-4 libcairo2 \
     libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgdk-pixbuf2.0-0 \
     libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 \

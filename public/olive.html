@@ -2,11 +2,9 @@
 <html lang="ko">
 
 <head>
-    <div class ="ranking header">
-        <meta charset="UTF-8">
-        <title>올리브영 랭킹</title>
-        <link rel="stylesheet" href="olive.css">
-    </div>
+    <meta charset="UTF-8">
+    <title>올리브영 랭킹</title>
+    <link rel="stylesheet" href="olive.css">
 </head>
 
 <body>
@@ -85,25 +83,21 @@
             </div>
         </div>
 
-        <div style = margin-top:100px;">
-            <table id="productSearchTable" style="margin-left: auto; margin-right: auto;">
-                <div id="lastUpdatedText" style="margin-top: -25px; margin-bottom: 15px; font-size: 1.1rem; color: #555;">
-                </div>
-                
-                <h2>제품명 데이터</h2>
+        <div class="table-container">
+            <div id="lastUpdatedText" class="last-updated-text"></div>
+            <h2>제품명 데이터</h2>
+            <table id="productSearchTable">
                 <thead>
-                    <div style ="margin-top : 10px";> 
-                        <tr>
-                            <th>날짜</th>
-                            <th>카테고리</th>
-                            <th>순위</th>
-                            <th>브랜드</th>
-                            <th>제품명</th>
-                            <th>소비자가</th>
-                            <th>판매가</th>
-                            <th>행사</th>
-                        </tr>
-                    </div>
+                    <tr>
+                        <th>날짜</th>
+                        <th>카테고리</th>
+                        <th>순위</th>
+                        <th>브랜드</th>
+                        <th>제품명</th>
+                        <th>소비자가</th>
+                        <th>판매가</th>
+                        <th>행사</th>
+                    </tr>
                 </thead>
                 <tbody>
                     <!-- 검색 결과 -->
