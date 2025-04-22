@@ -6,10 +6,20 @@ const path = require('path');
 const cron = require('node-cron');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
-process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
-
 const app = express();
 const port = 5001;
+process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
+
+// Dropbox 모듈 추가
+const { Dropbox } = require('dropbox');
+const axios = require('axios');
+const { promisify } = require('util');
+
+// 설정 및 환경 변수
+const DB_MAIN_FILE = 'rankings.db';
+const DB_BACKUP_DIR = path.join(__dirname, 'backups');
+const DROPBOX_TOKEN = process.env.DROPBOX_TOKEN;
+const DROPBOX_CAPTURES_PATH = '/olive_rankings/captures';
 
 app.use(cors());
 app.use(express.json());
@@ -24,12 +34,30 @@ app.get('/ping', (req, res) => {
     res.send('pong');
 });
 
+// 백업 디렉토리 생성
+if (!fs.existsSync(DB_BACKUP_DIR)) {
+    fs.mkdirSync(DB_BACKUP_DIR, { recursive: true });
+}
 
-const db = new sqlite3.Database('rankings.db', (err) => {
+// Dropbox 클라이언트 초기화
+let dropboxClient = null;
+if (DROPBOX_TOKEN) {
+    dropboxClient = new Dropbox({ accessToken: DROPBOX_TOKEN });
+    console.log('Dropbox 클라이언트가 초기화되었습니다.');
+} else {
+    console.warn('Dropbox 액세스 토큰이 없습니다. Dropbox 백업이 비활성화됩니다.');
+}
+
+// 기본 데이터베이스 연결
+const db = new sqlite3.Database(DB_MAIN_FILE, (err) => {
     if (err) console.error('DB error:', err.message);
     console.log('Connected to SQLite');
 });
 
+// 데이터베이스 쿼리를 Promise로 래핑하는 유틸리티 함수
+const dbRun = promisify(db.run.bind(db));
+const dbAll = promisify(db.all.bind(db));
+const dbGet = promisify(db.get.bind(db));
 
 // rankings 테이블 (기존 구조 유지)
 db.serialize(() => {
@@ -72,6 +100,24 @@ db.serialize(() => {
         CREATE TABLE IF NOT EXISTS captures (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT NOT NULL,
+            category TEXT NOT NULL,
+            capture_date TEXT NOT NULL,
+            dropbox_path TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+    `);
+});
+
+// 백업 로그 테이블 추가
+db.serialize(() => {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS backup_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            backup_file TEXT NOT NULL,
+            backup_date TEXT NOT NULL,
+            dropbox_path TEXT,
+            is_success BOOLEAN DEFAULT 1,
+            error_message TEXT,
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
     `);
@@ -120,142 +166,398 @@ db.all("PRAGMA table_info(rankings);", (err, rows) => {
     }
 });
 
+// 데이터베이스 백업 기능
+async function backupDatabase() {
+    try {
+        const now = new Date();
+        const timestamp = now.toISOString().replace(/[:.]/g, '-');
+        const backupFileName = `rankings_${timestamp}.db`;
+        const backupPath = path.join(DB_BACKUP_DIR, backupFileName);
+        
+        console.log(`🔄 DB 백업 시작: ${backupFileName}`);
+        
+        // 기존 DB 파일 복사
+        await new Promise((resolve, reject) => {
+            const readStream = fs.createReadStream(DB_MAIN_FILE);
+            const writeStream = fs.createWriteStream(backupPath);
+            
+            readStream.on('error', (error) => reject(error));
+            writeStream.on('error', (error) => reject(error));
+            writeStream.on('finish', () => resolve());
+            
+            readStream.pipe(writeStream);
+        });
+        
+        console.log(`✅ 로컬 백업 완료: ${backupPath}`);
+        
+        // 백업 로그 기록
+        let dropboxPath = null;
+        
+        // Dropbox에 업로드
+        if (dropboxClient) {
+            try {
+                const dropboxFilePath = `/olive_rankings/backup/${backupFileName}`;
+                const fileContent = fs.readFileSync(backupPath);
+                
+                await dropboxClient.filesUpload({
+                    path: dropboxFilePath,
+                    contents: fileContent
+                });
+                
+                console.log(`✅ Dropbox 백업 완료: ${dropboxFilePath}`);
+                dropboxPath = dropboxFilePath;
+                
+            } catch (error) {
+                console.error('❌ Dropbox 백업 실패:', error);
+                // 오류 메시지를 로그에 기록
+                await dbRun(
+                    `INSERT INTO backup_logs (backup_file, backup_date, dropbox_path, is_success, error_message)
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [backupFileName, now.toISOString(), null, 0, error.message]
+                );
+                return false;
+            }
+        }
+        
+        // 성공 로그 기록
+        await dbRun(
+            `INSERT INTO backup_logs (backup_file, backup_date, dropbox_path, is_success) 
+             VALUES (?, ?, ?, ?)`,
+            [backupFileName, now.toISOString(), dropboxPath, 1]
+        );
+        
+        return true;
+    } catch (error) {
+        console.error('❌ 데이터베이스 백업 과정에서 오류 발생:', error);
+        return false;
+    }
+}
 
+// 크롤링한 데이터를 데이터베이스에 저장하는 함수 - 당일 데이터만 업데이트하도록 수정
+async function saveProductsToDB(products, category, date) {
+    return new Promise((resolve, reject) => {
+        if (!products || products.length === 0) {
+            resolve();
+            return;
+        }
+        
+        // 데이터 정규화 - 모든 가격 정보를 한 줄로 변환
+        const normalizedProducts = products.map(item => ({
+            ...item,
+            salePrice: normalizePrice(item.salePrice),
+            originalPrice: normalizePrice(item.originalPrice)
+        }));
+
+        // 현재 날짜 확인 (한국 시간)
+        const now = new Date();
+        const koreaTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const today = koreaTime.toISOString().split('T')[0];
+        
+        // 오늘 날짜와 비교하여 오늘 데이터만 업데이트하는 로직
+        const isToday = date === today;
+        
+        if (!isToday) {
+            console.log(`⚠️ 지난 날짜(${date})의 데이터는 수정하지 않습니다.`);
+            resolve();
+            return;
+        }
+
+        // 트랜잭션 시작
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION', (err) => {
+                if (err) {
+                    console.error('트랜잭션 시작 실패:', err);
+                    reject(err);
+                    return;
+                }
+                
+                // 오늘 날짜 + 해당 카테고리 데이터 삭제
+                db.run(`DELETE FROM rankings WHERE date = ? AND category = ?`, [date, category], (err) => {
+                    if (err) {
+                        console.error('기존 데이터 삭제 실패:', err.message);
+                        db.run('ROLLBACK', () => reject(err));
+                        return;
+                    }
+                    
+                    // 크롤링한 데이터를 삽입
+                    const stmt = db.prepare(`
+                        INSERT OR REPLACE INTO rankings (date, category, rank, brand, product, salePrice, originalPrice, event)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `);
+                    
+                    normalizedProducts.forEach(item => {
+                        stmt.run(
+                            date,
+                            item.category,
+                            item.rank,
+                            item.brand,
+                            item.product,
+                            item.salePrice,
+                            item.originalPrice,
+                            item.event
+                        );
+                    });
+                    
+                    stmt.finalize(() => {
+                        // 최종 업데이트 시간 기록
+                        db.run(`INSERT INTO update_logs (updated_at) VALUES (datetime('now', 'localtime'))`, (err) => {
+                            if (err) {
+                                console.error('업데이트 기록 실패:', err.message);
+                                db.run('ROLLBACK', () => reject(err));
+                                return;
+                            }
+                            
+                            // 트랜잭션 커밋
+                            db.run('COMMIT', (err) => {
+                                if (err) {
+                                    console.error('트랜잭션 커밋 실패:', err);
+                                    db.run('ROLLBACK', () => reject(err));
+                                    return;
+                                }
+                                resolve();
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
+}
+
+// 가격 정규화 함수: 모든 줄바꿈, 공백을 제거하고 한 줄로 만드는 함수
+function normalizePrice(price) {
+    if (!price || price === '-' || price === 'X') return price;
+    
+    // 숫자와 통화 기호 사이의 줄바꿈이나 공백을 처리하기 위한 정규화 과정
+    let normalized = price
+        .replace(/\n/g, '') // 모든 줄바꿈 제거
+        .replace(/\r/g, '') // 캐리지 리턴 제거
+        .replace(/\s+/g, ' ') // 연속된 공백을 단일 공백으로
+        .trim(); // 앞뒤 공백 제거
+    
+    // 숫자 형식 정규화
+    normalized = normalized
+        .replace(/(\d)\s+(\d)/g, '$1$2') // 숫자 사이 공백 제거
+        .replace(/(\d+)\s*원/g, '$1원') // 숫자와 '원' 사이 공백 제거
+        .replace(/(\d+),(\d+)원/g, '$1$2원') // 'n,nnn원' 형식 정규화
+        .replace(/(\d+),(\d+),(\d+)원/g, '$1$2$3원'); // 'n,nnn,nnn원' 형식 정규화
+    
+    // 추가적인 가격 패턴 정규화
+    if (normalized.match(/^\d+$/)) {
+        // 숫자만 있는 경우 '원' 추가
+        normalized += '원';
+    }
+    
+    return normalized;
+}
 
 // 크롤링 함수
-async function crawlOliveYoung(category) {
+async function crawlOliveYoung(category, retryCount = 0) {
     let products = [];
     let browser;
 
-    console.log(`크롤링 시작: ${category}`);
+    // URL 세부 로그 제거하고 간단하게 표시
+    console.log(`${category} 크롤링 중... (시도: ${retryCount + 1})`);
 
     try {
         browser = await puppeteer.launch({
             headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu',
+                '--disable-extensions',
+                '--disable-audio-output',
+                '--js-flags=--max-old-space-size=512'
+            ],
+            timeout: 30000
         });
 
         const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 ...');
+        
+        // 성능 최적화: 이미지, 스타일시트, 폰트 등 불필요한 리소스 차단
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const resourceType = req.resourceType();
+            if (resourceType === 'image' || resourceType === 'font' || resourceType === 'media') {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
+        
+        // 브라우저 설정
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36');
         await page.setJavaScriptEnabled(true);
-        await page.setExtraHTTPHeaders({ 'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7' });
+        await page.setExtraHTTPHeaders({ 
+            'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8'
+        });
+        
+        // 타임아웃 설정 (30초로 단축)
+        await page.setDefaultNavigationTimeout(30000);
+        await page.setDefaultTimeout(30000);
 
         const baseUrl = 'https://www.oliveyoung.co.kr/store/main/getBestList.do';
         const categoryCode = oliveYoungCategories[category];
         const url = `${baseUrl}?dispCatNo=900000100100001&fltDispCatNo=${categoryCode}&pageIdx=1&rowsPerPage=100`;
 
+        // URL 로그 제거
         await page.goto(url, {
-            waitUntil: 'domcontentloaded',
-            timeout: 60000
+            waitUntil: 'domcontentloaded', // networkidle0 대신 더 빠른 domcontentloaded 사용
+            timeout: 30000
         });
+        
+        // 페이지 로딩 확인
+        await page.waitForSelector('.prd_info', { timeout: 15000 })
+            .catch(err => {
+                throw new Error(`${category} 상품 목록 로딩 실패: ${err.message}`);
+            });
 
+        // 상세 로그 제거
         products = await page.evaluate((cat) => {
             const result = [];
             const items = document.querySelectorAll('.prd_info');
+            
+            if (!items || items.length === 0) {
+                return result; // 빈 배열 반환
+            }
         
             items.forEach((el, index) => {
-                const brand = el.querySelector('.tx_brand')?.innerText.trim() || '';
-                const product = el.querySelector('.tx_name')?.innerText.trim() || '';
-                let salePrice = el.querySelector('.prd_price .tx_cur .tx_num')?.innerText.trim() || 'X';
-                let originalPrice = el.querySelector('.tx_org .tx_num')?.innerText.trim() || 'X';
-        
-                salePrice = salePrice !== 'X' ? salePrice.replace('원', '').trim() + '원' : salePrice;
-                originalPrice = originalPrice !== 'X' ? originalPrice.replace('원', '').trim() + '원' : originalPrice;
-        
-                if (salePrice === 'X' && originalPrice !== 'X') {
-                    salePrice = originalPrice;
-                } else if (originalPrice === 'X' && salePrice !== 'X') {
-                    originalPrice = salePrice;
+                try {
+                    const brand = el.querySelector('.tx_brand')?.innerText.trim() || '';
+                    const product = el.querySelector('.tx_name')?.innerText.trim() || '';
+                    let salePrice = el.querySelector('.prd_price .tx_cur .tx_num')?.innerText.trim() || 'X';
+                    let originalPrice = el.querySelector('.tx_org .tx_num')?.innerText.trim() || 'X';
+            
+                    // 줄바꿈 및 공백 정리
+                    salePrice = salePrice !== 'X' ? salePrice.replace(/\n/g, '').replace(/\s+/g, ' ').replace('원', '').trim() + '원' : salePrice;
+                    originalPrice = originalPrice !== 'X' ? originalPrice.replace(/\n/g, '').replace(/\s+/g, ' ').replace('원', '').trim() + '원' : originalPrice;
+            
+                    if (salePrice === 'X' && originalPrice !== 'X') {
+                        salePrice = originalPrice;
+                    } else if (originalPrice === 'X' && salePrice !== 'X') {
+                        originalPrice = salePrice;
+                    }
+            
+                    const eventFlags = Array.from(el.querySelectorAll('.icon_flag'))
+                        .map(flag => flag.textContent.trim())
+                        .join(' / ') || 'X';
+            
+                    result.push({
+                        rank: index + 1,
+                        category: cat,
+                        brand,
+                        product,
+                        salePrice,
+                        originalPrice,
+                        event: eventFlags
+                    });
+                } catch (error) {
+                    console.error(`상품 정보 추출 중 오류(${index+1}번째): ${error.message}`);
                 }
-        
-                const eventFlags = Array.from(el.querySelectorAll('.icon_flag'))
-                    .map(flag => flag.textContent.trim())
-                    .join(' / ') || 'X';
-        
-                result.push({
-                    rank: index + 1,
-                    category: cat,
-                    brand,
-                    product,
-                    salePrice,
-                    originalPrice,
-                    event: eventFlags
-                });
             });
             return result;
         }, category);
         
-    
+        // 간소화된 로그
+        if (products.length === 0) {
+            throw new Error(`${category} 상품 데이터를 찾을 수 없습니다.`);
+        }
+
         const now = new Date();
         const koreaTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const date = koreaTime.toISOString().split('T')[0];
 
-
-        // 오늘 날짜 + 해당 카테고리 데이터 삭제
-        await new Promise((resolve, reject) => {
-            db.run(`DELETE FROM rankings WHERE date = ? AND category = ?`, [date, category], (err) => {
-                if (err) {
-                    console.error('오늘자 데이터 삭제 실패:', err.message);
-                    reject(err);
-                } else {
-                    resolve();
-                }
-            });
-        });
-
-        // 크롤링한 데이터를 삽입
-        const stmt = db.prepare(`
-            INSERT OR REPLACE INTO rankings (date, category, rank, brand, product, salePrice, originalPrice, event)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        
-        products.forEach(item => {
-            stmt.run(
-                date,
-                item.category,
-                item.rank,
-                item.brand,
-                item.product,
-                item.salePrice,
-                item.originalPrice,
-                item.event
-            );
-        });
-
-        stmt.finalize();
-
-        // 최종 업데이트 시간 기록
-        await new Promise((resolve, reject) => {
-            db.run(`INSERT INTO update_logs (updated_at) VALUES (datetime('now', 'localtime'))`, (err) => {
-                if (err) {
-                    console.error('업데이트 기록 실패:', err.message);
-                    reject(err);
-                } else {
-                    resolve();
-                }
-            });
-        });
-        console.log(`${category} 크롤링 완료`);
+        // DB 저장 함수 호출로 대체
+        await saveProductsToDB(products, category, date);
+        console.log(`✅ ${category} 크롤링 성공: ${products.length}개 상품`);
+    
     } catch (err) {
-        console.error(`${category} 크롤링 실패:`, err.message);
+        console.error(`❌ ${category} 크롤링 실패:`, err.message);
+        
+        // 최대 2번까지 재시도
+        if (retryCount < 2) {
+            console.log(`${category} 크롤링 재시도 중... (${retryCount + 1}/2)`);
+            // 잠시 대기 후 재시도
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            return await crawlOliveYoung(category, retryCount + 1);
+        }
+        
         return [];
     } finally {
-        if (browser) await browser.close();
+        if (browser) {
+            try {
+                await browser.close();
+            } catch (error) {
+                console.error('브라우저 종료 오류:', error.message);
+            }
+        }
     }
-
     return products;
 }
 
 
 
-// 카테고리별 크롤링 API
-app.get('/api/crawl', async (req, res) => {
-    const { category } = req.query;
-    if (!category || !oliveYoungCategories[category]) {
-        return res.status(400).json({ error: '잘못된 카테고리' });
+
+// 모든 카테고리를 크롤링하는 함수
+async function crawlAllCategories() {
+    const today = new Date().toISOString().split('T')[0];
+    console.log(`📊 ${today} - 모든 카테고리 크롤링 시작`);
+    
+    // 병렬 처리를 위한 설정
+    const MAX_CONCURRENT = 3; // 동시에 처리할 카테고리 수
+    const categories = Object.keys(oliveYoungCategories);
+    const results = [];
+    
+    // 카테고리를 병렬로 처리하기 위한 함수
+    async function processBatch(batch) {
+        return Promise.all(batch.map(async (category) => {
+            // 개별 카테고리 시작 로그 제거
+            try {
+                const products = await crawlOliveYoung(category);
+                // 성공 로그는 crawlOliveYoung 내부에서 처리
+                return { category, success: true, count: products.length };
+            } catch (error) {
+                // 실패 로그는 crawlOliveYoung 내부에서 처리
+                return { category, success: false, error: error.message };
+            }
+        }));
     }
-    const data = await crawlOliveYoung(category);
-    res.json(data);
+    
+    // 카테고리를 지정된 개수만큼 나누어 병렬 처리
+    for (let i = 0; i < categories.length; i += MAX_CONCURRENT) {
+        const batch = categories.slice(i, i + MAX_CONCURRENT);
+        console.log(`🔄 배치 처리 [${Math.floor(i/MAX_CONCURRENT)+1}/${Math.ceil(categories.length/MAX_CONCURRENT)}]: ${batch.join(', ')}`);
+        
+        const batchResults = await processBatch(batch);
+        results.push(...batchResults);
+        
+        // 다음 배치 전에 잠시 대기 (서버 부하 방지, 1초로 감소)
+        if (i + MAX_CONCURRENT < categories.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    console.log(`✨ ${today} - 모든 카테고리 크롤링 완료: 성공 ${successCount}/${categories.length}`);
+    return true;
+}
+
+
+
+// 모든 카테고리 크롤링 API - 수정
+app.get('/api/crawl-all', async (req, res) => {
+    console.log('🚀 API 호출: 전체 카테고리 크롤링 시작');
+    try {
+        await crawlAllCategories();
+        res.json({ success: true, message: '모든 카테고리 크롤링이 완료되었습니다.' });
+    } catch (error) {
+        console.error('❌ API 크롤링 중 오류 발생:', error);
+        res.status(500).json({ success: false, error: '크롤링 중 오류가 발생했습니다.' });
+    }
 });
 
 
@@ -461,8 +763,8 @@ app.get('/api/download', (req, res) => {
                 { header: '순위', key: 'rank', width: 6 },
                 { header: '브랜드', key: 'brand', width: 15 },
                 { header: '제품명', key: 'product', width: 60 },
-                { header: '소비자가', key: 'originalPrice', width: 12 },
-                { header: '판매가', key: 'salePrice', width: 12 },
+                { header: '소비자가', key: 'originalPrice', width: 20 },
+                { header: '판매가', key: 'salePrice', width: 20 },
                 { header: '행사', key: 'event', width: 40 }
             ];
 
@@ -470,8 +772,8 @@ app.get('/api/download', (req, res) => {
             const processedRows = rows.map(row => ({
                 ...row,
                 brand: row.brand || '-',
-                originalPrice: row.originalPrice || '-',
-                salePrice: row.salePrice || '-',
+                originalPrice: normalizePrice(row.originalPrice),
+                salePrice: normalizePrice(row.salePrice),
                 event: row.event || '-'
             }));
 
@@ -568,8 +870,8 @@ app.get('/api/download-search', (req, res) => {
                 { header: '순위', key: 'rank', width: 6 },
                 { header: '브랜드', key: 'brand', width: 15 },
                 { header: '제품명', key: 'product', width: 60 },
-                { header: '소비자가', key: 'originalPrice', width: 12 },
-                { header: '판매가', key: 'salePrice', width: 12 },
+                { header: '소비자가', key: 'originalPrice', width: 20 },
+                { header: '판매가', key: 'salePrice', width: 20 },
                 { header: '행사', key: 'event', width: 40 }
             ];
 
@@ -578,8 +880,8 @@ app.get('/api/download-search', (req, res) => {
                 ...row,
                 category: row.category || '미분류',
                 brand: row.brand || '-',
-                originalPrice: row.originalPrice || '-',
-                salePrice: row.salePrice || '-',
+                originalPrice: normalizePrice(row.originalPrice),
+                salePrice: normalizePrice(row.salePrice),
                 event: row.event || '-'
             }));
 
@@ -632,24 +934,526 @@ app.get('/api/last-updated', (req, res) => {
 
 
 
-// 서버 시작 시 오늘자 크롤링
+// 서버 구동 설정
 app.listen(port, () => {
-    console.log(`서버 실행됨: http://localhost:${port}`);
-    (async () => {
-        for (const category of Object.keys(oliveYoungCategories)) {
-            await crawlOliveYoung(category);
+    console.log(`📡 서버가 http://localhost:${port} 에서 실행 중입니다.`);
+    
+    // 서버 시작 시 모든 카테고리 크롤링 실행
+    console.log('🔄 서버 시작 시 자동 크롤링 실행 중...');
+    crawlAllCategories().then(() => {
+        console.log('✅ 초기 크롤링 완료');
+        
+        // 크롤링 완료 후 DB 백업 실행
+        return backupDatabase();
+    }).then((backupResult) => {
+        if (backupResult) {
+            console.log('✅ 서버 시작 시 DB 백업 완료');
         }
-    })();
+        
+        // Dropbox에 업로드되지 않은 캡처 이미지 확인 및 업로드
+        if (dropboxClient) {
+            return dbAll(`SELECT COUNT(*) as count FROM captures WHERE dropbox_path IS NULL`);
+        }
+    }).then(result => {
+        if (result && result[0] && result[0].count > 0) {
+            console.log(`🔄 미업로드 캡처 이미지 ${result[0].count}개 발견. 자동 업로드 시작...`);
+            
+            // 백그라운드에서 실행 (응답을 기다리지 않음)
+            fetch(`http://localhost:${port}/api/captures/upload-to-dropbox`, {
+                method: 'POST'
+            }).catch(err => console.error('캡처 자동 업로드 요청 실패:', err));
+        }
+    }).catch(err => {
+        console.error('❌ 초기 처리 중 오류:', err);
+    });
+    
+    // 매일 오전 9시에 모든 카테고리 크롤링 스케줄 설정
+    cron.schedule('0 9 * * *', async () => {
+        console.log('⏰ 예약된 크롤링 작업 시작 - 오전 9시');
+        try {
+            await crawlAllCategories();
+            console.log('✅ 예약된 크롤링 작업 완료');
+            
+            // 크롤링 후 DB 백업
+            const backupResult = await backupDatabase();
+            if (backupResult) {
+                console.log('✅ 예약된 DB 백업 완료');
+            }
+        } catch (error) {
+            console.error('❌ 예약된 작업 중 오류:', error);
+        }
+    });
+    
+    // 매일 밤 12시에 DB 백업 스케줄 설정
+    cron.schedule('0 0 * * *', async () => {
+        console.log('⏰ 예약된 백업 작업 시작 - 밤 12시');
+        try {
+            const backupResult = await backupDatabase();
+            if (backupResult) {
+                console.log('✅ 예약된 DB 백업 완료');
+            } else {
+                console.error('❌ 백업 실패');
+            }
+            
+            // 미업로드 이미지 확인 및 업로드
+            if (dropboxClient) {
+                const result = await dbAll(`SELECT COUNT(*) as count FROM captures WHERE dropbox_path IS NULL`);
+                if (result[0].count > 0) {
+                    console.log(`🔄 미업로드 캡처 이미지 ${result[0].count}개 발견. 자동 업로드 시작...`);
+                    
+                    // 백그라운드에서 실행
+                    fetch(`http://localhost:${port}/api/captures/upload-to-dropbox`, {
+                        method: 'POST'
+                    }).catch(err => console.error('캡처 자동 업로드 요청 실패:', err));
+                }
+            }
+        } catch (error) {
+            console.error('❌ 예약된 백업 작업 중 오류:', error);
+        }
+    });
 });
 
+// 캡처 이미지 저장 디렉토리 생성
+const capturesDir = path.join(__dirname, 'public', 'captures');
+if (!fs.existsSync(capturesDir)) {
+    fs.mkdirSync(capturesDir, { recursive: true });
+}
 
+// 이미지 파일을 Dropbox에 업로드하는 함수
+async function uploadImageToDropbox(localFilePath, fileName, category) {
+    if (!dropboxClient) {
+        console.warn('Dropbox 클라이언트가 초기화되지 않았습니다. 이미지 업로드를 건너뜁니다.');
+        return null;
+    }
+    
+    try {
+        // 현재 날짜 기반 경로 생성 (YYYY-MM 형식)
+        const now = new Date();
+        const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        
+        // Dropbox 경로 생성: /olive_rankings/captures/YYYY-MM/카테고리/파일명
+        const dropboxFilePath = `${DROPBOX_CAPTURES_PATH}/${yearMonth}/${category}/${fileName}`;
+        
+        console.log(`🔄 Dropbox에 이미지 업로드 중: ${dropboxFilePath}`);
+        
+        // 파일 읽기
+        const fileContent = fs.readFileSync(localFilePath);
+        
+        // Dropbox에 업로드
+        const response = await dropboxClient.filesUpload({
+            path: dropboxFilePath,
+            contents: fileContent,
+            mode: {'.tag': 'overwrite'}
+        });
+        
+        console.log(`✅ Dropbox 이미지 업로드 완료: ${dropboxFilePath}`);
+        return dropboxFilePath;
+    } catch (error) {
+        console.error('❌ Dropbox 이미지 업로드 실패:', error.message);
+        return null;
+    }
+}
 
-cron.schedule('15 1-23/3 * * *', async () => {
-    console.log('3시간 주기 자동 크롤링 시작됨');
-
-    for (const category of Object.keys(oliveYoungCategories)) {
-        await crawlOliveYoung(category);
+// 캡처 API
+app.post('/api/capture', async (req, res) => {
+    const { html, category, date } = req.body;
+    if (!html || !category || !date) {
+        return res.status(400).json({ error: '필수 데이터가 누락되었습니다.' });
     }
 
-    console.log('3시간 주기 자동 크롤링 완료됨');
+    try {
+        const browser = await puppeteer.launch({
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+        const page = await browser.newPage();
+        
+        // HTML 컨텐츠 설정
+        await page.setContent(html);
+        await page.addStyleTag({
+            content: `
+                body { 
+                    background: white;
+                    padding: 20px;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                th, td {
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                    text-align: left;
+                }
+                th {
+                    background-color: #f5f5f5;
+                }
+            `
+        });
+
+        // 페이지의 실제 높이 계산
+        const bodyHandle = await page.$('body');
+        const { height } = await bodyHandle.boundingBox();
+        await bodyHandle.dispose();
+
+        // 뷰포트 크기 설정
+        await page.setViewport({
+            width: 1200,
+            height: Math.ceil(height)
+        });
+
+        // 스크린샷 찍기
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `capture_${category}_${date}_${timestamp}.png`;
+        const filepath = path.join(capturesDir, filename);
+        
+        await page.screenshot({
+            path: filepath,
+            fullPage: true
+        });
+
+        await browser.close();
+
+        // Dropbox에 이미지 업로드
+        let dropboxPath = null;
+        if (dropboxClient) {
+            dropboxPath = await uploadImageToDropbox(filepath, filename, category);
+        }
+
+        // DB에 캡처 정보 저장 (이제 Dropbox 경로도 포함)
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT INTO captures (filename, category, capture_date, dropbox_path, created_at) 
+                VALUES (?, ?, ?, ?, datetime('now', 'localtime'))`,
+                [filename, category, date, dropboxPath],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+
+        res.json({ 
+            success: true, 
+            filename,
+            url: `/captures/${filename}`,
+            dropbox_path: dropboxPath
+        });
+
+    } catch (error) {
+        console.error('캡처 중 오류:', error);
+        res.status(500).json({ error: '캡처 생성 중 오류가 발생했습니다.' });
+    }
+});
+
+// 기존 캡처 이미지를 Dropbox에 업로드하는 API 추가
+app.post('/api/captures/upload-to-dropbox', async (req, res) => {
+    if (!dropboxClient) {
+        return res.status(400).json({ 
+            success: false, 
+            error: 'Dropbox 클라이언트가 구성되지 않았습니다.' 
+        });
+    }
+    
+    try {
+        // Dropbox에 업로드되지 않은 캡처 이미지 조회
+        const captures = await dbAll(`
+            SELECT id, filename, category, capture_date
+            FROM captures
+            WHERE dropbox_path IS NULL
+        `);
+        
+        if (captures.length === 0) {
+            return res.json({
+                success: true,
+                message: 'Dropbox에 업로드할 이미지가 없습니다.',
+                uploaded: 0
+            });
+        }
+        
+        let successCount = 0;
+        
+        // 각 이미지를 Dropbox에 업로드
+        for (const capture of captures) {
+            const localFilePath = path.join(capturesDir, capture.filename);
+            
+            // 파일이 존재하는지 확인
+            if (!fs.existsSync(localFilePath)) {
+                console.warn(`파일을 찾을 수 없습니다: ${localFilePath}`);
+                continue;
+            }
+            
+            // Dropbox에 업로드
+            const dropboxPath = await uploadImageToDropbox(
+                localFilePath, 
+                capture.filename, 
+                capture.category
+            );
+            
+            if (dropboxPath) {
+                // DB 업데이트
+                await dbRun(
+                    `UPDATE captures SET dropbox_path = ? WHERE id = ?`,
+                    [dropboxPath, capture.id]
+                );
+                successCount++;
+            }
+        }
+        
+        res.json({
+            success: true,
+            message: `${successCount}/${captures.length} 개의 이미지가 Dropbox에 업로드되었습니다.`,
+            uploaded: successCount,
+            total: captures.length
+        });
+        
+    } catch (error) {
+        console.error('❌ 기존 캡처 업로드 중 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: `캡처 업로드 중 오류가 발생했습니다: ${error.message}`
+        });
+    }
+});
+
+// DB 상태 확인 API
+app.get('/api/status', (req, res) => {
+    try {
+        // 서버 상태 정보
+        const serverInfo = {
+            status: 'running',
+            uptime: process.uptime() + ' seconds',
+            timestamp: new Date().toISOString()
+        };
+        
+        // DB 테이블 정보 조회
+        db.all("SELECT name FROM sqlite_master WHERE type='table'", (err, tables) => {
+            if (err) {
+                return res.status(500).json({
+                    ...serverInfo,
+                    db_status: 'error',
+                    error: err.message
+                });
+            }
+            
+            // DB의 rankings 테이블 레코드 수
+            db.get("SELECT COUNT(*) as count FROM rankings", (err, countResult) => {
+                if (err) {
+                    return res.status(500).json({
+                        ...serverInfo,
+                        db_status: 'error',
+                        tables,
+                        error: err.message
+                    });
+                }
+                
+                // 최신 업데이트 시간 정보
+                db.get("SELECT updated_at FROM update_logs ORDER BY updated_at DESC LIMIT 1", (err, updateLog) => {
+                    // 응답 데이터 준비
+                    const responseData = {
+                        ...serverInfo,
+                        db_status: 'connected',
+                        tables: tables.map(t => t.name),
+                        rankings_count: countResult ? countResult.count : 0,
+                        last_updated: updateLog ? updateLog.updated_at : null
+                    };
+                    
+                    res.json(responseData);
+                });
+            });
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
+    }
+});
+
+// 직접 크롤링 실행 API (테스트용, 인증 없음)
+app.get('/api/crawl-test', async (req, res) => {
+    const category = req.query.category || '스킨케어';
+    
+    try {
+        console.log(`테스트 크롤링 시작: ${category}`);
+        const products = await crawlOliveYoung(category);
+        console.log(`테스트 크롤링 완료: ${products.length}개 상품`);
+        
+        res.json({
+            success: true,
+            category,
+            products_count: products.length,
+            products: products.slice(0, 5) // 처음 5개만 반환
+        });
+    } catch (error) {
+        console.error(`테스트 크롤링 실패:`, error);
+        res.status(500).json({
+            success: false,
+            category,
+            error: error.message
+        });
+    }
+});
+
+// 백업 관리 API 추가
+app.get('/api/backups', async (req, res) => {
+    try {
+        const logs = await dbAll(
+            `SELECT * FROM backup_logs ORDER BY created_at DESC LIMIT 100`
+        );
+        
+        res.json({
+            success: true,
+            backups: logs
+        });
+    } catch (error) {
+        console.error('백업 로그 조회 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: '백업 정보를 조회하는 중 오류가 발생했습니다.'
+        });
+    }
+});
+
+// 수동 백업 API 추가
+app.post('/api/backup', async (req, res) => {
+    try {
+        const result = await backupDatabase();
+        if (result) {
+            res.json({
+                success: true,
+                message: '데이터베이스 백업이 성공적으로 완료되었습니다.'
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: '백업 처리 중 오류가 발생했습니다.'
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Dropbox에서 최신 백업 복원 API
+app.post('/api/restore', async (req, res) => {
+    if (!dropboxClient) {
+        return res.status(400).json({
+            success: false,
+            error: 'Dropbox 클라이언트가 구성되지 않았습니다.'
+        });
+    }
+    
+    try {
+        // 복원 전에 현재 DB 백업
+        const tempBackupPath = path.join(DB_BACKUP_DIR, `pre_restore_${Date.now()}.db`);
+        fs.copyFileSync(DB_MAIN_FILE, tempBackupPath);
+        
+        // Dropbox에서 최신 백업 파일 목록 가져오기
+        const { result } = await dropboxClient.filesListFolder({
+            path: '/olive_rankings/backup'
+        });
+        
+        if (!result.entries || result.entries.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Dropbox에 백업 파일이 없습니다.'
+            });
+        }
+        
+        // 파일명으로 정렬하여 최신 백업 찾기 (rankings_날짜-시간.db 형식)
+        const backupFiles = result.entries
+            .filter(entry => entry.name.startsWith('rankings_') && entry.name.endsWith('.db'))
+            .sort((a, b) => b.name.localeCompare(a.name));
+        
+        if (backupFiles.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: '유효한 백업 파일을 찾을 수 없습니다.'
+            });
+        }
+        
+        const latestBackup = backupFiles[0];
+        console.log(`🔄 최신 백업 파일에서 복원 중: ${latestBackup.name}`);
+        
+        // 임시 파일로 다운로드
+        const tempPath = path.join(DB_BACKUP_DIR, `temp_${Date.now()}.db`);
+        const downloadResponse = await dropboxClient.filesDownload({
+            path: latestBackup.path_lower
+        });
+        
+        fs.writeFileSync(tempPath, downloadResponse.result.fileBinary);
+        
+        // DB 연결 종료 (복원을 위해)
+        await new Promise(resolve => {
+            db.close(err => {
+                if (err) console.error('DB 연결 종료 중 오류:', err);
+                resolve();
+            });
+        });
+        
+        // 다운로드한 파일을 메인 DB 파일로 복사
+        fs.copyFileSync(tempPath, DB_MAIN_FILE);
+        
+        // 임시 파일 삭제
+        fs.unlinkSync(tempPath);
+        
+        // DB 다시 연결
+        const newDb = new sqlite3.Database(DB_MAIN_FILE, err => {
+            if (err) {
+                console.error('DB 재연결 오류:', err);
+                return res.status(500).json({
+                    success: false,
+                    error: '데이터베이스 재연결 중 오류가 발생했습니다.'
+                });
+            }
+            
+            // 전역 DB 객체 교체
+            global.db = newDb;
+            
+            res.json({
+                success: true,
+                message: `백업 파일 '${latestBackup.name}'에서 성공적으로 복원되었습니다.`,
+                backup: latestBackup
+            });
+        });
+    } catch (error) {
+        console.error('복원 중 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: `복원 중 오류가 발생했습니다: ${error.message}`
+        });
+    }
+});
+
+// 캡처 목록 조회 API
+app.get('/api/captures', (req, res) => {
+    const { category, startDate, endDate } = req.query;
+    let query = `SELECT * FROM captures`;
+    const params = [];
+
+    if (category || (startDate && endDate)) {
+        query += ` WHERE 1=1`;
+        if (category) {
+            query += ` AND category = ?`;
+            params.push(category);
+        }
+        if (startDate && endDate) {
+            query += ` AND capture_date BETWEEN ? AND ?`;
+            params.push(startDate, endDate);
+        }
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    db.all(query, params, (err, rows) => {
+        if (err) {
+            console.error('캡처 목록 조회 오류:', err);
+            return res.status(500).json({ error: 'DB 오류' });
+        }
+        res.json(rows);
+    });
 });

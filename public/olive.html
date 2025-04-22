@@ -47,7 +47,7 @@
             <input type="date" id="endDate" min="2025-04-17">
             <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
             <label>제품명 검색 : </label>
-            <input type="text" id="productSearchInput" productSearchBtn, placeholder="예시 : 세럼 , 앰플"/>
+            <input type="text" id="productSearchInput" placeholder="예시 : 세럼 , 앰플"/>
             <button id="productSearchBtn">🔍</button>
         </div>
 
@@ -58,12 +58,34 @@
         </div>
 
 
-        <div style ="text-align: center; margin-top:50px;">
+        <div style="text-align: center; margin-top:50px;">
             <button id="searchBtn">랭킹 데이터 검색</button>
-            <button id="productSearchDownloadBtn" style="margin-left:100px;">제품명 : Excel 다운로드</button>
-            <button id="downloadExcelBtn" style="margin-left:100px;">랭킹 : Excel 다운로드</button>
-        
+            <button id="productSearchDownloadBtn" style="margin-left:80px;">제품명 : Excel 다운로드</button>
+            <button id="downloadExcelBtn" style="margin-left:80px;">랭킹 : Excel 다운로드</button>
+            <button id="captureBtn" style="margin-left:80px;">캡처</button>
+            <button id="showCapturesBtn" style="margin-left:2cap;">캡처 목록</button>
         </div>
+
+        <!-- 캡처 목록 모달 -->
+        <div id="captureListModal" class="modal">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 class="modal-title">캡처 목록</h3>
+                        <button type="button" class="btn-close" onclick="closeCaptureListModal();">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="captureListContainer">
+                            <!-- 캡처 목록이 여기에 동적으로 로드됩니다 -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-reset-data" onclick="if(confirm('모든 캡처 데이터를 삭제하시겠습니까?')) { resetCaptureData(); showCaptureList(); }">전체 삭제</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div style = margin-top:100px;">
             <table id="productSearchTable" style="margin-left: auto; margin-right: auto;">
                 <div id="lastUpdatedText" style="margin-top: -25px; margin-bottom: 15px; font-size: 1.1rem; color: #555;">
@@ -112,6 +134,8 @@
             </table>
         </div>
     </div>
+    
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <script src="script.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
 </body>
