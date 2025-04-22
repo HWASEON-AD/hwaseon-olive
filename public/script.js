@@ -14,7 +14,7 @@ async function searchByProductName() {
     try {
         // 서버에 요청 보내기
         const res = await fetch(
-            `http://localhost:5001/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
+            `https://hwaseonad.onrender.com/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
         );
         if (!res.ok) {
             const errorText = await res.text();  // 서버에서 반환한 오류 메시지 확인
@@ -31,7 +31,7 @@ async function searchByProductName() {
 
 async function showLastUpdatedTime() {
     try {
-        const res = await fetch('http://localhost:5001/api/last-updated');
+        const res = await fetch('https://hwaseonad.onrender.com/api/last-updated');
         const data = await res.json();
 
         const updatedAt = new Date(data.last_updated);
@@ -120,7 +120,7 @@ function formatEvent(event) {
 // 랭킹 업데이트
 async function fetchRankings(category, date) {
     try {
-        const res = await fetch(`http://localhost:5001/api/rankings?category=${category}&date=${date}`);
+        const res = await fetch(`https://hwaseonad.onrender.com/api/rankings?category=${category}&date=${date}`);
         const data = await res.json();
         updateTable(data);
     } catch (err) {
@@ -134,7 +134,7 @@ async function fetchRankingsByRange(category, startDate, endDate) {
     console.log('카테고리 값:', category); // 디버깅 로그 추가
     try {
         const res = await fetch(
-            `http://localhost:5001/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
+            `https://hwaseonad.onrender.com/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
         );
         const data = await res.json();
         console.log('서버 응답 데이터:', data); // 디버깅 로그 추가
@@ -196,7 +196,7 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
         return;
     }
 
-    const url = `http://localhost:5001/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
+    const url = `https://hwaseonad.onrender.com/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
 
     fetch(url)
         .then(response => {
@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('검색어와 날짜 범위를 모두 입력하세요.');
             return;
         }
-        const url = `http://localhost:5001/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
+        const url = `https://hwaseonad.onrender.com/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
 
         fetch(url)
             .then(response => {
