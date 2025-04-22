@@ -125,6 +125,18 @@ db.all("PRAGMA table_info(captures);", (err, rows) => {
         return;
     }
     const columnNames = rows.map(row => row.name);
+    if (!columnNames.includes("category")) {
+        db.run("ALTER TABLE captures ADD COLUMN category TEXT DEFAULT '';", (err) => {
+            if (err) console.error("category 컬럼 추가 실패:", err);
+            else console.log("✅ captures 테이블에 category 컬럼이 추가되었습니다.");
+        });
+    }
+    if (!columnNames.includes("capture_date")) {
+        db.run("ALTER TABLE captures ADD COLUMN capture_date TEXT DEFAULT '';", (err) => {
+            if (err) console.error("capture_date 컬럼 추가 실패:", err);
+            else console.log("✅ captures 테이블에 capture_date 컬럼이 추가되었습니다.");
+        });
+    }
     if (!columnNames.includes("dropbox_path")) {
         db.run("ALTER TABLE captures ADD COLUMN dropbox_path TEXT;", (err) => {
             if (err) console.error("dropbox_path 컬럼 추가 실패:", err);
@@ -376,6 +388,45 @@ function normalizePrice(price) {
     return normalized;
 }
 
+// Chrome 바이너리 경로 자동 탐지 함수 추가
+const CHROME_CACHE_DIR = process.env.PUPPETEER_CACHE_DIR;
+function getChromeBinaryPath() {
+    // 1) 프로젝트 로컬 'chromium' 디렉토리 우선 탐색
+    try {
+        const localRoot = path.join(__dirname, 'chromium');
+        if (fs.existsSync(localRoot)) {
+            const localVersions = fs.readdirSync(localRoot);
+            for (const ver of localVersions) {
+                const base = path.join(localRoot, ver);
+                const candidate = path.join(base, 'chrome-linux64', 'chrome');
+                if (fs.existsSync(candidate)) return candidate;
+                const candidate2 = path.join(base, 'chrome');
+                if (fs.existsSync(candidate2)) return candidate2;
+            }
+        }
+    } catch (e) {
+        console.warn('로컬 chromium 탐지 실패:', e.message);
+    }
+    // 2) Puppeteer 캐시 디렉토리 탐색
+    try {
+        const chromeRoot = path.join(CHROME_CACHE_DIR, 'chrome');
+        const versions = fs.readdirSync(chromeRoot);
+        for (const ver of versions) {
+            const base = path.join(chromeRoot, ver);
+            const candidate = path.join(base, 'chrome-linux64', 'chrome');
+            if (fs.existsSync(candidate)) return candidate;
+            const candidate2 = path.join(base, 'chrome');
+            if (fs.existsSync(candidate2)) return candidate2;
+        }
+    } catch (e) {
+        console.warn('Puppeteer 캐시 chrome 탐지 실패:', e.message);
+    }
+    // 3) fallback to Puppeteer default
+    return puppeteer.executablePath();
+}
+const CHROME_PATH = getChromeBinaryPath();
+console.log('▶️ Using Chrome executable:', CHROME_PATH);
+
 // 크롤링 함수
 async function crawlOliveYoung(category, retryCount = 0) {
     let products = [];
@@ -387,7 +438,6 @@ async function crawlOliveYoung(category, retryCount = 0) {
     try {
         browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: puppeteer.executablePath(),
             args: [
                 '--no-sandbox', 
                 '--disable-setuid-sandbox',
@@ -1123,7 +1173,6 @@ app.post('/api/capture', async (req, res) => {
     try {
         const browser = await puppeteer.launch({
             headless: 'new',
-            executablePath: puppeteer.executablePath(),
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
         const page = await browser.newPage();

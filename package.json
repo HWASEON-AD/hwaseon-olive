@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "build": "echo \"No build step\"",
     "postinstall": "npx puppeteer browsers install chrome && mkdir -p ./chromium && cp -r /opt/render/.cache/puppeteer/chrome/* ./chromium"
   },
   "keywords": [],

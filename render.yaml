@@ -1,10 +1,9 @@
 services:
   - type: web
     name: hwaseonad
-    env: node
+    env: docker
     plan: free
-    buildCommand: npm install
-    startCommand: node server.js
+    dockerfilePath: Dockerfile
     envVars:
       - key: NODE_VERSION
         value: 18
