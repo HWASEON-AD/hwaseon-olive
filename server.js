@@ -514,7 +514,7 @@ async function crawlOliveYoung(category) {
         // URL 로그 제거
         await page.goto(url, {
             waitUntil: 'domcontentloaded', // networkidle0 대신 더 빠른 domcontentloaded 사용
-            timeout: 30000
+            timeout: 60000
         });
         
         // 페이지 로딩 확인
