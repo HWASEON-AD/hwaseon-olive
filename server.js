@@ -6,6 +6,7 @@ const path = require('path');
 const cron = require('node-cron');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
+const compression = require('compression');
 const app = express();
 const port = process.env.PORT || 5001;
 process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
@@ -38,9 +39,12 @@ if (IS_RENDER) {
     console.log(`🌐 외부 URL: ${RENDER_EXTERNAL_URL || '설정되지 않음'}`);
 }
 
+// Enable GZIP compression
+app.use(compression());
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files with 1-day cache
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
 
 
 app.get('/', (req, res) => {
@@ -243,9 +247,16 @@ async function backupDatabase() {
                 const dropboxFilePath = `/olive_rankings/backup/${backupFileName}`;
                 const fileContent = fs.readFileSync(backupPath);
                 
-                await dropboxClient.filesUpload({
+                const response = await dropboxClient.filesUpload({
                     path: dropboxFilePath,
-                    contents: fileContent
+                    contents: fileContent,
+                    mode: {'.tag': 'overwrite'},
+                    headers: {
+                        'User-Agent': 'OliveYoung/7.8.0 (Android 11; Nexus 5X)',
+                        'Accept-Language': 'ko-KR,ko;q=0.9',
+                        'Accept': 'application/json, text/javascript, */*; q=0.01',
+                        'Referer': 'https://www.oliveyoung.co.kr'
+                    }
                 });
                 
                 console.log(`✅ Dropbox 백업 완료: ${dropboxFilePath}`);
@@ -262,7 +273,7 @@ async function backupDatabase() {
                 // 오류 메시지를 로그에 기록
                 await dbRun(
                     `INSERT INTO backup_logs (backup_file, backup_date, dropbox_path, is_success, error_message)
-                     VALUES (?, ?, ?, ?, ?)`,
+                    VALUES (?, ?, ?, ?, ?)`,
                     [backupFileName, now.toISOString(), null, 0, error.message]
                 );
                 return false;
@@ -272,7 +283,7 @@ async function backupDatabase() {
         // 성공 로그 기록
         await dbRun(
             `INSERT INTO backup_logs (backup_file, backup_date, dropbox_path, is_success) 
-             VALUES (?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?)`,
             [backupFileName, now.toISOString(), dropboxPath, 1]
         );
         
@@ -1090,6 +1101,8 @@ app.listen(port, () => {
         } catch (error) {
             console.error('❌ 예약된 작업 중 오류:', error);
         }
+    }, {
+        timezone: 'Asia/Seoul'
     });
     
     // 매일 밤 12시에 DB 백업 스케줄 설정
@@ -1121,6 +1134,8 @@ app.listen(port, () => {
         } catch (error) {
             console.error('❌ 예약된 백업 작업 중 오류:', error);
         }
+    }, {
+        timezone: 'Asia/Seoul'
     });
     
     // 추가: 서버 활성화 유지를 위한 스케줄 (12시간마다)
@@ -1134,6 +1149,8 @@ app.listen(port, () => {
         } catch (error) {
             console.error('❌ 서버 활성화 확인 실패:', error.message);
         }
+    }, {
+        timezone: 'Asia/Seoul'
     });
 });
 
@@ -1396,31 +1413,6 @@ app.get('/api/status', (req, res) => {
     } catch (error) {
         res.status(500).json({
             status: 'error',
-            error: error.message
-        });
-    }
-});
-
-// 직접 크롤링 실행 API (테스트용, 인증 없음)
-app.get('/api/crawl-test', async (req, res) => {
-    const category = req.query.category || '스킨케어';
-    
-    try {
-        console.log(`테스트 크롤링 시작: ${category}`);
-        const products = await crawlOliveYoung(category);
-        console.log(`테스트 크롤링 완료: ${products.length}개 상품`);
-        
-        res.json({
-            success: true,
-            category,
-            products_count: products.length,
-            products: products.slice(0, 5) // 처음 5개만 반환
-        });
-    } catch (error) {
-        console.error(`테스트 크롤링 실패:`, error);
-        res.status(500).json({
-            success: false,
-            category,
             error: error.message
         });
     }

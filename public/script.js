@@ -1,3 +1,6 @@
+// Disable debug logs
+console.log = function() {};
+
 async function searchByProductName() {
     const keyword = document.getElementById('productSearchInput').value.trim();
     const startDate = document.getElementById('startDate').value;
@@ -14,7 +17,7 @@ async function searchByProductName() {
     try {
         // 서버에 요청 보내기
         const res = await fetch(
-            `https://hwaseonad.onrender.com/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
+            `/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
         );
         if (!res.ok) {
             const errorText = await res.text();  // 서버에서 반환한 오류 메시지 확인
@@ -31,7 +34,7 @@ async function searchByProductName() {
 
 async function showLastUpdatedTime() {
     try {
-        const res = await fetch('https://hwaseonad.onrender.com/api/last-updated');
+        const res = await fetch('/api/last-updated');
         const data = await res.json();
 
         const updatedAt = new Date(data.last_updated);
@@ -120,7 +123,7 @@ function formatEvent(event) {
 // 랭킹 업데이트
 async function fetchRankings(category, date) {
     try {
-        const res = await fetch(`https://hwaseonad.onrender.com/api/rankings?category=${category}&date=${date}`);
+        const res = await fetch(`/api/rankings?category=${encodeURIComponent(category)}&date=${encodeURIComponent(date)}`);
         const data = await res.json();
         updateTable(data);
     } catch (err) {
@@ -134,7 +137,7 @@ async function fetchRankingsByRange(category, startDate, endDate) {
     console.log('카테고리 값:', category); // 디버깅 로그 추가
     try {
         const res = await fetch(
-            `https://hwaseonad.onrender.com/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
+            `/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
         );
         const data = await res.json();
         console.log('서버 응답 데이터:', data); // 디버깅 로그 추가
@@ -196,7 +199,7 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
         return;
     }
 
-    const url = `https://hwaseonad.onrender.com/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
+    const url = `/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
 
     fetch(url)
         .then(response => {
@@ -229,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('검색어와 날짜 범위를 모두 입력하세요.');
             return;
         }
-        const url = `https://hwaseonad.onrender.com/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
+        const url = `/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
 
         fetch(url)
             .then(response => {
@@ -1200,6 +1203,45 @@ const mobileCategoryCodes = {
     '리빙_가전': '10000030005',
     '취미_팬시': '10000030006'
 };
+
+// 모바일 앱 실시간 랭킹 조회 함수
+async function fetchLiveRanking() {
+    const category = document.getElementById('category').value;
+    const code = mobileCategoryCodes[category];
+    if (!code) {
+        alert('알 수 없는 카테고리입니다.');
+        return;
+    }
+    try {
+        const url = `/api/mobile-ranking?dispCatNo=900000100100001&fltDispCatNo=${code}&pageIdx=1&rowsPerPage=100`;
+        console.log('🔗 실시간 랭킹 요청 URL:', url);
+        const res = await fetch(url);
+        const data = await res.json();
+        const list = data.resultList || data.list || data;
+        if (!Array.isArray(list)) {
+            console.error('실시간 랭킹 데이터 형식 오류:', data);
+            alert('실시간 랭킹 데이터를 불러오지 못했습니다.');
+            return;
+        }
+        const mapped = list.map((item, idx) => ({
+            date: new Date().toISOString(),
+            category,
+            rank: item.rank || idx + 1,
+            brand: item.brand || item.makerNm || '',
+            product: item.prdNm || item.product || '',
+            originalPrice: item.orglSale ? formatPrice(item.orglSale) : '-',
+            salePrice: item.prdSale ? formatPrice(item.prdSale) : '-',
+            event: item.eventFlags || item.eventTag || '-'
+        }));
+        updateTable(mapped);
+    } catch (err) {
+        console.error('실시간 랭킹 조회 오류:', err);
+        alert('실시간 랭킹 조회 중 오류가 발생했습니다.');
+    }
+}
+
+// 전역 바인딩
+window.fetchLiveRanking = fetchLiveRanking;
 
 
 
