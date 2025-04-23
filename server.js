@@ -606,56 +606,17 @@ async function crawlAllCategories() {
     const today = new Date().toISOString().split('T')[0];
     console.log(`📊 ${today} - 모든 카테고리 크롤링 시작`);
     
-    // 병렬 처리를 위한 설정
-    const MAX_CONCURRENT = 2; // 동시 처리를 2로 설정
     const categories = Object.keys(oliveYoungCategories);
     const results = [];
-    
-    // 카테고리를 병렬로 처리하기 위한 함수
-    async function processBatch(batch) {
-        const browser = await puppeteer.launch({
-            executablePath: CHROME_PATH,
-            headless: 'new',
-            args: [
-                '--no-sandbox', 
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--disable-extensions',
-                '--disable-audio-output',
-                '--js-flags=--max-old-space-size=512'
-            ],
-            timeout: 30000
-        });
-
-        const pagePromises = batch.map(async category => {
-            const page = await browser.newPage();
-            // request 차단·크롤링
-            await page.close();
-            return crawlOliveYoung(category);
-        });
-
-        const batchResults = await Promise.all(pagePromises);
-        await browser.close();
-        return batchResults;
+    // 순차 처리: 카테고리별 크롤링
+    for (const category of categories) {
+        console.log(`🔄 ${category} 크롤링 시작`);
+        const res = await crawlOliveYoung(category);
+        results.push(res);
+        // 서버 부하 완화를 위한 짧은 대기
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
-    
-    // 카테고리를 지정된 개수만큼 나누어 병렬 처리
-    for (let i = 0; i < categories.length; i += MAX_CONCURRENT) {
-        const batch = categories.slice(i, i + MAX_CONCURRENT);
-        console.log(`🔄 배치 처리 [${Math.floor(i/MAX_CONCURRENT)+1}/${Math.ceil(categories.length/MAX_CONCURRENT)}]: ${batch.join(', ')}`);
-        
-        const batchResults = await processBatch(batch);
-        results.push(...batchResults);
-        
-        // 다음 배치 전에 잠시 대기 (서버 부하 방지, 1초로 감소)
-        if (i + MAX_CONCURRENT < categories.length) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-    }
-    
-    const successCount = results.filter(r => r.length > 0).length;
+    const successCount = results.filter(r => Array.isArray(r) && r.length > 0).length;
     console.log(`✨ ${today} - 모든 카테고리 크롤링 완료: 성공 ${successCount}/${categories.length}`);
     return true;
 }
