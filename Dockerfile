@@ -1,48 +1,31 @@
-FROM node:slim
+FROM node:18.20.1-bullseye-slim
 
-# Puppeteer가 필요한 의존성 설치
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libgdk-pixbuf2.0-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    wget \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# 앱 디렉토리 생성 및 이동
+# Create app directory
 WORKDIR /app
 
-# 의존성 설치
+# Copy package.json and lock
 COPY package*.json ./
-RUN npm ci --only=production \
- && npm audit fix --force \
- && npm prune --production
 
-# 소스 복사
+# Install dependencies
+RUN npm ci --only=production \
+    && npm audit fix --force \
+    && npm prune --production
+
+# Copy rest of the code
 COPY . .
 
-# Puppeteer 브라우저 설치 (캐시 디렉토리를 /tmp로 설정)
-ENV PUPPETEER_CACHE_DIR=/tmp/puppeteer
+# Puppeteer 기본 Chromium 설치
+RUN npx puppeteer install --with-deps
+
+# Postinstall scripts (Puppeteer Chrome cache)
+RUN npx puppeteer browsers install chrome \
+ && mkdir -p chromium \
+ && cp -r /opt/render/.cache/puppeteer/chrome/* ./chromium
+
+# Environment variables for Puppeteer
+ENV PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 
-# Chrome 설치
-RUN npx puppeteer browsers install chrome \
- && mkdir -p ./chromium \
- && cp -r /tmp/puppeteer/chrome/* ./chromium
-
-# 포트 노출 및 실행
+# Expose port and run
 EXPOSE 5001
-CMD ["npm", "start"]
+CMD ["npm", "start"] 
