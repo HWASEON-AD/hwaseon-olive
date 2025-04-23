@@ -250,13 +250,7 @@ async function backupDatabase() {
                 const response = await dropboxClient.filesUpload({
                     path: dropboxFilePath,
                     contents: fileContent,
-                    mode: {'.tag': 'overwrite'},
-                    headers: {
-                        'User-Agent': 'OliveYoung/7.8.0 (Android 11; Nexus 5X)',
-                        'Accept-Language': 'ko-KR,ko;q=0.9',
-                        'Accept': 'application/json, text/javascript, */*; q=0.01',
-                        'Referer': 'https://www.oliveyoung.co.kr'
-                    }
+                    mode: {'.tag': 'overwrite'}
                 });
                 
                 console.log(`✅ Dropbox 백업 완료: ${dropboxFilePath}`);
@@ -453,12 +447,12 @@ const CHROME_PATH = process.env.CHROME_PATH || getChromeBinaryPath();
 console.log('▶️ Using Chrome executable:', CHROME_PATH);
 
 // 크롤링 함수
-async function crawlOliveYoung(category, retryCount = 0) {
+async function crawlOliveYoung(category) {
     let products = [];
     let browser;
 
     // URL 세부 로그 제거하고 간단하게 표시
-    console.log(`${category} 크롤링 중... (시도: ${retryCount + 1})`);
+    console.log(`${category} 크롤링 중...`);
 
     try {
         browser = await puppeteer.launch({
@@ -579,15 +573,7 @@ async function crawlOliveYoung(category, retryCount = 0) {
     
     } catch (err) {
         console.error(`❌ ${category} 크롤링 실패:`, err.message);
-        
-        // 최대 2번까지 재시도
-        if (retryCount < 2) {
-            console.log(`${category} 크롤링 재시도 중... (${retryCount + 1}/2)`);
-            // 잠시 대기 후 재시도
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            return await crawlOliveYoung(category, retryCount + 1);
-        }
-        
+        // 오류 발생 시 재시도 없이 빈 배열 반환
         return [];
     } finally {
         if (browser) {
@@ -1018,21 +1004,6 @@ app.get('/api/download-search', (req, res) => {
 
 
 
-app.get('/api/last-updated', (req, res) => {
-    db.get(`SELECT updated_at FROM update_logs ORDER BY updated_at DESC LIMIT 1`, (err, row) => {
-        if (err) {
-            console.error("최신 업데이트 시간 조회 오류:", err);
-            return res.status(500).json({ error: 'DB 오류' });
-        }
-        if (!row) {
-            return res.status(404).json({ error: '업데이트 기록 없음' });
-        }
-
-        res.json({
-            last_updated: row.updated_at
-        });
-    });
-});
 
 
 
@@ -1184,13 +1155,7 @@ async function uploadImageToDropbox(localFilePath, fileName, category) {
         const response = await dropboxClient.filesUpload({
             path: dropboxFilePath,
             contents: fileContent,
-            mode: {'.tag': 'overwrite'},
-            headers: {
-                'User-Agent': 'OliveYoung/7.8.0 (Android 11; Nexus 5X)',
-                'Accept-Language': 'ko-KR,ko;q=0.9',
-                'Accept': 'application/json, text/javascript, */*; q=0.01',
-                'Referer': 'https://www.oliveyoung.co.kr'
-            }
+            mode: {'.tag': 'overwrite'}
         });
         
         console.log(`✅ Dropbox 이미지 업로드 완료: ${dropboxFilePath}`);
@@ -1403,7 +1368,6 @@ app.get('/api/status', (req, res) => {
                         db_status: 'connected',
                         tables: tables.map(t => t.name),
                         rankings_count: countResult ? countResult.count : 0,
-                        last_updated: updateLog ? updateLog.updated_at : null
                     };
                     
                     res.json(responseData);
