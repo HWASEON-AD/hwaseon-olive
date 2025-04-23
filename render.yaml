@@ -1,3 +1,5 @@
+startCommand: PUPPETEER_CACHE_DIR=/tmp/puppeteer node server.js
+
 services:
   - type: web
     name: hwaseonad

@@ -1,11 +1,12 @@
-FROM node:18-bullseye-slim
+FROM node:18.20.1-bookworm-slim
 
 # Create app directory
 WORKDIR /app
 
 # Install Chrome dependencies for Puppeteer
-RUN apt-get update && apt-get install -y \
-    chromium \
+RUN apt-get update \
+ && apt-get dist-upgrade -y \
+ && apt-get install -y --no-install-recommends \
     gconf-service libasound2 libatk1.0-0 libc6 libgconf-2-4 libcairo2 \
     libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgdk-pixbuf2.0-0 \
     libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 \
@@ -19,7 +20,10 @@ RUN apt-get update && apt-get install -y \
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --only=production \
+    && npm audit \
+    && npm audit fix --production \
+    && npm prune --production
 
 # Copy rest of the code
 COPY . .
@@ -31,6 +35,7 @@ RUN npx puppeteer browsers install chrome \
 
 # Environment variables for Puppeteer
 ENV PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 
 # Expose port and run
 EXPOSE 5001

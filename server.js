@@ -9,7 +9,15 @@ const fs = require('fs');
 const compression = require('compression');
 const app = express();
 const port = process.env.PORT || 5001;
-process.env.PUPPETEER_CACHE_DIR = '/opt/render/.cache/puppeteer';
+const tmpCachePath = '/tmp/puppeteer';
+process.env.PUPPETEER_CACHE_DIR = tmpCachePath;
+
+
+if (!fs.existsSync(tmpCachePath)) {
+    fs.mkdirSync(tmpCachePath, { recursive: true });
+    console.log(`✅ Puppeteer 캐시 경로 생성됨: ${tmpCachePath}`);
+}
+
 
 // Dropbox 모듈 추가
 const { Dropbox } = require('dropbox');
@@ -26,9 +34,15 @@ const DROPBOX_CAPTURES_PATH = '/olive_rankings/captures';
 const IS_RENDER = process.env.RENDER === 'true';
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
 
-// Ensure Puppeteer cache directory exists (Render 환경 대비)
-const puppeteerCacheDir = process.env.PUPPETEER_CACHE_DIR;
-if (puppeteerCacheDir && !fs.existsSync(puppeteerCacheDir)) {
+// Puppeteer 캐시 디렉토리 설정 및 생성
+let puppeteerCacheDir;
+if (IS_RENDER) {
+    puppeteerCacheDir = '/opt/render/.cache/puppeteer';
+} else {
+    puppeteerCacheDir = path.join(__dirname, '.cache', 'puppeteer');
+}
+process.env.PUPPETEER_CACHE_DIR = puppeteerCacheDir;
+if (!fs.existsSync(puppeteerCacheDir)) {
     fs.mkdirSync(puppeteerCacheDir, { recursive: true });
     console.log(`🚀 Created Puppeteer cache directory: ${puppeteerCacheDir}`);
 }
