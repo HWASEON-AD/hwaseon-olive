@@ -1175,4 +1175,3 @@ window.resetCaptureData = resetCaptureData;
 window.closeCaptureListModal = closeCaptureListModal;
 window.deleteCapture = deleteCapture;
 window.downloadCapture = downloadCapture;
-
