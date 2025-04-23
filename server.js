@@ -489,13 +489,10 @@ async function crawlOliveYoung(category) {
         
         // 성능 최적화: 이미지, 스타일시트, 폰트 등 불필요한 리소스 차단
         await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            const resourceType = req.resourceType();
-            if (resourceType === 'image' || resourceType === 'font' || resourceType === 'media') {
-                req.abort();
-            } else {
-                req.continue();
-            }
+        page.on('request', req => {
+            const t = req.resourceType();
+            if (['image','font','media','stylesheet'].includes(t)) req.abort();
+            else req.continue();
         });
         
         // 브라우저 설정
@@ -610,23 +607,38 @@ async function crawlAllCategories() {
     console.log(`📊 ${today} - 모든 카테고리 크롤링 시작`);
     
     // 병렬 처리를 위한 설정
-    const MAX_CONCURRENT = 1; // 동시 처리를 1로 줄여 트랜잭션 오류 방지
+    const MAX_CONCURRENT = 2; // 동시 처리를 2로 설정
     const categories = Object.keys(oliveYoungCategories);
     const results = [];
     
     // 카테고리를 병렬로 처리하기 위한 함수
     async function processBatch(batch) {
-        return Promise.all(batch.map(async (category) => {
-            // 개별 카테고리 시작 로그 제거
-            try {
-                const products = await crawlOliveYoung(category);
-                // 성공 로그는 crawlOliveYoung 내부에서 처리
-                return { category, success: true, count: products.length };
-            } catch (error) {
-                // 실패 로그는 crawlOliveYoung 내부에서 처리
-                return { category, success: false, error: error.message };
-            }
-        }));
+        const browser = await puppeteer.launch({
+            executablePath: CHROME_PATH,
+            headless: 'new',
+            args: [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu',
+                '--disable-extensions',
+                '--disable-audio-output',
+                '--js-flags=--max-old-space-size=512'
+            ],
+            timeout: 30000
+        });
+
+        const pagePromises = batch.map(async category => {
+            const page = await browser.newPage();
+            // request 차단·크롤링
+            await page.close();
+            return crawlOliveYoung(category);
+        });
+
+        const batchResults = await Promise.all(pagePromises);
+        await browser.close();
+        return batchResults;
     }
     
     // 카테고리를 지정된 개수만큼 나누어 병렬 처리
@@ -643,7 +655,7 @@ async function crawlAllCategories() {
         }
     }
     
-    const successCount = results.filter(r => r.success).length;
+    const successCount = results.filter(r => r.length > 0).length;
     console.log(`✨ ${today} - 모든 카테고리 크롤링 완료: 성공 ${successCount}/${categories.length}`);
     return true;
 }

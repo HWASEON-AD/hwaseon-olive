@@ -342,11 +342,14 @@ tbody tr:hover {
     word-break: break-word;
 }
 
-#rankingTable td:nth-child(8), #productSearchTable td:nth-child(8) {  /* 이벤트 데이터 */
-    text-align: left;
+#rankingTable td:nth-child(8) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4em;
+    max-height: calc(1.4em * 2); /* 줄 간격 * 줄 수 */
     word-break: break-word;
-    color: #28a745;
-    font-weight: 500;
 }
 
 #rankingTable td:nth-child(8) span, #productSearchTable td:nth-child(8) span {

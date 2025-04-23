@@ -1,42 +1,48 @@
-FROM node:18.20.1-bookworm-slim
+FROM node:slim
 
-# Create app directory
+# Puppeteer가 필요한 의존성 설치
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libgdk-pixbuf2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    wget \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 앱 디렉토리 생성 및 이동
 WORKDIR /app
 
-# Install Chrome dependencies for Puppeteer
-RUN apt-get update \
- && apt-get dist-upgrade -y \
- && apt-get install -y --no-install-recommends \
-    gconf-service libasound2 libatk1.0-0 libc6 libgconf-2-4 libcairo2 \
-    libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgdk-pixbuf2.0-0 \
-    libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 \
-    libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 \
-    libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 \
-    libxss1 libxtst6 ca-certificates fonts-liberation lsb-release \
-    xdg-utils wget \
- && rm -rf /var/lib/apt/lists/*
-
-# Copy package.json and lock
+# 의존성 설치
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci --only=production \
-    && npm audit \
-    && npm audit fix --production \
-    && npm prune --production
+ && npm audit fix --force \
+ && npm prune --production
 
-# Copy rest of the code
+# 소스 복사
 COPY . .
 
-# Postinstall scripts (Puppeteer Chrome cache)
-RUN npx puppeteer browsers install chrome \
- && mkdir -p chromium \
- && cp -r /opt/render/.cache/puppeteer/chrome/* ./chromium
-
-# Environment variables for Puppeteer
-ENV PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer
+# Puppeteer 브라우저 설치 (캐시 디렉토리를 /tmp로 설정)
+ENV PUPPETEER_CACHE_DIR=/tmp/puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 
-# Expose port and run
+# Chrome 설치
+RUN npx puppeteer browsers install chrome \
+ && mkdir -p ./chromium \
+ && cp -r /tmp/puppeteer/chrome/* ./chromium
+
+# 포트 노출 및 실행
 EXPOSE 5001
-CMD ["npm", "start"] 
+CMD ["npm", "start"]
