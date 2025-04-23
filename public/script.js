@@ -323,11 +323,16 @@ document.addEventListener('DOMContentLoaded', function() {
         closeModalFooterBtn.addEventListener('click', closeCaptureListModal);
     }
     
-    // 이벤트 항목 여백 확대 및 가격 셀 줄바꿈 방지
+    // 행사 항목을 한 줄에 최대 2개씩 표시하도록 flex-wrap 레이아웃 적용, 가격 셀은 줄바꿈 방지
     const style = document.createElement('style');
     style.textContent = `
+        #rankingTable td:nth-child(8) {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 8px;
+        }
         .event-item {
-            display: inline-block;
+            flex: 0 0 calc(50% - 16px);
             background-color: #f8f4ff;
             color: #5f2eea;
             padding: 4px 8px;
@@ -336,7 +341,6 @@ document.addEventListener('DOMContentLoaded', function() {
             font-size: 1.1em;
             font-weight: 600;
             border: 1.5px solid #e0d3ff;
-            min-width: 60px;
             text-align: center;
             white-space: normal;
         }

@@ -89,7 +89,8 @@ if (dropboxClient) {
         dropboxClient.filesCreateFolderV2({ path: folder, autorename: false })
         .then(() => console.log(`✅ Dropbox 폴더 생성 완료: ${folder}`))
         .catch(err => {
-            if (err.error && err.error['.tag'] === 'path/conflict/folder') {
+            // 이미 존재하는 폴더(409 Conflict)인 경우 무시
+            if (err.status === 409 || (err.error_summary && err.error_summary.startsWith('path/conflict/folder'))) {
                 console.log(`✅ Dropbox 폴더가 이미 존재합니다: ${folder}`);
             } else {
                 console.error(`❌ Dropbox 폴더 생성 중 오류 (${folder}):`, err);
