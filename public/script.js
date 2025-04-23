@@ -272,8 +272,8 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchRankingsByRange(category, startDate, endDate);
     });
 
-    // 초기 로드 시 모바일 앱의 실시간 랭킹 표시
-    fetchLiveRanking();
+    // 초기 로드 시 PC 버전 랭킹 표시
+    fetchRankingsByRange(categoryEl.value, startDateEl.value, endDateEl.value);
     showLastUpdatedTime();
 });
 
@@ -343,11 +343,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // IndexedDB 초기화
     initIndexedDB().catch(error => console.error('IndexedDB 초기화 오류:', error));
-
-    const liveBtn = document.getElementById('liveRankingBtn');
-    if (liveBtn) {
-        liveBtn.addEventListener('click', fetchLiveRanking);
-    }
 });
 
 // 타임스탬프를 사용자 친화적인 형식으로 포맷팅하는 함수
@@ -1179,71 +1174,3 @@ window.resetCaptureData = resetCaptureData;
 window.closeCaptureListModal = closeCaptureListModal;
 window.deleteCapture = deleteCapture;
 window.downloadCapture = downloadCapture;
-
-// 모바일 앱 API용 카테고리 코드 매핑
-const mobileCategoryCodes = {
-    '스킨케어': '10000010001',
-    '마스크팩': '10000010009',
-    '클렌징': '10000010010',
-    '선케어': '10000010011',
-    '메이크업': '10000010002',
-    '네일': '10000010012',
-    '뷰티소품': '10000010006',
-    '더모_코스메틱': '10000010008',
-    '맨즈케어': '10000010007',
-    '향수_디퓨저': '10000010005',
-    '헤어케어': '10000010004',
-    '바디케어': '10000010003',
-    '건강식품': '10000020001',
-    '푸드': '10000020002',
-    '구강용품': '10000020003',
-    '헬스_건강용품': '10000020005',
-    '여성_위생용품': '10000020004',
-    '패션': '10000030007',
-    '리빙_가전': '10000030005',
-    '취미_팬시': '10000030006'
-};
-
-// 모바일 앱 실시간 랭킹 조회 함수
-async function fetchLiveRanking() {
-    const category = document.getElementById('category').value;
-    const code = mobileCategoryCodes[category];
-    if (!code) {
-        alert('알 수 없는 카테고리입니다.');
-        return;
-    }
-    try {
-        const url = `/api/mobile-ranking?dispCatNo=900000100100001&fltDispCatNo=${code}&pageIdx=1&rowsPerPage=100`;
-        console.log('🔗 실시간 랭킹 요청 URL:', url);
-        const res = await fetch(url);
-        const data = await res.json();
-        const list = data.resultList || data.list || data;
-        if (!Array.isArray(list)) {
-            console.error('실시간 랭킹 데이터 형식 오류:', data);
-            alert('실시간 랭킹 데이터를 불러오지 못했습니다.');
-            return;
-        }
-        const mapped = list.map((item, idx) => ({
-            date: new Date().toISOString(),
-            category,
-            rank: item.rank || idx + 1,
-            brand: item.brand || item.makerNm || '',
-            product: item.prdNm || item.product || '',
-            originalPrice: item.orglSale ? formatPrice(item.orglSale) : '-',
-            salePrice: item.prdSale ? formatPrice(item.prdSale) : '-',
-            event: item.eventFlags || item.eventTag || '-'
-        }));
-        updateTable(mapped);
-    } catch (err) {
-        console.error('실시간 랭킹 조회 오류:', err);
-        alert('실시간 랭킹 조회 중 오류가 발생했습니다.');
-    }
-}
-
-// 전역 바인딩
-window.fetchLiveRanking = fetchLiveRanking;
-
-
-
-
-
