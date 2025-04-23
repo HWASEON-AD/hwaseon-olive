@@ -6,20 +6,6 @@ window.alert = () => {};
 // Disable debug logs
 console.log = function() {};
 
-// 모바일 랭킹 404 호출 차단 및 빈 결과 반환
-;(function() {
-    const origFetch = window.fetch;
-    window.fetch = function(input, init) {
-        let url = (typeof input === 'string') ? input : input.url;
-        if (url.includes('/api/mobile-ranking')) {
-            // 빈 배열 형태의 resultList 반환
-            return Promise.resolve(new Response(JSON.stringify({ resultList: [] }), {
-                headers: { 'Content-Type': 'application/json' }
-            }));
-        }
-        return origFetch(input, init);
-    };
-})();
 
 // 특정 에러 메시지 로깅 억제
 ;(function() {
@@ -1190,5 +1176,3 @@ window.closeCaptureListModal = closeCaptureListModal;
 window.deleteCapture = deleteCapture;
 window.downloadCapture = downloadCapture;
 
-// 모바일 랭킹 호출 함수 빈 구현 (404 에러 방지)
-window.fetchLiveRanking = async () => {};
