@@ -325,7 +325,7 @@ tbody tr:hover {
 
 #rankingTable th:nth-child(3), #productSearchTable th:nth-child(3) {  /* 순위 열 */
     width: 5%;
-    min-width: 50px;
+    min-width: 30px;
 }
 
 #rankingTable th:nth-child(5), #productSearchTable th:nth-child(5) {  /* 제품명 열 */
@@ -342,14 +342,12 @@ tbody tr:hover {
     word-break: break-word;
 }
 
-#rankingTable td:nth-child(8) {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.4em;
-    max-height: calc(1.4em * 2); /* 줄 간격 * 줄 수 */
+#rankingTable td:nth-child(8), #productSearchTable td:nth-child(8) {  /* 이벤트 데이터 */
+    text-align: left;
     word-break: break-word;
+    color: #28a745;
+    font-weight: 500;
+    width: 10%;
 }
 
 #rankingTable td:nth-child(8) span, #productSearchTable td:nth-child(8) span {

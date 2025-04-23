@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
         closeModalFooterBtn.addEventListener('click', closeCaptureListModal);
     }
     
-    // 행사 아이템의 스타일 추가
+    // 이벤트 항목 여백 확대 및 가격 셀 줄바꿈 방지
     const style = document.createElement('style');
     style.textContent = `
         .event-item {
@@ -332,12 +332,17 @@ document.addEventListener('DOMContentLoaded', function() {
             color: #5f2eea;
             padding: 4px 8px;
             border-radius: 5px;
-            margin: 4px 6px;
+            margin: 6px 8px;
             font-size: 1.1em;
             font-weight: 600;
             border: 1.5px solid #e0d3ff;
             min-width: 60px;
             text-align: center;
+            white-space: normal;
+        }
+        #rankingTable td:nth-child(6),
+        #rankingTable td:nth-child(7) {
+            white-space: nowrap;
         }
     `;
     document.head.appendChild(style);

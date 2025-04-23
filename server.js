@@ -83,6 +83,21 @@ if (DROPBOX_TOKEN) {
     console.warn('Dropbox 액세스 토큰이 없습니다. Dropbox 백업이 비활성화됩니다.');
 }
 
+// Dropbox 폴더 초기화 (캡처 및 백업 경로)
+if (dropboxClient) {
+    [DROPBOX_CAPTURES_PATH, '/olive_rankings/backup'].forEach(folder => {
+        dropboxClient.filesCreateFolderV2({ path: folder, autorename: false })
+        .then(() => console.log(`✅ Dropbox 폴더 생성 완료: ${folder}`))
+        .catch(err => {
+            if (err.error && err.error['.tag'] === 'path/conflict/folder') {
+                console.log(`✅ Dropbox 폴더가 이미 존재합니다: ${folder}`);
+            } else {
+                console.error(`❌ Dropbox 폴더 생성 중 오류 (${folder}):`, err);
+            }
+        });
+    });
+}
+
 // 기본 데이터베이스 연결
 const db = new sqlite3.Database(DB_MAIN_FILE, (err) => {
     if (err) console.error('DB error:', err.message);
@@ -518,10 +533,11 @@ async function crawlOliveYoung(category) {
         });
         
         // 페이지 로딩 확인
-        await page.waitForSelector('.prd_info', { timeout: 15000 })
-            .catch(err => {
-                throw new Error(`${category} 상품 목록 로딩 실패: ${err.message}`);
-            });
+        try {
+            await page.waitForSelector('.prd_info', { timeout: 30000 });
+        } catch (err) {
+            console.warn(`${category} 상품 목록 로딩 지연: ${err.message}. 계속 진행합니다.`);
+        }
 
         // 상세 로그 제거
         products = await page.evaluate((cat) => {
