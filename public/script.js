@@ -50,6 +50,7 @@ async function searchByProductName() {
 
 
 
+
 // 제품명 검색 테이블
 function updateSearchTable(results) {
     const tbody = document.querySelector('#productSearchTable tbody');
@@ -143,7 +144,7 @@ async function fetchRankingsByRange(category, startDate, endDate) {
             showNotification('실시간 랭킹 조회 오류: 응답 파싱 실패', 3000);
             return;
         }
-        // console.log('서버 응답 데이터:', data);
+        console.log('서버 응답 데이터:', data);
         updateTable(data);
     } catch (err) {
         console.error('실시간 랭킹 조회 오류:', err);
@@ -163,6 +164,7 @@ function formatDate(dateString) {
 }
 
 function updateTable(rankings) {
+    console.log("업데이트할 랭킹 데이터:", rankings);
     const tbody = document.querySelector('#rankingTable tbody');
     tbody.innerHTML = '';
 
@@ -1044,7 +1046,7 @@ function captureScreen() {
     showNotification('화면을 캡처하는 중...');
     
     // 전체 화면 캡처 설정
-    html2canvas(document.querySelector('.container'), {
+    html2canvas(document.querySelector('.container') || document.body, {
         windowWidth: window.innerWidth,
         windowHeight: document.body.scrollHeight,
         scrollX: 0,
@@ -1090,6 +1092,8 @@ function captureScreen() {
         try {
             localStorage.setItem('captures', JSON.stringify(captures));
             console.log('캡처가 저장되었습니다:', fileName);
+            showNotification('✅ 캡처 완료');
+            showCaptureList(); // 캡처 후 자동으로 목록 표시
         } catch (e) {
             console.error('캡처 저장 오류:', e);
             alert('캡처 저장 중 오류가 발생했습니다: ' + e.message);

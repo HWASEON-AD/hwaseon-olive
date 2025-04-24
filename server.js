@@ -1023,6 +1023,9 @@ const getServerUrl = () => {
 app.listen(port, () => {
     console.log(`📡 서버가 http://localhost:${port} 에서 실행 중입니다.`);
     
+    // 슬립 방지 ping 설정
+    setupAntiSleepPing();
+    
     // 서버 시작 시 모든 카테고리 크롤링 실행
     console.log('🔄 서버 시작 시 자동 크롤링 실행 중...');
     crawlAllCategories().then(() => {
@@ -1052,6 +1055,77 @@ app.listen(port, () => {
         }
     }).catch(err => {
         console.error('❌ 초기 처리 중 오류:', err);
+    });
+    
+    // 매일 오전 9시에 모든 카테고리 크롤링 스케줄 설정
+    cron.schedule('0 9 * * *', async () => {
+        console.log('⏰ 예약된 크롤링 작업 시작 - 오전 9시');
+        try {
+            // 자기 자신 깨우기
+            const serverUrl = getServerUrl();
+            await axios.get(`${serverUrl}/api/wake-up?run_tasks=true`);
+            
+            await crawlAllCategories();
+            console.log('✅ 예약된 크롤링 작업 완료');
+            
+            // 크롤링 후 DB 백업
+            const backupResult = await backupDatabase();
+            if (backupResult) {
+                console.log('✅ 예약된 DB 백업 완료');
+            }
+        } catch (error) {
+            console.error('❌ 예약된 작업 중 오류:', error);
+        }
+    }, {
+        timezone: 'Asia/Seoul'
+    });
+    
+    // 매일 밤 12시에 DB 백업 스케줄 설정
+    cron.schedule('0 0 * * *', async () => {
+        console.log('⏰ 예약된 백업 작업 시작 - 밤 12시');
+        try {
+            // 자기 자신 깨우기
+            const serverUrl = getServerUrl();
+            await axios.get(`${serverUrl}/api/wake-up`);
+            
+            const backupResult = await backupDatabase();
+            if (backupResult) {
+                console.log('✅ 예약된 DB 백업 완료');
+            } else {
+                console.error('❌ 백업 실패');
+            }
+            
+            // 미업로드 이미지 확인 및 업로드
+            if (dropboxClient) {
+                const result = await dbAll(`SELECT COUNT(*) as count FROM captures WHERE dropbox_path IS NULL`);
+                if (result[0].count > 0) {
+                    console.log(`🔄 미업로드 캡처 이미지 ${result[0].count}개 발견. 자동 업로드 시작...`);
+                    
+                    // 백그라운드에서 실행
+                    axios.post(`${serverUrl}/api/captures/upload-to-dropbox`)
+                        .catch(err => console.error('캡처 자동 업로드 요청 실패:', err));
+                }
+            }
+        } catch (error) {
+            console.error('❌ 예약된 백업 작업 중 오류:', error);
+        }
+    }, {
+        timezone: 'Asia/Seoul'
+    });
+    
+    // 추가: 서버 활성화 유지를 위한 스케줄 (12시간마다)
+    cron.schedule('0 */12 * * *', async () => {
+        const serverUrl = getServerUrl();
+        console.log(`⏰ 12시간 주기 서버 활성화 확인 중...`);
+        
+        try {
+            await axios.get(`${serverUrl}/ping`);
+            console.log('✅ 서버 활성화 확인 완료');
+        } catch (error) {
+            console.error('❌ 서버 활성화 확인 실패:', error.message);
+        }
+    }, {
+        timezone: 'Asia/Seoul'
     });
 });
 
@@ -1475,6 +1549,26 @@ app.get('/api/captures', (req, res) => {
     });
 });
 
+// Render 서버 슬립 방지를 위한 자동 핑 설정 (5분마다)
+const setupAntiSleepPing = () => {
+    const PING_INTERVAL = 5 * 60 * 1000; // 5분
+    
+    setInterval(async () => {
+        const serverUrl = getServerUrl();
+        try {
+            console.log(`🔄 서버 슬립 방지 ping 실행... (${new Date().toISOString()})`);
+            const response = await axios.get(`${serverUrl}/ping`);
+            console.log(`✅ Ping 성공: ${response?.data || 'OK'}`);
+        } catch (error) {
+            console.error(`❌ Ping 실패 (${serverUrl}/ping):`, error.message);
+        }
+    }, PING_INTERVAL);
+    
+    console.log(`⏰ 서버 슬립 방지 기능 활성화: ${PING_INTERVAL/1000}초 간격`);
+};
+
+
+
 // 서버 시작 시 cron 작업에서 외부 핑 요청을 받도록 설정
 app.get('/api/wake-up', async (req, res) => {
     const timestamp = new Date().toISOString();
@@ -1495,18 +1589,12 @@ app.get('/api/wake-up', async (req, res) => {
             status: serverStatus
         });
         
-        // 서버가 깨어났을 때 자동으로 크롤링 및 백업 수행
+        // 서버가 깨어났을 때 자동으로 크롤링 등 필요한 작업 수행
         if (req.query.run_tasks === 'true') {
-            console.log('🔄 Wake-up 요청으로 인한 자동 크롤링 및 백업 수행 중...');
-            setTimeout(async () => {
-                try {
-                    await crawlAllCategories();
-                    console.log('✅ Wake-up 자동 크롤링 완료');
-                    const backupResult = await backupDatabase();
-                    if (backupResult) console.log('✅ Wake-up 자동 백업 완료');
-                } catch (e) {
-                    console.error('❌ Wake-up 자동 작업 오류:', e);
-                }
+            console.log('🔄 Wake-up 요청으로 인한 자동 작업 수행 중...');
+            // 필요한 경우 크롤링 등 실행 (백그라운드로)
+            setTimeout(() => {
+                backupDatabase().catch(err => console.error('자동 백업 오류:', err));
             }, 5000);
         }
     } catch (error) {
