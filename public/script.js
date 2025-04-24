@@ -143,7 +143,7 @@ async function fetchRankingsByRange(category, startDate, endDate) {
             showNotification('실시간 랭킹 조회 오류: 응답 파싱 실패', 3000);
             return;
         }
-        console.log('서버 응답 데이터:', data);
+        // console.log('서버 응답 데이터:', data);
         updateTable(data);
     } catch (err) {
         console.error('실시간 랭킹 조회 오류:', err);
@@ -163,7 +163,6 @@ function formatDate(dateString) {
 }
 
 function updateTable(rankings) {
-    console.log("업데이트할 랭킹 데이터:", rankings);
     const tbody = document.querySelector('#rankingTable tbody');
     tbody.innerHTML = '';
 
@@ -322,34 +321,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('모달 푸터 닫기 버튼 초기화');
         closeModalFooterBtn.addEventListener('click', closeCaptureListModal);
     }
-    
-    // 행사 항목을 한 줄에 최대 2개씩 표시하도록 flex-wrap 레이아웃 적용, 가격 셀은 줄바꿈 방지
-    const style = document.createElement('style');
-    style.textContent = `
-        #rankingTable td:nth-child(8) {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px 8px;
-        }
-        .event-item {
-            flex: 0 0 calc(50% - 16px);
-            background-color: #f8f4ff;
-            color: #5f2eea;
-            padding: 4px 8px;
-            border-radius: 5px;
-            margin: 6px 8px;
-            font-size: 1.1em;
-            font-weight: 600;
-            border: 1.5px solid #e0d3ff;
-            text-align: center;
-            white-space: normal;
-        }
-        #rankingTable td:nth-child(6),
-        #rankingTable td:nth-child(7) {
-            white-space: nowrap;
-        }
-    `;
-    document.head.appendChild(style);
     
     // IndexedDB 초기화
     initIndexedDB().catch(error => console.error('IndexedDB 초기화 오류:', error));
