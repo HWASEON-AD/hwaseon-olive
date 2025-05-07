@@ -163,6 +163,27 @@ function formatDate(dateString) {
     return `${year}.<br>${month}.${day}`;
 }
 
+function getRankChangeHTML(rankChange, amount) {
+    if (!rankChange || !amount) return '';
+    
+    const colors = {
+        up: '#28a745',    // 초록색
+        down: '#dc3545',  // 빨간색
+        same: '#6c757d'   // 회색
+    };
+    
+    const arrows = {
+        up: '▲',
+        down: '▼',
+        same: '−'
+    };
+    
+    const color = colors[rankChange];
+    const arrow = arrows[rankChange];
+    
+    return `<span style="color: ${color}; margin-left: 5px;">${arrow}(${amount})</span>`;
+}
+
 function updateTable(rankings) {
     console.log("업데이트할 랭킹 데이터:", rankings);
     const tbody = document.querySelector('#rankingTable tbody');
@@ -175,12 +196,32 @@ function updateTable(rankings) {
         return;
     }
 
+    // 크롤링 시간 표시
+    const lastUpdate = new Date(rankings[0].date);
+    const now = new Date();
+    const timeDiff = Math.floor((now - lastUpdate) / (1000 * 60)); // 분 단위 차이
+    
+    let timeMessage = '';
+    if (timeDiff < 60) {
+        timeMessage = `${timeDiff}분 전 크롤링`;
+    } else {
+        const hours = Math.floor(timeDiff / 60);
+        timeMessage = `${hours}시간 전 크롤링`;
+    }
+    
+    const timeInfo = document.createElement('div');
+    timeInfo.style.cssText = 'color: #666; font-size: 0.9rem; margin-bottom: 10px;';
+    timeInfo.textContent = `(직전 3시간 점 데이터 기준, ${timeMessage})`;
+    tbody.parentElement.insertBefore(timeInfo, tbody);
+
     rankings.forEach(item => {
         const row = document.createElement('tr');
+        const rankChangeHTML = getRankChangeHTML(item.rank_change, item.rank_change_amount);
+        
         row.innerHTML = `
             <td>${formatDate(item.date)}</td>
             <td>${item.category}</td>
-            <td>${item.rank}</td>
+            <td>${item.rank}${rankChangeHTML}</td>
             <td>${item.brand}</td>
             <td>${item.product}</td>
             <td>${formatPrice(item.originalPrice)}</td>
@@ -1166,7 +1207,8 @@ async function showLastCrawled() {
         const res = await fetch('/api/last-crawled');
         const data = await res.json();
         const last = data.lastCrawled;
-        const container = document.querySelector('.table-container'); // 제품명 데이터 테이블 위쪽
+        const productTable = document.getElementById('productSearchTable');
+        if (!productTable) return;
         let infoDiv = document.getElementById('lastCrawledInfo');
         if (!infoDiv) {
             infoDiv = document.createElement('div');
@@ -1175,7 +1217,7 @@ async function showLastCrawled() {
             infoDiv.style.fontSize = '13px';
             infoDiv.style.color = '#888';
             infoDiv.style.margin = '0 0 5px 5px';
-            container.insertBefore(infoDiv, container.firstChild);
+            productTable.parentNode.insertBefore(infoDiv, productTable);
         }
         if (!last) {
             infoDiv.textContent = '최근 크롤링 정보 없음';

@@ -703,3 +703,27 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
     min-width: auto;
     word-break: keep-all;
 }
+
+/* 순위 변동 표시 스타일 */
+#rankingTable td:nth-child(3) {
+    position: relative;
+    padding-right: 40px;
+}
+
+#rankingTable td:nth-child(3) span {
+    position: absolute;
+    right: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* 크롤링 시간 정보 스타일 */
+.crawling-time-info {
+    color: #666;
+    font-size: 0.9rem;
+    margin: 10px 0;
+    padding: 5px 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    display: inline-block;
+}
