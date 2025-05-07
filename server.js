@@ -1,3 +1,14 @@
+// 환경변수 설정
+require('dotenv').config();
+
+// 환경변수 로드 테스트
+console.log('=== 환경변수 로드 테스트 ===');
+console.log('DROPBOX_TOKEN:', process.env.DROPBOX_TOKEN ? '설정됨' : '설정되지 않음');
+console.log('DROPBOX_REFRESH_TOKEN:', process.env.DROPBOX_REFRESH_TOKEN ? '설정됨' : '설정되지 않음');
+console.log('DROPBOX_CLIENT_ID:', process.env.DROPBOX_CLIENT_ID ? '설정됨' : '설정되지 않음');
+console.log('DROPBOX_CLIENT_SECRET:', process.env.DROPBOX_CLIENT_SECRET ? '설정됨' : '설정되지 않음');
+console.log('========================');
+
 const express = require('express');
 const puppeteer = require('puppeteer');
 const sqlite3 = require('sqlite3')
@@ -22,14 +33,12 @@ if (!fs.existsSync(tmpCachePath)) {
 // Dropbox 모듈 추가
 const { Dropbox } = require('dropbox');
 
-
 const axios = require('axios');
 const { promisify } = require('util');
 
 // 설정 및 환경 변수
 const DB_MAIN_FILE = 'rankings.db';
 const DB_BACKUP_DIR = path.join(__dirname, 'backups');
-const DROPBOX_TOKEN = process.env.DROPBOX_TOKEN;
 const DROPBOX_CAPTURES_PATH = '/olive_rankings/captures';
 
 // Render 배포 감지 및 환경 설정
@@ -78,11 +87,20 @@ if (!fs.existsSync(DB_BACKUP_DIR)) {
 
 // Dropbox 클라이언트 초기화
 let dropboxClient = null;
-if (DROPBOX_TOKEN) {
-    dropboxClient = new Dropbox({ accessToken: DROPBOX_TOKEN });
-    console.log('Dropbox 클라이언트가 초기화되었습니다.');
+if (process.env.DROPBOX_TOKEN) {
+    try {
+        dropboxClient = new Dropbox({
+            accessToken: process.env.DROPBOX_TOKEN,
+            refreshToken: process.env.DROPBOX_REFRESH_TOKEN,
+            clientId: process.env.DROPBOX_CLIENT_ID,
+            clientSecret: process.env.DROPBOX_CLIENT_SECRET
+        });
+        console.log('✅ Dropbox 클라이언트가 초기화되었습니다.');
+    } catch (error) {
+        console.error('❌ Dropbox 클라이언트 초기화 실패:', error.message);
+    }
 } else {
-    console.warn('Dropbox 액세스 토큰이 없습니다. Dropbox 백업이 비활성화됩니다.');
+    console.warn('⚠️ Dropbox 액세스 토큰이 없습니다. Dropbox 백업이 비활성화됩니다.');
 }
 
 // Dropbox 폴더 초기화 (캡처 및 백업 경로)
@@ -1175,14 +1193,69 @@ if (!fs.existsSync(capturesDir)) {
     fs.mkdirSync(capturesDir, { recursive: true });
 }
 
-// 이미지 파일을 Dropbox에 업로드하는 함수
+// Dropbox 토큰 갱신 함수
+async function refreshDropboxToken() {
+    if (!process.env.DROPBOX_REFRESH_TOKEN || !process.env.DROPBOX_CLIENT_ID || !process.env.DROPBOX_CLIENT_SECRET) {
+        console.error('❌ Dropbox 토큰 갱신에 필요한 환경변수가 없습니다.');
+        return false;
+    }
+
+    try {
+        const response = await axios.post('https://api.dropbox.com/oauth2/token', null, {
+            params: {
+                grant_type: 'refresh_token',
+                refresh_token: process.env.DROPBOX_REFRESH_TOKEN,
+                client_id: process.env.DROPBOX_CLIENT_ID,
+                client_secret: process.env.DROPBOX_CLIENT_SECRET
+            }
+        });
+
+        if (response.data && response.data.access_token) {
+            // 새로운 액세스 토큰으로 클라이언트 재초기화
+            dropboxClient = new Dropbox({
+                accessToken: response.data.access_token,
+                refreshToken: process.env.DROPBOX_REFRESH_TOKEN,
+                clientId: process.env.DROPBOX_CLIENT_ID,
+                clientSecret: process.env.DROPBOX_CLIENT_SECRET
+            });
+            console.log('✅ Dropbox 토큰이 갱신되었습니다.');
+            return true;
+        }
+    } catch (error) {
+        console.error('❌ Dropbox 토큰 갱신 실패:', error.message);
+        return false;
+    }
+    return false;
+}
+
+// Dropbox API 호출 전 토큰 확인 및 갱신
+async function ensureValidDropboxToken() {
+    if (!dropboxClient) return false;
+    
+    try {
+        // 간단한 API 호출로 토큰 유효성 테스트
+        await dropboxClient.filesListFolder({ path: '' });
+        return true;
+    } catch (error) {
+        if (error.status === 401) {
+            // 토큰이 만료된 경우 갱신 시도
+            return await refreshDropboxToken();
+        }
+        throw error;
+    }
+}
+
+// uploadImageToDropbox 함수 수정
 async function uploadImageToDropbox(localFilePath, fileName, category) {
     if (!dropboxClient) {
-        console.warn('Dropbox 클라이언트가 초기화되지 않았습니다. 이미지 업로드를 건너뜁니다.');
+        console.warn('⚠️ Dropbox 클라이언트가 초기화되지 않았습니다. 이미지 업로드를 건너뜁니다.');
         return null;
     }
     
     try {
+        // 토큰 유효성 확인 및 갱신
+        await ensureValidDropboxToken();
+        
         // 현재 날짜 기반 경로 생성 (YYYY-MM 형식)
         const now = new Date();
         const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
