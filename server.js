@@ -666,7 +666,7 @@ app.get('/api/rankings', (req, res) => {
             c.category,
             p.rank as previous_rank,
             CASE 
-                WHEN p.rank IS NULL THEN NULL
+                WHEN p.rank IS NULL THEN 'new'
                 WHEN c.rank < p.rank THEN 'up'
                 WHEN c.rank > p.rank THEN 'down'
                 ELSE 'same'

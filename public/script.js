@@ -165,24 +165,26 @@ function formatDate(dateString) {
 }
 
 function getRankChangeHTML(rankChange, amount) {
-    if (!rankChange || !amount) return '';
+    if (!rankChange) return '';
     
     const colors = {
         up: '#28a745',    // 초록색
         down: '#dc3545',  // 빨간색
-        same: '#6c757d'   // 회색
+        same: '#6c757d',  // 회색
+        new: '#0d6efd'    // 파란색
     };
     
     const arrows = {
         up: '▲',
         down: '▼',
-        same: '−'
+        same: '−',
+        new: 'NEW'
     };
     
     const color = colors[rankChange];
     const arrow = arrows[rankChange];
     
-    return `<span style="color: ${color}; margin-left: 5px;">${arrow}(${amount})</span>`;
+    return `<span style="color: ${color}; margin-left: 5px; font-weight: bold;">${arrow}${amount ? `(${amount})` : ''}</span>`;
 }
 
 function updateTable(rankings) {
