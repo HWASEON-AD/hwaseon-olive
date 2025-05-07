@@ -1605,3 +1605,40 @@ app.get('/api/wake-up', async (req, res) => {
         });
     }
 });
+
+// URL 단축 API
+app.post('/shorten', (req, res) => {
+    const longUrl = req.body.url;
+    if (!longUrl) {
+        return res.status(400).json({ error: 'URL 누락' });
+    }
+
+    // 중복되지 않는 코드 생성
+    let shortCode;
+    const db = loadDB();
+    do {
+        shortCode = generateShortCode();
+    } while (db[shortCode]);
+
+    // 클라이언트 IP 추출
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
+
+    // URL 저장
+    db[shortCode] = {
+        longUrl: longUrl,
+        shortUrl: `${BASE_URL}/${shortCode}`,
+        todayVisits: 0,
+        totalVisits: 0,
+        createdAt: new Date().toISOString(),
+        lastReset: new Date().toISOString(),
+        ip: ip
+    };
+    
+    saveDB(db);
+    console.log('Created new URL:', shortCode, db[shortCode]);
+
+    res.json({ 
+        shortUrl: db[shortCode].shortUrl,
+        shortCode: shortCode
+    });
+});
