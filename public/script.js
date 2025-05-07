@@ -1159,3 +1159,47 @@ window.resetCaptureData = resetCaptureData;
 window.closeCaptureListModal = closeCaptureListModal;
 window.deleteCapture = deleteCapture;
 window.downloadCapture = downloadCapture;
+
+// 크롤링 시각 표시 함수 추가
+async function showLastCrawled() {
+    try {
+        const res = await fetch('/api/last-crawled');
+        const data = await res.json();
+        const last = data.lastCrawled;
+        const container = document.querySelector('.table-container'); // 제품명 데이터 테이블 위쪽
+        let infoDiv = document.getElementById('lastCrawledInfo');
+        if (!infoDiv) {
+            infoDiv = document.createElement('div');
+            infoDiv.id = 'lastCrawledInfo';
+            infoDiv.style.textAlign = 'left';
+            infoDiv.style.fontSize = '13px';
+            infoDiv.style.color = '#888';
+            infoDiv.style.margin = '0 0 5px 5px';
+            container.insertBefore(infoDiv, container.firstChild);
+        }
+        if (!last) {
+            infoDiv.textContent = '최근 크롤링 정보 없음';
+            return;
+        }
+        const lastDate = new Date(last);
+        const now = new Date();
+        const diffMs = now - lastDate;
+        const diffMin = Math.floor(diffMs / 60000);
+        let text = '';
+        if (diffMin <= 1) {
+            text = '방금 전 크롤링됨';
+        } else if (diffMin < 60) {
+            text = `${diffMin}분 전 크롤링됨`;
+        } else {
+            const h = Math.floor(diffMin / 60);
+            const m = diffMin % 60;
+            text = `${h}시간 ${m}분 전 크롤링됨`;
+        }
+        infoDiv.textContent = text;
+    } catch {
+        // 무시
+    }
+}
+
+// 페이지 로드시, 제품명 데이터 위에 크롤링 시각 표시
+window.addEventListener('DOMContentLoaded', showLastCrawled);
