@@ -1680,3 +1680,15 @@ app.post('/shorten', (req, res) => {
         shortCode: shortCode
     });
 });
+
+// 비밀번호 검증 API
+app.post('/api/verify-password', (req, res) => {
+    const { password } = req.body;
+    const correctPassword = 'hwaseon@00';
+    
+    if (password === correctPassword) {
+        res.json({ success: true });
+    } else {
+        res.status(401).json({ success: false, message: '비밀번호가 일치하지 않습니다.' });
+    }
+});
