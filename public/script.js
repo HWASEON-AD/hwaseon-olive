@@ -94,17 +94,14 @@ function formatPrice(price) {
 // 행사 정보 포맷팅 함수 추가
 function formatEvent(event) {
     if (!event || event === '-' || event === 'X') return '-';
-    
     // 슬래시(/), 줄바꿈, 쉼표, 슬래시로 구분된 항목들을 분리
     const items = event
-        .split(/[,\n\/]+/)  // 쉼표, 줄바꿈, 슬래시로 분리
+        .split(/[\,\n\/]+/)  // 쉼표, 줄바꿈, 슬래시로 분리
         .map(item => item.trim())
         .filter(item => item);
-    
     if (items.length === 0) return '-';
-    
-    // 단일 또는 다중 행사 항목 모두에 스타일된 span을 적용
-    return items.map(item => `<span class="event-item">${item}</span>`).join(' ');
+    // pill 스타일로 통일
+    return items.map(item => `<span class="event-pill">${item}</span>`).join(' ');
 }
 
 // 랭킹 업데이트
@@ -206,15 +203,23 @@ function updateTable(rankings) {
     
     let timeMessage = '';
     if (timeDiff < 60) {
-        timeMessage = `${timeDiff}분 전 크롤링`;
+        timeMessage = `${timeDiff}분 전 업데이트`;
     } else {
         const hours = Math.floor(timeDiff / 60);
-        timeMessage = `${hours}시간 전 크롤링`;
+        timeMessage = `${hours}시간 전 업데이트`;
     }
     
+    // 기존 시간 정보 제거
+    const existingTimeInfo = tbody.parentElement.querySelector('.time-info');
+    if (existingTimeInfo) {
+        existingTimeInfo.remove();
+    }
+    
+    // 새로운 시간 정보 추가
     const timeInfo = document.createElement('div');
-    timeInfo.style.cssText = 'color: #666; font-size: 0.9rem; margin-bottom: 10px;';
-    timeInfo.textContent = `(직전 3시간 점 데이터 기준, ${timeMessage})`;
+    timeInfo.className = 'time-info';
+    timeInfo.style.cssText = 'color: #666; font-size: 0.9rem; margin-bottom: 10px; text-align: right; padding-right: 10px;';
+    timeInfo.textContent = timeMessage;
     tbody.parentElement.insertBefore(timeInfo, tbody);
 
     rankings.forEach(item => {
