@@ -6,6 +6,7 @@ window.alert = () => {};
 // Disable debug logs
 console.log = function() {};
 
+// API 엔드포인트 설정 제거 (상대경로 사용)
 
 // 특정 에러 메시지 로깅 억제
 ;(function() {
@@ -32,17 +33,17 @@ async function searchByProductName() {
         return;
     }
     try {
-        // 서버에 요청 보내기
+        // 서버에 요청 보내기 (상대경로 사용)
         const res = await fetch(
             `/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
         );
         if (!res.ok) {
-            const errorText = await res.text();  // 서버에서 반환한 오류 메시지 확인
+            const errorText = await res.text();
             console.error('서버 오류:', errorText); 
             throw new Error('서버 오류');
         }
         const data = await res.json();
-        updateSearchTable(data);  // 테이블에 결과 출력
+        updateSearchTable(data);
     } catch (err) {
         console.error("검색 오류:", err);
     }
