@@ -21,6 +21,14 @@ if (!fs.existsSync(tmpCachePath)) {
 
 // Dropbox 모듈 추가
 const { Dropbox } = require('dropbox');
+
+const dbx = new Dropbox({
+  clientId: process.env.DROPBOX_CLIENT_ID,         // 환경변수에서 App Key 읽어옴
+  clientSecret: process.env.DROPBOX_CLIENT_SECRET, // 환경변수에서 App Secret 읽어옴
+  refreshToken: process.env.DROPBOX_REFRESH_TOKEN  // 환경변수에서 refresh_token 읽어옴
+});
+
+
 const axios = require('axios');
 const { promisify } = require('util');
 
