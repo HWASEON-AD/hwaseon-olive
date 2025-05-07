@@ -90,10 +90,7 @@ let dropboxClient = null;
 if (process.env.DROPBOX_TOKEN) {
     try {
         dropboxClient = new Dropbox({
-            accessToken: process.env.DROPBOX_TOKEN,
-            refreshToken: process.env.DROPBOX_REFRESH_TOKEN,
-            clientId: process.env.DROPBOX_CLIENT_ID,
-            clientSecret: process.env.DROPBOX_CLIENT_SECRET
+            accessToken: process.env.DROPBOX_TOKEN
         });
         console.log('✅ Dropbox 클라이언트가 초기화되었습니다.');
     } catch (error) {
@@ -1715,6 +1712,111 @@ app.get('/api/wake-up', async (req, res) => {
         res.status(500).json({
             success: false,
             error: '서버 상태 확인 중 오류가 발생했습니다.'
+        });
+    }
+});
+
+// Dropbox 백업 파일 목록 조회 API
+app.get('/api/backup-files', async (req, res) => {
+    if (!dropboxClient) {
+        return res.status(400).json({
+            success: false,
+            error: 'Dropbox 클라이언트가 구성되지 않았습니다.'
+        });
+    }
+    
+    try {
+        const { result } = await dropboxClient.filesListFolder({
+            path: '/olive_rankings/backup'
+        });
+        
+        // 파일명으로 정렬하여 최신 백업 찾기 (rankings_날짜-시간.db 형식)
+        const backupFiles = result.entries
+            .filter(entry => entry.name.startsWith('rankings_') && entry.name.endsWith('.db'))
+            .sort((a, b) => b.name.localeCompare(a.name));
+        
+        res.json({
+            success: true,
+            files: backupFiles
+        });
+    } catch (error) {
+        console.error('백업 파일 목록 조회 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: '백업 파일 목록을 조회하는 중 오류가 발생했습니다.'
+        });
+    }
+});
+
+// 특정 백업 파일 복원 API
+app.post('/api/restore-backup', async (req, res) => {
+    const { filePath } = req.body;
+    
+    if (!dropboxClient) {
+        return res.status(400).json({
+            success: false,
+            error: 'Dropbox 클라이언트가 구성되지 않았습니다.'
+        });
+    }
+    
+    if (!filePath) {
+        return res.status(400).json({
+            success: false,
+            error: '복원할 백업 파일 경로를 지정해주세요.'
+        });
+    }
+    
+    try {
+        // 복원 전에 현재 DB 백업
+        const tempBackupPath = path.join(DB_BACKUP_DIR, `pre_restore_${Date.now()}.db`);
+        fs.copyFileSync(DB_MAIN_FILE, tempBackupPath);
+        
+        // Dropbox에서 백업 파일 다운로드
+        const downloadResponse = await dropboxClient.filesDownload({
+            path: filePath
+        });
+        
+        // 임시 파일로 저장
+        const tempPath = path.join(DB_BACKUP_DIR, `temp_${Date.now()}.db`);
+        fs.writeFileSync(tempPath, downloadResponse.result.fileBinary);
+        
+        // DB 연결 종료
+        await new Promise(resolve => {
+            db.close(err => {
+                if (err) console.error('DB 연결 종료 중 오류:', err);
+                resolve();
+            });
+        });
+        
+        // 다운로드한 파일을 메인 DB 파일로 복사
+        fs.copyFileSync(tempPath, DB_MAIN_FILE);
+        
+        // 임시 파일 삭제
+        fs.unlinkSync(tempPath);
+        
+        // DB 다시 연결
+        const newDb = new sqlite3.Database(DB_MAIN_FILE, err => {
+            if (err) {
+                console.error('DB 재연결 오류:', err);
+                return res.status(500).json({
+                    success: false,
+                    error: '데이터베이스 재연결 중 오류가 발생했습니다.'
+                });
+            }
+            
+            // 전역 DB 객체 교체
+            global.db = newDb;
+            
+            res.json({
+                success: true,
+                message: `백업 파일 '${filePath}'에서 성공적으로 복원되었습니다.`
+            });
+        });
+    } catch (error) {
+        console.error('복원 중 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: `복원 중 오류가 발생했습니다: ${error.message}`
         });
     }
 });
