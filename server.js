@@ -133,7 +133,6 @@ db.serialize(() => {
         CREATE TABLE IF NOT EXISTS rankings (
             date TEXT,
             rank INTEGER,
-            
             brand TEXT,
             product TEXT,
             salePrice TEXT,
@@ -146,7 +145,7 @@ db.serialize(() => {
 });
 
 
-// update_logs 테이블 (최종 업데이트 기록용 - 따로)
+// update_logs 테이블 생성
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS update_logs (
@@ -337,93 +336,59 @@ async function backupDatabase() {
 
 // 크롤링한 데이터를 데이터베이스에 저장하는 함수 - 당일 데이터만 업데이트하도록 수정
 async function saveProductsToDB(products, category, date) {
-    return new Promise((resolve, reject) => {
-        if (!products || products.length === 0) {
-            resolve();
-            return;
-        }
-        
-        // 데이터 정규화 - 모든 가격 정보를 한 줄로 변환
-        const normalizedProducts = products.map(item => ({
-            ...item,
-            salePrice: normalizePrice(item.salePrice),
-            originalPrice: normalizePrice(item.originalPrice)
-        }));
+    if (!products || products.length === 0) {
+        console.warn(`${category} 카테고리의 데이터가 없습니다.`);
+        return;
+    }
 
-        // 현재 날짜 확인 (한국 시간)
-        const now = new Date();
-        const koreaTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-        const today = koreaTime.toISOString().split('T')[0];
-        
-        // 오늘 날짜와 비교하여 오늘 데이터만 업데이트하는 로직
-        const isToday = date === today;
-        
-        if (!isToday) {
-            console.log(`⚠️ 지난 날짜(${date})의 데이터는 수정하지 않습니다.`);
-            resolve();
-            return;
-        }
+    // 데이터 정규화
+    const normalizedProducts = products.map((item, index) => ({
+        category,
+        rank: index + 1,
+        brand: item.brand || '',
+        product: item.product || '',
+        salePrice: item.salePrice || '',
+        originalPrice: item.originalPrice || '',
+        event: item.event || ''
+    }));
 
+    try {
         // 트랜잭션 시작
-        db.serialize(() => {
-            db.run('BEGIN TRANSACTION', (err) => {
-                if (err) {
-                    console.error('트랜잭션 시작 실패:', err);
-                    reject(err);
-                    return;
-                }
-                
-                // 오늘 날짜 + 해당 카테고리 데이터 삭제
-                db.run(`DELETE FROM rankings WHERE date = ? AND category = ?`, [date, category], (err) => {
-                    if (err) {
-                        console.error('기존 데이터 삭제 실패:', err.message);
-                        db.run('ROLLBACK', () => reject(err));
-                        return;
+        await dbRun('BEGIN TRANSACTION');
+
+        // 기존 데이터 삭제하지 않고 UPSERT 사용
+        const stmt = db.prepare(`
+            INSERT OR REPLACE INTO rankings (date, category, rank, brand, product, salePrice, originalPrice, event)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const item of normalizedProducts) {
+            await new Promise((resolve, reject) => {
+                stmt.run(
+                    date,
+                    item.category,
+                    item.rank,
+                    item.brand,
+                    item.product,
+                    item.salePrice,
+                    item.originalPrice,
+                    item.event,
+                    (err) => {
+                        if (err) reject(err);
+                        else resolve();
                     }
-                    
-                    // 크롤링한 데이터를 삽입
-                    const stmt = db.prepare(`
-                        INSERT OR REPLACE INTO rankings (date, category, rank, brand, product, salePrice, originalPrice, event)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    `);
-                    
-                    normalizedProducts.forEach(item => {
-                        stmt.run(
-                            date,
-                            item.category,
-                            item.rank,
-                            item.brand,
-                            item.product,
-                            item.salePrice,
-                            item.originalPrice,
-                            item.event
-                        );
-                    });
-                    
-                    stmt.finalize(() => {
-                        // 최종 업데이트 시간 기록
-                        db.run(`INSERT INTO update_logs (updated_at) VALUES (datetime('now', 'localtime'))`, (err) => {
-                            if (err) {
-                                console.error('업데이트 기록 실패:', err.message);
-                                db.run('ROLLBACK', () => reject(err));
-                                return;
-                            }
-                            
-                            // 트랜잭션 커밋
-                            db.run('COMMIT', (err) => {
-                                if (err) {
-                                    console.error('트랜잭션 커밋 실패:', err);
-                                    db.run('ROLLBACK', () => reject(err));
-                                    return;
-                                }
-                                resolve();
-                            });
-                        });
-                    });
-                });
+                );
             });
-        });
-    });
+        }
+
+        stmt.finalize();
+        await dbRun('COMMIT');
+        console.log(`✅ ${category} 데이터 저장 완료`);
+    } catch (error) {
+        console.error(`❌ ${category} 데이터 저장 실패:`, error);
+        await dbRun('ROLLBACK');
+        throw error;
+    }
 }
 
 // 가격 정규화 함수: 모든 줄바꿈, 공백을 제거하고 한 줄로 만드는 함수
@@ -498,7 +463,6 @@ async function crawlOliveYoung(category) {
     let products = [];
     let browser;
 
-    // URL 세부 로그 제거하고 간단하게 표시
     console.log(`${category} 크롤링 중...`);
 
     try {
@@ -1819,4 +1783,25 @@ app.post('/api/restore-backup', async (req, res) => {
             error: `복원 중 오류가 발생했습니다: ${error.message}`
         });
     }
+});
+
+// 크롤링 업데이트 시간 조회 API
+app.get('/api/last-update', (req, res) => {
+    db.get(
+        `SELECT updated_at FROM update_logs ORDER BY updated_at DESC LIMIT 1`,
+        (err, row) => {
+            if (err) {
+                console.error('업데이트 시간 조회 오류:', err);
+                return res.status(500).json({
+                    success: false,
+                    error: '업데이트 시간을 조회하는 중 오류가 발생했습니다.'
+                });
+            }
+            
+            res.json({
+                success: true,
+                lastUpdate: row ? row.updated_at : null
+            });
+        }
+    );
 });

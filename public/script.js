@@ -368,6 +368,42 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // IndexedDB 초기화
     initIndexedDB().catch(error => console.error('IndexedDB 초기화 오류:', error));
+
+    // 날짜 선택 input 초기화
+    const today = new Date();
+    const startDate = new Date('2024-05-03'); // 데이터 시작일
+    
+    // endDate input에 오늘 날짜 설정
+    const endDateInput = document.getElementById('endDate');
+    endDateInput.value = today.toISOString().split('T')[0];
+    
+    // startDate input에 3일 전 날짜 설정
+    const startDateInput = document.getElementById('startDate');
+    const threeDaysAgo = new Date(today);
+    threeDaysAgo.setDate(today.getDate() - 3);
+    startDateInput.value = threeDaysAgo.toISOString().split('T')[0];
+    
+    // 날짜 범위 제한
+    startDateInput.min = startDate.toISOString().split('T')[0];
+    startDateInput.max = today.toISOString().split('T')[0];
+    endDateInput.min = startDate.toISOString().split('T')[0];
+    endDateInput.max = today.toISOString().split('T')[0];
+    
+    // startDate가 변경되면 endDate의 최소값 업데이트
+    startDateInput.addEventListener('change', function() {
+        endDateInput.min = this.value;
+        if (endDateInput.value < this.value) {
+            endDateInput.value = this.value;
+        }
+    });
+    
+    // endDate가 변경되면 startDate의 최대값 업데이트
+    endDateInput.addEventListener('change', function() {
+        startDateInput.max = this.value;
+        if (startDateInput.value > this.value) {
+            startDateInput.value = this.value;
+        }
+    });
 });
 
 // 타임스탬프를 사용자 친화적인 형식으로 포맷팅하는 함수

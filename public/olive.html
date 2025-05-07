@@ -41,9 +41,9 @@
 
             <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
             <label for="startDate"> 날짜 선택 :</label>
-            <input type="date" id="startDate" min="2025-04-22">
+            <input type="date" id="startDate">
             <label>~</label>
-            <input type="date" id="endDate" min="2025-04-22">
+            <input type="date" id="endDate">
             <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
             <label>제품명 검색 : </label>
             <input type="text" id="productSearchInput" placeholder="예시 : 세럼 , 앰플"/>
@@ -54,7 +54,7 @@
 
         <div style="display: flex; align-items: center; justify-content: center; height: 32px; margin-top: -15px;">
             <span style="color: rgba(0, 0, 0, 0.6); font-size: 17px;">
-            ※ 25.04.22 부터 데이터 조회 가능
+            ※ 2024.05.03 부터 데이터 조회 가능
             </span>
         </div>
 
@@ -131,6 +131,89 @@
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <script src="script.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+
+    <style>
+        /* 순위 변동 스타일 */
+        .rank-change {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .rank-up {
+            color: #2196F3;  /* 파란색 */
+            background-color: rgba(33, 150, 243, 0.1);
+        }
+        
+        .rank-down {
+            color: #F44336;  /* 빨간색 */
+            background-color: rgba(244, 67, 54, 0.1);
+        }
+        
+        .rank-same {
+            color: #757575;  /* 회색 */
+        }
+        
+        .rank-new {
+            color: #4CAF50;  /* 초록색 */
+            background-color: rgba(76, 175, 80, 0.1);
+        }
+    </style>
+
+    <script>
+        function updateTable(rankings) {
+            const tbody = document.querySelector('#rankingTable tbody');
+            tbody.innerHTML = '';
+
+            if (!Array.isArray(rankings) || rankings.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td colspan="8">데이터가 없습니다.</td>`;
+                tbody.appendChild(row);
+                return;
+            }
+
+            rankings.forEach(item => {
+                const row = document.createElement('tr');
+                
+                // 순위 변동 표시 생성
+                let rankChangeHtml = '';
+                if (item.rank_change) {
+                    const changeClass = item.rank_change === 'up' ? 'rank-up' : 
+                                      item.rank_change === 'down' ? 'rank-down' : 'rank-same';
+                    const arrow = item.rank_change === 'up' ? '↑' : 
+                                item.rank_change === 'down' ? '↓' : '→';
+                    rankChangeHtml = `
+                        <span class="rank-change ${changeClass}">
+                            ${arrow} ${item.rank_change_amount || ''}
+                        </span>
+                    `;
+                } else if (item.previous_rank === null) {
+                    rankChangeHtml = `
+                        <span class="rank-change rank-new">
+                            NEW
+                        </span>
+                    `;
+                }
+
+                row.innerHTML = `
+                    <td>${item.date}</td>
+                    <td>${item.category}</td>
+                    <td>
+                        ${item.rank}
+                        ${rankChangeHtml}
+                    </td>
+                    <td>${item.brand}</td>
+                    <td>${item.product}</td>
+                    <td>${item.originalPrice}</td>
+                    <td>${item.salePrice}</td>
+                    <td>${item.event}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    </script>
 </body>
 </html>
 
