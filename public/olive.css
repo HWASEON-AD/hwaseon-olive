@@ -727,3 +727,10 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
     border-radius: 4px;
     display: inline-block;
 }
+
+.last-crawled {
+    color: #666;
+    font-size: 0.9em;
+    margin: 5px 0;
+    text-align: center;
+}

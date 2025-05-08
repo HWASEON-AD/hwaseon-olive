@@ -51,7 +51,6 @@ async function searchByProductName() {
 
 
 
-
 // 제품명 검색 테이블
 function updateSearchTable(results) {
     const tbody = document.querySelector('#productSearchTable tbody');
@@ -115,44 +114,6 @@ async function fetchRankings(category, date) {
     }
 }
 
-// 랭킹 테이블 업데이트
-function updateTable(rankings, latestCrawl) {
-    const tbody = document.querySelector('#rankingTable tbody');
-    tbody.innerHTML = '';
-
-    if (!Array.isArray(rankings) || rankings.length === 0) {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="8">데이터가 없습니다.</td>`;
-        tbody.appendChild(row);
-        return;
-    }
-
-    // 업데이트 시간 표시
-    if (latestCrawl) {
-        const updateTimeDiv = document.getElementById('rankingUpdateTime');
-        updateTimeDiv.textContent = formatTimeAgo(latestCrawl);
-    }
-
-    // 가장 최근 크롤링 데이터만 표시
-    const latestCrawlTime = rankings[0]?.crawled_at;
-    const latestRankings = rankings.filter(item => item.crawled_at === latestCrawlTime);
-
-    latestRankings.forEach(item => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${formatDate(item.date)} ${item.crawled_at_formatted}</td>
-            <td>${item.category}</td>
-            <td>${item.rank}</td>
-            <td>${item.brand}</td>
-            <td>${item.product}</td>
-            <td>${formatPrice(item.originalPrice)}</td>
-            <td>${formatPrice(item.salePrice)}</td>
-            <td>${formatEvent(item.event)}</td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
 // 시간 경과 표시 함수
 function formatTimeAgo(dateString) {
     const date = new Date(dateString);
@@ -160,17 +121,17 @@ function formatTimeAgo(dateString) {
     const diffInSeconds = Math.floor((now - date) / 1000);
     
     if (diffInSeconds < 60) {
-        return '방금 전 업데이트';
+        return '방금 전';
     } else if (diffInSeconds < 3600) {
         const minutes = Math.floor(diffInSeconds / 60);
-        return `${minutes}분 전 업데이트`;
+        return `${minutes}분 전`;
     } else if (diffInSeconds < 86400) {
         const hours = Math.floor(diffInSeconds / 3600);
         const minutes = Math.floor((diffInSeconds % 3600) / 60);
-        return `${hours}시간 ${minutes}분 전 업데이트`;
+        return `${hours}시간 ${minutes}분 전`;
     } else {
         const days = Math.floor(diffInSeconds / 86400);
-        return `${days}일 전 업데이트`;
+        return `${days}일 전`;
     }
 }
 
@@ -183,28 +144,6 @@ function formatDate(dateString) {
     return `${year}.<br>${month}.${day}`;
 }
 
-function getRankChangeHTML(rankChange, amount) {
-    if (!rankChange) return '';
-    
-    const colors = {
-        up: '#28a745',    // 초록색
-        down: '#dc3545',  // 빨간색
-        same: '#6c757d',  // 회색
-        new: '#0d6efd'    // 파란색
-    };
-    
-    const arrows = {
-        up: '▲',
-        down: '▼',
-        same: '−',
-        new: 'NEW'
-    };
-    
-    const color = colors[rankChange];
-    const arrow = arrows[rankChange];
-    
-    return `<span style="color: ${color}; margin-left: 5px; font-weight: bold;">${arrow}${amount ? `(${amount})` : ''}</span>`;
-}
 
 async function fetchRankingsByRange(category, startDate, endDate) {
     // 파라미터 유효성 검사
