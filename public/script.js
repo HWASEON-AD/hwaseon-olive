@@ -109,48 +109,70 @@ async function fetchRankings(category, date) {
     try {
         const res = await fetch(`/api/rankings?category=${encodeURIComponent(category)}&date=${encodeURIComponent(date)}`);
         const data = await res.json();
-        updateTable(data);
+        updateTable(data.rankings, data.latestCrawl);
     } catch (err) {
         console.error("오류 발생:", err);
     }
-}   
-
-
-// ... existing code ...
-async function fetchRankingsByRange(category, startDate, endDate) {
-    // 파라미터 유효성 검사
-    if (!category || !startDate || !endDate) {
-        alert('카테고리와 날짜를 모두 선택하세요.');
-        return;
-    }
-    console.log('카테고리/날짜 범위:', category, startDate, endDate);
-    try {
-        const res = await fetch(
-            `/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
-        );
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error('실시간 랭킹 조회 오류:', errorText);
-            showNotification(`실시간 랭킹 조회 오류: ${errorText}`, 3000);
-            return;
-        }
-        let data;
-        try {
-            data = await res.json();
-        } catch (parseError) {
-            console.error('실시간 랭킹 조회 오류: 응답 파싱 실패', parseError);
-            showNotification('실시간 랭킹 조회 오류: 응답 파싱 실패', 3000);
-            return;
-        }
-        console.log('서버 응답 데이터:', data);
-        updateTable(data);
-    } catch (err) {
-        console.error('실시간 랭킹 조회 오류:', err);
-        showNotification('실시간 랭킹 조회 오류', 3000);
-    }
 }
 
+// 랭킹 테이블 업데이트
+function updateTable(rankings, latestCrawl) {
+    const tbody = document.querySelector('#rankingTable tbody');
+    tbody.innerHTML = '';
 
+    if (!Array.isArray(rankings) || rankings.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td colspan="8">데이터가 없습니다.</td>`;
+        tbody.appendChild(row);
+        return;
+    }
+
+    // 업데이트 시간 표시
+    if (latestCrawl) {
+        const updateTimeDiv = document.getElementById('rankingUpdateTime');
+        updateTimeDiv.textContent = formatTimeAgo(latestCrawl);
+    }
+
+    // 가장 최근 크롤링 데이터만 표시
+    const latestCrawlTime = rankings[0]?.crawled_at;
+    const latestRankings = rankings.filter(item => item.crawled_at === latestCrawlTime);
+
+    latestRankings.forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${formatDate(item.date)} ${item.crawled_at_formatted}</td>
+            <td>${item.category}</td>
+            <td>${item.rank}</td>
+            <td>${item.brand}</td>
+            <td>${item.product}</td>
+            <td>${formatPrice(item.originalPrice)}</td>
+            <td>${formatPrice(item.salePrice)}</td>
+            <td>${formatEvent(item.event)}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// 시간 경과 표시 함수
+function formatTimeAgo(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+    
+    if (diffInSeconds < 60) {
+        return '방금 전 업데이트';
+    } else if (diffInSeconds < 3600) {
+        const minutes = Math.floor(diffInSeconds / 60);
+        return `${minutes}분 전 업데이트`;
+    } else if (diffInSeconds < 86400) {
+        const hours = Math.floor(diffInSeconds / 3600);
+        const minutes = Math.floor((diffInSeconds % 3600) / 60);
+        return `${hours}시간 ${minutes}분 전 업데이트`;
+    } else {
+        const days = Math.floor(diffInSeconds / 86400);
+        return `${days}일 전 업데이트`;
+    }
+}
 
 // 랭킹 테이블
 function formatDate(dateString) {
@@ -184,64 +206,38 @@ function getRankChangeHTML(rankChange, amount) {
     return `<span style="color: ${color}; margin-left: 5px; font-weight: bold;">${arrow}${amount ? `(${amount})` : ''}</span>`;
 }
 
-function updateTable(rankings) {
-    console.log("업데이트할 랭킹 데이터:", rankings);
-    const tbody = document.querySelector('#rankingTable tbody');
-    tbody.innerHTML = '';
-
-    if (!Array.isArray(rankings) || rankings.length === 0) {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="8">데이터가 없습니다.</td>`;
-        tbody.appendChild(row);
+async function fetchRankingsByRange(category, startDate, endDate) {
+    // 파라미터 유효성 검사
+    if (!category || !startDate || !endDate) {
+        alert('카테고리와 날짜를 모두 선택하세요.');
         return;
     }
-
-    // 크롤링 시간 표시
-    const lastUpdate = new Date(rankings[0].date);
-    const now = new Date();
-    const timeDiff = Math.floor((now - lastUpdate) / (1000 * 60)); // 분 단위 차이
-    
-    let timeMessage = '';
-    if (timeDiff < 60) {
-        timeMessage = `${timeDiff}분 전 업데이트`;
-    } else {
-        const hours = Math.floor(timeDiff / 60);
-        timeMessage = `${hours}시간 전 업데이트`;
+    console.log('카테고리/날짜 범위:', category, startDate, endDate);
+    try {
+        const res = await fetch(
+            `/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
+        );
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error('실시간 랭킹 조회 오류:', errorText);
+            showNotification(`실시간 랭킹 조회 오류: ${errorText}`, 3000);
+            return;
+        }
+        let data;
+        try {
+            data = await res.json();
+        } catch (parseError) {
+            console.error('실시간 랭킹 조회 오류: 응답 파싱 실패', parseError);
+            showNotification('실시간 랭킹 조회 오류: 응답 파싱 실패', 3000);
+            return;
+        }
+        console.log('서버 응답 데이터:', data);
+        updateTable(data.rankings, data.latestCrawl);
+    } catch (err) {
+        console.error('실시간 랭킹 조회 오류:', err);
+        showNotification('실시간 랭킹 조회 오류', 3000);
     }
-    
-    // 기존 시간 정보 제거
-    const existingTimeInfo = tbody.parentElement.querySelector('.time-info');
-    if (existingTimeInfo) {
-        existingTimeInfo.remove();
-    }
-    
-    // 새로운 시간 정보 추가
-    const timeInfo = document.createElement('div');
-    timeInfo.className = 'time-info';
-    timeInfo.style.cssText = 'color: #666; font-size: 0.9rem; margin-bottom: 10px; text-align: right; padding-right: 10px;';
-    timeInfo.textContent = timeMessage;
-    tbody.parentElement.insertBefore(timeInfo, tbody);
-
-    rankings.forEach(item => {
-        const row = document.createElement('tr');
-        const rankChangeHTML = getRankChangeHTML(item.rank_change, item.rank_change_amount);
-        
-        row.innerHTML = `
-            <td>${formatDate(item.date)}</td>
-            <td>${item.category}</td>
-            <td>${item.rank}${rankChangeHTML}</td>
-            <td>${item.brand}</td>
-            <td>${item.product}</td>
-            <td>${formatPrice(item.originalPrice)}</td>
-            <td>${formatPrice(item.salePrice)}</td>
-            <td>${formatEvent(item.event)}</td>
-        `;
-        tbody.appendChild(row);
-    });
 }
-
-
-
 
 document.getElementById('downloadExcelBtn').addEventListener('click', () => {
     const category = document.getElementById('category').value;
@@ -274,8 +270,6 @@ document.getElementById('downloadExcelBtn').addEventListener('click', () => {
         });
 });
 
-
-
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('productSearchDownloadBtn')?.addEventListener('click', () => {
         const keyword = document.getElementById('productSearchInput').value.trim();
@@ -306,8 +300,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-
-
 document.addEventListener('DOMContentLoaded', () => {
     const categoryEl = document.getElementById('category');
     const startDateEl = document.getElementById('startDate');
@@ -327,8 +319,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 });
-
-
 
 document.getElementById('productSearchBtn').addEventListener('click', searchByProductName);
 document.getElementById('productSearchInput').addEventListener('keydown', function (event) {
