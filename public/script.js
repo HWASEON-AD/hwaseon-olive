@@ -109,14 +109,14 @@ async function fetchRankings(category, date) {
     try {
         const res = await fetch(`/api/rankings?category=${encodeURIComponent(category)}&date=${encodeURIComponent(date)}`);
         const data = await res.json();
-        updateTable(data.rankings, data.latestCrawl);
+        updateTable(data.rankings);
     } catch (err) {
         console.error("오류 발생:", err);
     }
 }
 
 // 랭킹 테이블 업데이트
-function updateTable(rankings, latestCrawl) {
+function updateTable(rankings) {
     const tbody = document.querySelector('#rankingTable tbody');
     tbody.innerHTML = '';
 
@@ -127,17 +127,7 @@ function updateTable(rankings, latestCrawl) {
         return;
     }
 
-    // 업데이트 시간 표시
-    if (latestCrawl) {
-        const updateTimeDiv = document.getElementById('rankingUpdateTime');
-        updateTimeDiv.textContent = formatTimeAgo(latestCrawl);
-    }
-
-    // 가장 최근 크롤링 데이터만 표시
-    const latestCrawlTime = rankings[0]?.crawled_at;
-    const latestRankings = rankings.filter(item => item.crawled_at === latestCrawlTime);
-
-    latestRankings.forEach(item => {
+    rankings.forEach(item => {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${formatDate(item.date)} ${item.crawled_at_formatted}</td>
@@ -206,36 +196,25 @@ function getRankChangeHTML(rankChange, amount) {
     return `<span style="color: ${color}; margin-left: 5px; font-weight: bold;">${arrow}${amount ? `(${amount})` : ''}</span>`;
 }
 
+// 날짜 범위로 랭킹 조회
 async function fetchRankingsByRange(category, startDate, endDate) {
-    // 파라미터 유효성 검사
     if (!category || !startDate || !endDate) {
         alert('카테고리와 날짜를 모두 선택하세요.');
         return;
     }
-    console.log('카테고리/날짜 범위:', category, startDate, endDate);
+
     try {
         const res = await fetch(
             `/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
         );
         if (!res.ok) {
-            const errorText = await res.text();
-            console.error('실시간 랭킹 조회 오류:', errorText);
-            showNotification(`실시간 랭킹 조회 오류: ${errorText}`, 3000);
-            return;
+            throw new Error('랭킹 데이터 조회 실패');
         }
-        let data;
-        try {
-            data = await res.json();
-        } catch (parseError) {
-            console.error('실시간 랭킹 조회 오류: 응답 파싱 실패', parseError);
-            showNotification('실시간 랭킹 조회 오류: 응답 파싱 실패', 3000);
-            return;
-        }
-        console.log('서버 응답 데이터:', data);
-        updateTable(data.rankings, data.latestCrawl);
+        const data = await res.json();
+        updateTable(data.rankings);
     } catch (err) {
-        console.error('실시간 랭킹 조회 오류:', err);
-        showNotification('실시간 랭킹 조회 오류', 3000);
+        console.error('랭킹 조회 오류:', err);
+        alert('랭킹 데이터를 불러오는데 실패했습니다.');
     }
 }
 

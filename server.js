@@ -639,52 +639,28 @@ app.get('/api/crawl-all', async (req, res) => {
 app.get('/api/rankings', (req, res) => {
     const { category, date } = req.query;
     
-    // 현재 시간 기준으로 3시간 전 데이터도 함께 조회
-    const currentDate = new Date(date);
-    const threeHoursAgo = new Date(currentDate.getTime() - 3 * 60 * 60 * 1000);
-    const previousDate = threeHoursAgo.toISOString().split('T')[0];
-    
     db.all(
-        `WITH current_rankings AS (
-            SELECT date, rank, brand, product, salePrice, originalPrice, event, category 
-            FROM rankings 
-            WHERE category = ? AND date = ?
-        ),
-        previous_rankings AS (
-            SELECT date, rank, brand, product, salePrice, originalPrice, event, category 
-            FROM rankings 
-            WHERE category = ? AND date = ?
-        )
-        SELECT 
-            c.date,
-            c.rank,
-            c.brand,
-            c.product,
-            c.salePrice,
-            c.originalPrice,
-            c.event,
-            c.category,
-            p.rank as previous_rank,
-            CASE 
-                WHEN p.rank IS NULL THEN 'new'
-                WHEN c.rank < p.rank THEN 'up'
-                WHEN c.rank > p.rank THEN 'down'
-                ELSE 'same'
-            END as rank_change,
-            CASE 
-                WHEN p.rank IS NULL THEN NULL
-                ELSE ABS(c.rank - p.rank)
-            END as rank_change_amount
-        FROM current_rankings c
-        LEFT JOIN previous_rankings p ON c.product = p.product
-        ORDER BY c.rank ASC`,
-        [category, date, category, previousDate],
+        `SELECT 
+            date,
+            rank,
+            brand,
+            product,
+            salePrice,
+            originalPrice,
+            event,
+            category,
+            datetime('now', 'localtime') as crawled_at,
+            strftime('%H:%M', 'now', 'localtime') as crawled_at_formatted
+        FROM rankings 
+        WHERE category = ? AND date = ?
+        ORDER BY rank ASC`,
+        [category, date],
         (err, rows) => {
             if (err) {
                 console.error("DB 에러:", err);
                 return res.status(500).json({ error: 'DB 오류' });
             }
-            res.json(rows);
+            res.json({ rankings: rows });
         }
     );
 });
