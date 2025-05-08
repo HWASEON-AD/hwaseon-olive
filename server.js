@@ -742,23 +742,111 @@ app.get('/api/search', (req, res) => {
 
 
 
+// 날짜 유효성 검사 함수 추가
+function isValidDate(dateStr) {
+    const date = new Date(dateStr);
+    const today = new Date();
+    return date instanceof Date && !isNaN(date) && date <= today;
+}
+
+// 마지막 크롤링 시간 조회 API (last-crawled로 변경)
+app.get('/api/last-crawled', (req, res) => {
+    db.get(
+        `SELECT updated_at FROM update_logs ORDER BY updated_at DESC LIMIT 1`,
+        (err, row) => {
+            if (err) {
+                console.error('크롤링 시간 조회 오류:', err);
+                return res.status(500).json({
+                    success: false,
+                    error: '크롤링 시간을 조회하는 중 오류가 발생했습니다.'
+                });
+            }
+            
+            res.json({
+                success: true,
+                lastCrawled: row ? row.updated_at : null
+            });
+        }
+    );
+});
+
+// 날짜 범위 랭킹 조회 API 수정
+app.get('/api/rankings-range', (req, res) => {
+    const { category, startDate, endDate } = req.query;
+    
+    // 필수 파라미터 검증
+    if (!category || !startDate || !endDate) {
+        return res.status(400).json({
+            success: false,
+            error: '카테고리와 날짜 범위를 모두 선택하세요.'
+        });
+    }
+
+    // 날짜 유효성 검사
+    if (!isValidDate(startDate) || !isValidDate(endDate)) {
+        return res.status(400).json({
+            success: false,
+            error: '유효하지 않은 날짜입니다. 미래 날짜는 사용할 수 없습니다.'
+        });
+    }
+
+    // 시작일이 종료일보다 늦은 경우
+    if (new Date(startDate) > new Date(endDate)) {
+        return res.status(400).json({
+            success: false,
+            error: '시작일은 종료일보다 이전이어야 합니다.'
+        });
+    }
+
+    db.all(`
+        SELECT date, rank, brand, product, salePrice, originalPrice, event, category
+        FROM rankings
+        WHERE category = ?
+        AND date BETWEEN ? AND ?
+        ORDER BY date ASC, rank ASC
+    `, [category, startDate, endDate], (err, rows) => {
+        if (err) {
+            console.error("DB 오류:", err);
+            return res.status(500).json({
+                success: false,
+                error: '데이터 조회 중 오류가 발생했습니다.'
+            });
+        }
+        
+        res.json({
+            success: true,
+            data: rows
+        });
+    });
+});
+
+// 검색 범위 API 수정
 app.get('/api/search-range', (req, res) => {
     const { keyword, startDate, endDate } = req.query;
 
     if (!keyword || !startDate || !endDate) {
-        return res.status(400).json({ message: '제품명과 날짜 범위를 모두 선택하세요.' });
+        return res.status(400).json({
+            success: false,
+            error: '검색어와 날짜 범위를 모두 입력하세요.'
+        });
     }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    if (isNaN(start) || isNaN(end)) {
-        return res.status(400).json({ message: '유효한 날짜를 입력하세요.' });
+    // 날짜 유효성 검사
+    if (!isValidDate(startDate) || !isValidDate(endDate)) {
+        return res.status(400).json({
+            success: false,
+            error: '유효하지 않은 날짜입니다. 미래 날짜는 사용할 수 없습니다.'
+        });
     }
 
-    const formattedStartDate = start.toISOString().split('T')[0];
-    const formattedEndDate = end.toISOString().split('T')[0];
+    // 시작일이 종료일보다 늦은 경우
+    if (new Date(startDate) > new Date(endDate)) {
+        return res.status(400).json({
+            success: false,
+            error: '시작일은 종료일보다 이전이어야 합니다.'
+        });
+    }
 
-    // 중복 제거 및 데이터 순서 정렬
     db.all(`
         WITH RankedResults AS (
             SELECT 
@@ -800,39 +888,19 @@ app.get('/api/search-range', (req, res) => {
         FROM RankedResults
         WHERE rn = 1
         ORDER BY date ASC, CAST(rank AS INTEGER) ASC
-    `, [`%${keyword}%`, formattedStartDate, formattedEndDate], (err, rows) => {
+    `, [`%${keyword}%`, startDate, endDate], (err, rows) => {
         if (err) {
             console.error("서버 오류:", err);
-            return res.status(500).json({ error: '서버 오류' });
+            return res.status(500).json({
+                success: false,
+                error: '데이터 조회 중 오류가 발생했습니다.'
+            });
         }
-        res.json(rows);
-    });
-});
-
-
-
-app.get('/api/rankings-range', (req, res) => {
-    const { category, startDate, endDate } = req.query;
-    console.log('서버에서 받은 카테고리:', category);
-
-    if (!category || !startDate || !endDate) {
-        console.log('필수 파라미터 누락:', { category, startDate, endDate });
-        return res.status(400).json({ error: '카테고리와 날짜를 모두 선택하세요.' });
-    }
-
-    db.all(`
-        SELECT date, rank, brand, product, salePrice, originalPrice, event, category
-        FROM rankings
-        WHERE category = ?
-        AND date BETWEEN ? AND ?
-        ORDER BY date ASC, rank ASC
-    `, [category, startDate, endDate], (err, rows) => {
-        if (err) {
-            console.error("DB 오류:", err);
-            return res.status(500).json({ error: '서버 오류' });
-        }
-        console.log('DB 쿼리 결과:', rows);
-        res.json(rows);
+        
+        res.json({
+            success: true,
+            data: rows
+        });
     });
 });
 
@@ -1024,9 +1092,6 @@ app.get('/api/download-search', (req, res) => {
         }
     );
 });
-
-
-
 
 
 
@@ -1767,7 +1832,6 @@ app.post('/api/restore-backup', async (req, res) => {
                     error: '데이터베이스 재연결 중 오류가 발생했습니다.'
                 });
             }
-            
             // 전역 DB 객체 교체
             global.db = newDb;
             
@@ -1786,22 +1850,107 @@ app.post('/api/restore-backup', async (req, res) => {
 });
 
 // 크롤링 업데이트 시간 조회 API
-app.get('/api/last-update', (req, res) => {
+app.get('/api/last-crawled', (req, res) => {
     db.get(
         `SELECT updated_at FROM update_logs ORDER BY updated_at DESC LIMIT 1`,
         (err, row) => {
             if (err) {
-                console.error('업데이트 시간 조회 오류:', err);
+                console.error('크롤링 시간 조회 오류:', err);
                 return res.status(500).json({
                     success: false,
-                    error: '업데이트 시간을 조회하는 중 오류가 발생했습니다.'
+                    error: '크롤링 시간을 조회하는 중 오류가 발생했습니다.'
                 });
             }
             
             res.json({
                 success: true,
-                lastUpdate: row ? row.updated_at : null
+                lastCrawled: row ? row.updated_at : null
             });
         }
     );
+});
+
+// 마지막 크롤링 시간 조회 API (중복 제거)
+app.get('/api/last-crawled', async (req, res) => {
+    try {
+        const result = await db.get(`
+            SELECT MAX(updated_at) as last_crawled 
+            FROM update_logs
+        `);
+        res.json({ 
+            success: true,
+            lastCrawled: result.last_crawled 
+        });
+    } catch (err) {
+        console.error('마지막 크롤링 시간 조회 오류:', err);
+        res.status(500).json({ 
+            success: false,
+            error: '마지막 크롤링 시간 조회 실패' 
+        });
+    }
+});
+
+// 날짜 범위로 랭킹 조회 API 수정
+app.get('/api/rankings-range', async (req, res) => {
+    const { category, startDate, endDate } = req.query;
+    
+    if (!category || !startDate || !endDate) {
+        return res.status(400).json({ 
+            success: false,
+            error: '필수 파라미터가 누락되었습니다.' 
+        });
+    }
+
+    try {
+        // 미래 날짜 체크
+        const now = new Date();
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        if (start > now || end > now) {
+            return res.status(400).json({ 
+                success: false,
+                error: '미래 날짜는 조회할 수 없습니다.' 
+            });
+        }
+
+        const query = `
+            SELECT 
+                date,
+                category,
+                rank,
+                brand,
+                product,
+                salePrice,
+                originalPrice,
+                event,
+                strftime('%Y-%m-%d %H:%M', updated_at) as crawled_at_formatted
+            FROM rankings 
+            WHERE category = ? 
+            AND date BETWEEN ? AND ?
+            ORDER BY date DESC, rank ASC
+        `;
+        
+        const rankings = await db.all(query, [category, startDate, endDate]);
+        
+        // 최신 크롤링 시간 조회
+        const latestCrawl = await db.get(`
+            SELECT updated_at 
+            FROM update_logs 
+            ORDER BY updated_at DESC 
+            LIMIT 1
+        `);
+        
+        res.json({ 
+            success: true,
+            rankings, 
+            latestCrawl: latestCrawl ? latestCrawl.updated_at : null 
+        });
+    } catch (err) {
+        console.error('랭킹 조회 오류:', err);
+        res.status(500).json({ 
+            success: false,
+            error: '랭킹 조회 실패' 
+        });
+    }
 });
