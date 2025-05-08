@@ -139,8 +139,7 @@ db.serialize(() => {
             originalPrice TEXT,
             event TEXT,
             category TEXT,
-            crawled_at TEXT,
-            PRIMARY KEY (date, category, rank, crawled_at)
+            PRIMARY KEY (date, category, rank)
         );
     `);
 });
@@ -151,9 +150,7 @@ db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS update_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-            category TEXT,
-            crawled_at TEXT
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
     `, (err) => {
         if (err) {
@@ -339,42 +336,57 @@ async function backupDatabase() {
 
 // 크롤링한 데이터를 데이터베이스에 저장하는 함수 - 당일 데이터만 업데이트하도록 수정
 async function saveProductsToDB(products, category, date) {
-    const now = new Date();
-    const crawled_at = now.toISOString();
-    
+    if (!products || products.length === 0) {
+        console.warn(`${category} 카테고리의 데이터가 없습니다.`);
+        return;
+    }
+
+    // 데이터 정규화
+    const normalizedProducts = products.map((item, index) => ({
+        category,
+        rank: index + 1,
+        brand: item.brand || '',
+        product: item.product || '',
+        salePrice: item.salePrice || '',
+        originalPrice: item.originalPrice || '',
+        event: item.event || ''
+    }));
+
     try {
+        // 트랜잭션 시작
         await dbRun('BEGIN TRANSACTION');
-        
-        for (const product of products) {
-            await dbRun(`
-                INSERT INTO rankings (
-                    date, rank, brand, product, salePrice, 
-                    originalPrice, event, category, crawled_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-                date,
-                product.rank,
-                product.brand,
-                product.product,
-                product.salePrice,
-                product.originalPrice,
-                product.event,
-                category,
-                crawled_at
-            ]);
+
+        // 기존 데이터 삭제하지 않고 UPSERT 사용
+        const stmt = db.prepare(`
+            INSERT OR REPLACE INTO rankings (date, category, rank, brand, product, salePrice, originalPrice, event)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const item of normalizedProducts) {
+            await new Promise((resolve, reject) => {
+                stmt.run(
+                    date,
+                    item.category,
+                    item.rank,
+                    item.brand,
+                    item.product,
+                    item.salePrice,
+                    item.originalPrice,
+                    item.event,
+                    (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
         }
 
-        // update_logs에 크롤링 기록 추가
-        await dbRun(`
-            INSERT INTO update_logs (category, crawled_at)
-            VALUES (?, ?)
-        `, [category, crawled_at]);
-
+        stmt.finalize();
         await dbRun('COMMIT');
-        console.log(`✅ ${category} 카테고리 데이터 저장 완료 (${crawled_at})`);
+        console.log(`✅ ${category} 데이터 저장 완료`);
     } catch (error) {
+        console.error(`❌ ${category} 데이터 저장 실패:`, error);
         await dbRun('ROLLBACK');
-        console.error(`❌ ${category} 카테고리 데이터 저장 실패:`, error);
         throw error;
     }
 }
@@ -624,37 +636,57 @@ app.get('/api/crawl-all', async (req, res) => {
 
 
 // 날짜별 랭킹 조회
-app.get('/api/rankings', async (req, res) => {
+app.get('/api/rankings', (req, res) => {
     const { category, date } = req.query;
     
-    try {
-        // 가장 최근 크롤링 시간 조회
-        const latestCrawl = await dbGet(`
-            SELECT crawled_at 
-            FROM update_logs 
-            WHERE category = ? 
-            ORDER BY crawled_at DESC 
-            LIMIT 1
-        `, [category]);
-
-        // 해당 카테고리의 모든 크롤링 데이터 조회
-        const rankings = await dbAll(`
-            SELECT r.*, 
-            strftime('%Y-%m-%d %H:%M:%S', r.crawled_at) as crawled_at_formatted
-            FROM rankings r
-            WHERE r.category = ? 
-            AND r.date = ?
-            ORDER BY r.crawled_at DESC, r.rank ASC
-        `, [category, date]);
-
-        res.json({
-            rankings,
-            latestCrawl: latestCrawl ? latestCrawl.crawled_at : null
-        });
-    } catch (error) {
-        console.error('랭킹 데이터 조회 실패:', error);
-        res.status(500).json({ error: '랭킹 데이터 조회 실패' });
-    }
+    // 현재 시간 기준으로 3시간 전 데이터도 함께 조회
+    const currentDate = new Date(date);
+    const threeHoursAgo = new Date(currentDate.getTime() - 3 * 60 * 60 * 1000);
+    const previousDate = threeHoursAgo.toISOString().split('T')[0];
+    
+    db.all(
+        `WITH current_rankings AS (
+            SELECT date, rank, brand, product, salePrice, originalPrice, event, category 
+            FROM rankings 
+            WHERE category = ? AND date = ?
+        ),
+        previous_rankings AS (
+            SELECT date, rank, brand, product, salePrice, originalPrice, event, category 
+            FROM rankings 
+            WHERE category = ? AND date = ?
+        )
+        SELECT 
+            c.date,
+            c.rank,
+            c.brand,
+            c.product,
+            c.salePrice,
+            c.originalPrice,
+            c.event,
+            c.category,
+            p.rank as previous_rank,
+            CASE 
+                WHEN p.rank IS NULL THEN 'new'
+                WHEN c.rank < p.rank THEN 'up'
+                WHEN c.rank > p.rank THEN 'down'
+                ELSE 'same'
+            END as rank_change,
+            CASE 
+                WHEN p.rank IS NULL THEN NULL
+                ELSE ABS(c.rank - p.rank)
+            END as rank_change_amount
+        FROM current_rankings c
+        LEFT JOIN previous_rankings p ON c.product = p.product
+        ORDER BY c.rank ASC`,
+        [category, date, category, previousDate],
+        (err, rows) => {
+            if (err) {
+                console.error("DB 에러:", err);
+                return res.status(500).json({ error: 'DB 오류' });
+            }
+            res.json(rows);
+        }
+    );
 });
 
 
