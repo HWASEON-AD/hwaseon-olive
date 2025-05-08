@@ -315,9 +315,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const startDate = startDateEl.value;
         const endDate = endDateEl.value;
 
+        // 날짜 유효성 검사
+        if (new Date(startDate) > new Date(endDate)) {
+            alert('시작일이 종료일보다 늦을 수 없습니다.');
+            return;
+        }
+
         fetchRankingsByRange(category, startDate, endDate);
     });
-
 });
 
 document.getElementById('productSearchBtn').addEventListener('click', searchByProductName);
@@ -368,7 +373,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 날짜 선택 input 초기화
     const today = new Date();
-    const startDate = new Date('2024-05-03'); // 데이터 시작일
     
     // endDate input에 오늘 날짜 설정
     const endDateInput = document.getElementById('endDate');
@@ -379,28 +383,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const threeDaysAgo = new Date(today);
     threeDaysAgo.setDate(today.getDate() - 3);
     startDateInput.value = threeDaysAgo.toISOString().split('T')[0];
-    
-    // 날짜 범위 제한
-    startDateInput.min = startDate.toISOString().split('T')[0];
-    startDateInput.max = today.toISOString().split('T')[0];
-    endDateInput.min = startDate.toISOString().split('T')[0];
-    endDateInput.max = today.toISOString().split('T')[0];
-    
-    // startDate가 변경되면 endDate의 최소값 업데이트
-    startDateInput.addEventListener('change', function() {
-        endDateInput.min = this.value;
-        if (endDateInput.value < this.value) {
-            endDateInput.value = this.value;
-        }
-    });
-    
-    // endDate가 변경되면 startDate의 최대값 업데이트
-    endDateInput.addEventListener('change', function() {
-        startDateInput.max = this.value;
-        if (startDateInput.value > this.value) {
-            startDateInput.value = this.value;
-        }
-    });
 });
 
 // 타임스탬프를 사용자 친화적인 형식으로 포맷팅하는 함수
@@ -913,369 +895,140 @@ function cleanupOldCaptures() {
 
 // 캡처 다운로드 함수
 function downloadCapture(captureId, fileName) {
-    console.log(`캡처 다운로드 요청: ${captureId}`);
-    
-    if (!captureId) {
-        console.error('다운로드할 캡처 ID가 제공되지 않았습니다.');
-        alert('다운로드할 캡처를 찾을 수 없습니다.');
-        return;
-    }
-    
-    // IndexedDB에서 캡처 데이터 가져오기
-    if (db) {
-        try {
-            const transaction = db.transaction(['captures'], 'readonly');
-            const store = transaction.objectStore('captures');
-            const request = store.get(captureId);
-            
-            request.onsuccess = (event) => {
-                const capture = event.target.result;
-                if (capture) {
-                    console.log('캡처 데이터를 성공적으로 로드했습니다:', capture.id);
-                    
-                    // 파일 이름 설정
-                    const downloadFileName = fileName || capture.fileName || `capture_${new Date().toISOString().replace(/:/g, '-').replace(/\./g, '_')}.png`;
-                    
-                    // 다운로드 링크 생성 및 클릭
-                    triggerDownload(capture.imageData, downloadFileName);
-                } else {
-                    console.error(`ID ${captureId}에 해당하는 캡처를 찾을 수 없습니다.`);
-                    alert('다운로드할 캡처를 찾을 수 없습니다.');
-                }
-            };
-            
-            request.onerror = (event) => {
-                console.error('캡처 데이터 로드 중 오류:', event.target.error);
-                alert('캡처 로드 중 오류가 발생했습니다. 다시 시도해주세요.');
-                
-                // 로컬 스토리지 백업에서 시도
-                tryDownloadFromLocalStorage(captureId, fileName);
-            };
-        } catch (error) {
-            console.error('캡처 다운로드 중 오류:', error);
-            alert('캡처 다운로드 중 오류가 발생했습니다. 다시 시도해주세요.');
-            
-            // 로컬 스토리지 백업에서 시도
-            tryDownloadFromLocalStorage(captureId, fileName);
-        }
-    } else {
-        console.warn('IndexedDB가 초기화되지 않았습니다. 로컬 스토리지에서 다운로드를 시도합니다.');
-        tryDownloadFromLocalStorage(captureId, fileName);
-    }
+    console.log('캡처 다운로드 시작:', captureId);
 }
 
-// 로컬 스토리지에서 캡처 다운로드 시도
-function tryDownloadFromLocalStorage(captureId, fileName) {
-    try {
-        const captures = JSON.parse(localStorage.getItem('captures') || '[]');
-        const capture = captures.find(item => item.id === captureId);
-        
-        if (capture) {
-            console.log('로컬 스토리지에서 캡처 데이터를 찾았습니다:', capture.id);
-            
-            // 파일 이름 설정
-            const downloadFileName = fileName || capture.fileName || `capture_${new Date().toISOString().replace(/:/g, '-').replace(/\./g, '_')}.png`;
-            
-            // 다운로드 링크 생성 및 클릭
-            triggerDownload(capture.imageData, downloadFileName);
-        } else {
-            console.error(`ID ${captureId}에 해당하는 캡처를 로컬 스토리지에서도 찾을 수 없습니다.`);
-            alert('다운로드할 캡처를 찾을 수 없습니다.');
-        }
-    } catch (error) {
-        console.error('로컬 스토리지에서 캡처 로드 중 오류:', error);
-        alert('캡처 로드 중 오류가 발생했습니다. 다시 시도해주세요.');
-    }
-}
-
-// 다운로드 트리거 헬퍼 함수
-function triggerDownload(imageData, fileName) {
-    if (!imageData) {
-        console.error('다운로드할 이미지 데이터가 없습니다.');
-        alert('이미지 데이터가 손상되었습니다. 다시 시도해주세요.');
-        return;
-    }
-    
-    try {
-        // 다운로드 링크 생성
-        const downloadLink = document.createElement('a');
-        downloadLink.href = imageData;
-        downloadLink.download = fileName;
-        downloadLink.style.display = 'none';
-        
-        // 링크를 DOM에 추가하고 클릭 이벤트 발생
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        
-        // 일정 시간 후 링크 제거
-        setTimeout(() => {
-            document.body.removeChild(downloadLink);
-        }, 100);
-        
-        console.log(`캡처 다운로드 성공: ${fileName}`);
-    } catch (error) {
-        console.error('다운로드 링크 생성 중 오류:', error);
-        alert('다운로드 중 오류가 발생했습니다. 다시 시도해주세요.');
-    }
-}
-
-// 캡처 삭제 함수 완전히 재구현
-function deleteCapture(captureId) {
-    console.log(`캡처 삭제 시작 - ID: ${captureId}`);
-    
-    // 확인 대화상자 표시
-    if (!confirm('이 캡처를 삭제하시겠습니까?')) {
-        console.log('사용자가 삭제를 취소했습니다.');
-        return;
-    }
-    
-    try {
-        // 로컬 스토리지에서 캡처 목록 가져오기
-        const capturesStr = localStorage.getItem('captures');
-        if (!capturesStr) {
-            showNotification('저장된 캡처가 없습니다.');
-            return;
-        }
-        
-        let captures = JSON.parse(capturesStr);
-        if (!Array.isArray(captures)) {
-            captures = [];
-        }
-        
-        // 삭제 전 캡처 수
-        const initialCount = captures.length;
-        console.log(`삭제 전 캡처 수: ${initialCount}`);
-        
-        // ID로 항목 필터링 (문자열과 숫자 모두 고려)
-        const newCaptures = captures.filter(item => {
-            // id가 없는 항목 필터링
-            if (!item || !item.id) return false;
-            
-            // ID 비교 (문자열 또는 숫자 형태 모두 처리)
-            const itemId = String(item.id);
-            const targetId = String(captureId);
-            return itemId !== targetId;
-        });
-        
-        // 삭제 후 캡처 수
-        console.log(`삭제 후 캡처 수: ${newCaptures.length}`);
-        
-        // 실제로 항목이 삭제되었는지 확인
-        if (newCaptures.length === initialCount) {
-            console.warn(`ID '${captureId}'에 해당하는 캡처를 찾을 수 없습니다.`);
-            showNotification('해당 캡처를 찾을 수 없습니다.');
-            return;
-        }
-        
-        // 변경된 목록 저장
-        localStorage.setItem('captures', JSON.stringify(newCaptures));
-        console.log('새 캡처 목록이 저장되었습니다.');
-        
-        // 화면에서 해당 요소 제거 (data-id 속성 사용)
-        const captureElement = document.querySelector(`.capture-item[data-id="${captureId}"]`);
-        if (captureElement) {
-            captureElement.remove();
-            console.log('화면에서 캡처 항목이 제거되었습니다.');
-            
-            // 목록이 비어있는지 확인
-            const container = document.getElementById('captureListContainer');
-            if (container && container.children.length === 0) {
-                container.innerHTML = '<p style="text-align: center; padding: 20px; color: #888;">저장된 캡처가 없습니다.</p>';
-            }
-        } else {
-            // 요소를 찾지 못했다면 전체 목록 새로고침
-            console.log('화면에서 요소를 찾지 못했습니다. 목록을 새로고침합니다.');
-            showCaptureList();
-        }
-    } catch (error) {
-        console.error('캡처 삭제 중 오류 발생:', error);
-    }
-}
-
-// 전체 화면 캡처 함수 수정 - 파일명 먼저 입력 요청
-function captureScreen() {
-    // 현재 시간을 이용한 기본 파일명 생성 (YYYYMMDD_HHMM 형식)
-    const now = new Date();
-    const defaultFileName = `캡처_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-    
-    // 캡처 전에 사용자에게 파일명 입력 요청
-    let customName = prompt('캡처 파일 이름을 작성하세요 (취소하면 자동 생성):', '');
-    let fileName = defaultFileName + '.jpg';
-    
-    // 사용자가 취소를 눌렀는지 확인
-    if (customName === null) {
-        if (!confirm('자동 생성된 파일명으로 캡처하시겠습니까?')) {
-            return; // 취소 시 함수 종료
-        }
-    } else if (customName.trim() !== '') {
-        // 확장자가 없으면 .jpg 추가
-        if (!customName.toLowerCase().endsWith('.jpg') && 
-            !customName.toLowerCase().endsWith('.jpeg') && 
-            !customName.toLowerCase().endsWith('.png')) {
-            customName += '.jpg';
-        }
-        fileName = customName;
-    }
-    
-    // 알림 표시
-    showNotification('화면을 캡처하는 중...');
-    
-    // 전체 화면 캡처 설정
-    html2canvas(document.querySelector('.container') || document.body, {
-        windowWidth: window.innerWidth,
-        windowHeight: document.body.scrollHeight,
-        scrollX: 0,
-        scrollY: 0,
-        allowTaint: true,
-        useCORS: true,
-        logging: false
-    }).then(function(canvas) {
-        // 캔버스를 데이터 URL로 변환
-        const dataUrl = canvas.toDataURL('image/jpeg');
-        
-        // 고유 ID 생성
-        const captureId = 'capture_' + new Date().getTime();
-        
-        // 캡처 정보 객체 생성
-        const captureData = {
-            id: captureId,
-            dataUrl: dataUrl,
-            fileName: fileName,
-            customName: customName !== null && customName.trim() !== '' ? customName : null,
-            timestamp: new Date().toISOString()
-        };
-        
-        // 기존 캡처 목록에 추가
-        let captures = [];
-        try {
-            const capturesStr = localStorage.getItem('captures');
-            if (capturesStr) {
-                captures = JSON.parse(capturesStr);
-            }
-        } catch (e) {
-            console.error('캡처 목록 로드 오류:', e);
-        }
-        
-        // 배열 확인 및 추가
-        if (!Array.isArray(captures)) {
-            captures = [];
-        }
-        
-        captures.push(captureData);
-        
-        // 로컬 스토리지에 저장
-        try {
-            localStorage.setItem('captures', JSON.stringify(captures));
-            console.log('캡처가 저장되었습니다:', fileName);
-            showNotification('✅ 캡처 완료');
-            showCaptureList(); // 캡처 후 자동으로 목록 표시
-        } catch (e) {
-            console.error('캡처 저장 오류:', e);
-            alert('캡처 저장 중 오류가 발생했습니다: ' + e.message);
-        }
-    }).catch(function(err) {
-        console.error('화면 캡처 오류:', err);
-        if (typeof html2canvas === 'undefined') {
-            console.error('html2canvas 라이브러리가 로드되지 않았습니다.');
-        }
-    });
-}
-
-// 저장 공간 확보를 위해 오래된 캡처 정리
-function cleanupOldCaptures(maxCount = 3) {
-    try {
-        console.log(`저장 공간 확보를 위해 오래된 캡처 정리 시작 (최대 ${maxCount}개 유지)`);
-        
-        // 다른 불필요한 데이터 삭제
-        localStorage.removeItem('captureList');
-        localStorage.removeItem('savedCaptures');
-        
-        // 현재 캡처 목록 가져오기
-        const capturesStr = localStorage.getItem('captures');
-        if (!capturesStr) return;
-        
-        const captures = JSON.parse(capturesStr);
-        if (!Array.isArray(captures) || captures.length <= maxCount) return;
-        
-        // 최신 항목만 유지
-        const newCaptures = captures.slice(0, maxCount);
-        localStorage.setItem('captures', JSON.stringify(newCaptures));
-        
-        console.log(`오래된 캡처 정리 완료 (${captures.length} → ${newCaptures.length})`);
-    } catch (error) {
-        console.error('캡처 정리 중 오류:', error);
-    }
-}
-
-// 캡처 데이터 초기화 함수 개선 및 전역으로 노출
-function resetCaptureData() {
-    console.log('캡처 데이터 초기화 시작');
-    
-    try {
-        // 이전에 사용했던 모든 저장소 키 삭제
-        localStorage.removeItem('captures');
-        localStorage.removeItem('captureList');
-        localStorage.removeItem('savedCaptures');
-        
-        // 새 캡처 배열 초기화
-        localStorage.setItem('captures', JSON.stringify([]));
-        
-        console.log('모든 캡처 데이터가 초기화되었습니다');
-        return true;
-    } catch (error) {
-        console.error('캡처 데이터 초기화 중 오류:', error);
-        showNotification('데이터 초기화 중 오류가 발생했습니다.');
-        return false;
-    }
-}
-
-// 전역 함수로 등록
-window.resetCaptureData = resetCaptureData;
-window.closeCaptureListModal = closeCaptureListModal;
-window.deleteCapture = deleteCapture;
-window.downloadCapture = downloadCapture;
-
-// 크롤링 시각 표시 함수 추가
+// 크롤링 시각 표시 함수 개선
 async function showLastCrawled() {
     try {
         const res = await fetch('/api/last-crawled');
+        if (!res.ok) {
+            throw new Error('Failed to fetch last crawled time');
+        }
         const data = await res.json();
         const last = data.lastCrawled;
-        const productTable = document.getElementById('productSearchTable');
-        if (!productTable) return;
-        let infoDiv = document.getElementById('lastCrawledInfo');
-        if (!infoDiv) {
-            infoDiv = document.createElement('div');
-            infoDiv.id = 'lastCrawledInfo';
-            infoDiv.style.textAlign = 'left';
-            infoDiv.style.fontSize = '13px';
-            infoDiv.style.color = '#888';
-            infoDiv.style.margin = '0 0 5px 5px';
-            productTable.parentNode.insertBefore(infoDiv, productTable);
-        }
-        if (!last) {
-            infoDiv.textContent = '최근 크롤링 정보 없음';
-            return;
-        }
-        const lastDate = new Date(last);
-        const now = new Date();
-        const diffMs = now - lastDate;
-        const diffMin = Math.floor(diffMs / 60000);
-        let text = '';
-        if (diffMin <= 1) {
-            text = '방금 전 크롤링됨';
-        } else if (diffMin < 60) {
-            text = `${diffMin}분 전 크롤링됨`;
-        } else {
-            const h = Math.floor(diffMin / 60);
-            const m = diffMin % 60;
-            text = `${h}시간 ${m}분 전 크롤링됨`;
-        }
-        infoDiv.textContent = text;
-    } catch {
-        // 무시
+        
+        // 제품명 검색 테이블과 랭킹 테이블 위에 크롤링 시각 표시
+        const tables = ['productSearchTable', 'rankingTable'];
+        
+        tables.forEach(tableId => {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+            
+            let infoDiv = document.getElementById(`${tableId}LastCrawled`);
+            if (!infoDiv) {
+                infoDiv = document.createElement('div');
+                infoDiv.id = `${tableId}LastCrawled`;
+                infoDiv.className = 'last-crawled-info';
+                table.parentNode.insertBefore(infoDiv, table);
+            }
+
+            if (!last) {
+                infoDiv.innerHTML = `
+                    <div class="crawl-status">
+                        <span class="crawl-icon">🔄</span>
+                        <span class="crawl-text">크롤링 정보 없음</span>
+                    </div>
+                `;
+                return;
+            }
+
+            const lastDate = new Date(last);
+            const now = new Date();
+            const diffMs = now - lastDate;
+            const diffMin = Math.floor(diffMs / 60000);
+            
+            let statusText = '';
+            let statusClass = '';
+            
+            if (diffMin <= 1) {
+                statusText = '방금 전 업데이트';
+                statusClass = 'recent';
+            } else if (diffMin < 60) {
+                statusText = `${diffMin}분 전 업데이트`;
+                statusClass = 'recent';
+            } else {
+                const h = Math.floor(diffMin / 60);
+                const m = diffMin % 60;
+                statusText = `${h}시간 ${m}분 전 업데이트`;
+                statusClass = diffMin > 180 ? 'outdated' : 'normal'; // 3시간 이상이면 outdated
+            }
+
+            const formattedTime = lastDate.toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            infoDiv.innerHTML = `
+                <div class="crawl-status ${statusClass}">
+                    <span class="crawl-icon">🔄</span>
+                    <span class="crawl-text">${statusText}</span>
+                    <span class="crawl-time">(${formattedTime} 기준)</span>
+                    ${statusClass === 'outdated' ? '<span class="crawl-warning">⚠️ 3시간 이상 경과</span>' : ''}
+                </div>
+            `;
+        });
+    } catch (error) {
+        console.error('Error showing last crawled time:', error);
     }
 }
 
-// 페이지 로드시, 제품명 데이터 위에 크롤링 시각 표시
-window.addEventListener('DOMContentLoaded', showLastCrawled);
+// 페이지 로드시와 주기적으로 크롤링 시각 업데이트
+document.addEventListener('DOMContentLoaded', () => {
+    showLastCrawled();
+    // 1분마다 크롤링 시각 업데이트
+    setInterval(showLastCrawled, 60000);
+});
+
+// 크롤링 시각 표시를 위한 스타일 추가
+const style = document.createElement('style');
+style.textContent = `
+    .last-crawled-info {
+        margin: 10px 0;
+        padding: 8px 12px;
+        border-radius: 6px;
+        background-color: #f8f9fa;
+        font-size: 14px;
+    }
+
+    .crawl-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .crawl-icon {
+        animation: spin 2s linear infinite;
+    }
+
+    .crawl-text {
+        font-weight: 500;
+    }
+
+    .crawl-time {
+        color: #666;
+    }
+
+    .crawl-warning {
+        color: #dc3545;
+        margin-left: auto;
+    }
+
+    .crawl-status.recent .crawl-text {
+        color: #28a745;
+    }
+
+    .crawl-status.normal .crawl-text {
+        color: #0d6efd;
+    }
+
+    .crawl-status.outdated .crawl-text {
+        color: #dc3545;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+`;
+document.head.appendChild(style);

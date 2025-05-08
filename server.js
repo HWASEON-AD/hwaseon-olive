@@ -640,7 +640,7 @@ app.get('/api/rankings', async (req, res) => {
         // 해당 카테고리의 모든 크롤링 데이터 조회
         const rankings = await dbAll(`
             SELECT r.*, 
-                   strftime('%Y-%m-%d %H:%M:%S', r.crawled_at) as crawled_at_formatted
+            strftime('%Y-%m-%d %H:%M:%S', r.crawled_at) as crawled_at_formatted
             FROM rankings r
             WHERE r.category = ? 
             AND r.date = ?
