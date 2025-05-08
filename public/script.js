@@ -104,6 +104,16 @@ function formatEvent(event) {
     return items.map(item => `<span class="event-pill">${item}</span>`).join(' ');
 }
 
+// 크롤링 시각 업데이트 함수
+function updateCrawlingTime(crawledAt) {
+    const updateTimeDiv = document.getElementById('rankingUpdateTime');
+    if (updateTimeDiv && crawledAt) {
+        const now = new Date();
+        const diffInMinutes = Math.floor((now - new Date(crawledAt)) / (1000 * 60));
+        updateTimeDiv.innerHTML = `${diffInMinutes}분 전 업데이트`;
+    }
+}
+
 // 랭킹 업데이트
 async function fetchRankings(category, date) {
     try {
@@ -127,10 +137,19 @@ function updateTable(rankings) {
         return;
     }
 
+    // 크롤링 시각 표시
+    if (rankings[0].crawled_at) {
+        updateCrawlingTime(rankings[0].crawled_at);
+        // 1분마다 크롤링 시각 업데이트
+        setInterval(() => {
+            updateCrawlingTime(rankings[0].crawled_at);
+        }, 60000);
+    }
+
     rankings.forEach(item => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${formatDate(item.date)} ${item.crawled_at_formatted}</td>
+            <td>${formatDate(item.date)}</td>
             <td>${item.category}</td>
             <td>${item.rank}</td>
             <td>${item.brand}</td>

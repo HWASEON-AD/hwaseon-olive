@@ -134,66 +134,6 @@
     <script src="script.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
 
-
-
-    <script>
-        function formatTimeAgo(dateString) {
-            const date = new Date(dateString);
-            const now = new Date();
-            const diffInSeconds = Math.floor((now - date) / 1000);
-            
-            if (diffInSeconds < 60) {
-                return '방금 전 업데이트';
-            } else if (diffInSeconds < 3600) {
-                const minutes = Math.floor(diffInSeconds / 60);
-                return `${minutes}분 전 업데이트`;
-            } else if (diffInSeconds < 86400) {
-                const hours = Math.floor(diffInSeconds / 3600);
-                const minutes = Math.floor((diffInSeconds % 3600) / 60);
-                return `${hours}시간 ${minutes}분 전 업데이트`;
-            } else {
-                const days = Math.floor(diffInSeconds / 86400);
-                return `${days}일 전 업데이트`;
-            }
-        }
-
-        function updateTable(rankings, latestCrawl) {
-            const tbody = document.querySelector('#rankingTable tbody');
-            tbody.innerHTML = '';
-
-            if (!Array.isArray(rankings) || rankings.length === 0) {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td colspan="8">데이터가 없습니다.</td>`;
-                tbody.appendChild(row);
-                return;
-            }
-
-            // 업데이트 시간 표시
-            if (latestCrawl) {
-                const updateTimeDiv = document.getElementById('rankingUpdateTime');
-                updateTimeDiv.textContent = formatTimeAgo(latestCrawl);
-            }
-
-            // 가장 최근 크롤링 데이터만 표시
-            const latestCrawlTime = rankings[0]?.crawled_at;
-            const latestRankings = rankings.filter(item => item.crawled_at === latestCrawlTime);
-
-            latestRankings.forEach(item => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${item.date} ${item.crawled_at_formatted}</td>
-                    <td>${item.category}</td>
-                    <td>${item.rank}</td>
-                    <td>${item.brand}</td>
-                    <td>${item.product}</td>
-                    <td>${item.originalPrice}</td>
-                    <td>${item.salePrice}</td>
-                    <td>${item.event}</td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-    </script>
 </body>
 </html>
 
