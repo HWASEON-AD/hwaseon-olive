@@ -85,41 +85,52 @@ if (!fs.existsSync(DB_BACKUP_DIR)) {
     fs.mkdirSync(DB_BACKUP_DIR, { recursive: true });
 }
 
-// Dropbox 클라이언트 초기화
+// Dropbox 클라이언트 초기화 개선
 let dropboxClient = null;
-if (process.env.DROPBOX_TOKEN) {
+async function initializeDropbox() {
+    if (!process.env.DROPBOX_TOKEN) {
+        console.warn('⚠️ Dropbox 액세스 토큰이 없습니다. Dropbox 백업이 비활성화됩니다.');
+        return;
+    }
+
     try {
         dropboxClient = new Dropbox({
-            accessToken: process.env.DROPBOX_TOKEN
+            accessToken: process.env.DROPBOX_TOKEN,
+            refreshToken: process.env.DROPBOX_REFRESH_TOKEN,
+            clientId: process.env.DROPBOX_CLIENT_ID,
+            clientSecret: process.env.DROPBOX_CLIENT_SECRET
         });
+
+        // 토큰 유효성 테스트
+        await dropboxClient.filesListFolder({ path: '' });
         console.log('✅ Dropbox 클라이언트가 초기화되었습니다.');
+
+        // 필요한 폴더 생성
+        const folders = [DROPBOX_CAPTURES_PATH, '/olive_rankings/backup'];
+        for (const folder of folders) {
+            try {
+                await dropboxClient.filesCreateFolderV2({ 
+                    path: folder, 
+                    autorename: false 
+                });
+                console.log(`✅ Dropbox 폴더 생성 완료: ${folder}`);
+            } catch (err) {
+                if (err.status === 409) {
+                    console.log(`✅ Dropbox 폴더가 이미 존재합니다: ${folder}`);
+                } else {
+                    console.error(`❌ Dropbox 폴더 생성 중 오류 (${folder}):`, err);
+                }
+            }
+        }
     } catch (error) {
         console.error('❌ Dropbox 클라이언트 초기화 실패:', error.message);
+        dropboxClient = null;
     }
-} else {
-    console.warn('⚠️ Dropbox 액세스 토큰이 없습니다. Dropbox 백업이 비활성화됩니다.');
 }
 
-// Dropbox 폴더 초기화 (캡처 및 백업 경로)
-if (dropboxClient) {
-    [DROPBOX_CAPTURES_PATH, '/olive_rankings/backup'].forEach(folder => {
-        dropboxClient.filesCreateFolderV2({ path: folder, autorename: false })
-        .then(() => console.log(`✅ Dropbox 폴더 생성 완료: ${folder}`))
-        .catch(err => {
-            // 이미 존재하는 폴더(409 Conflict)인 경우 무시
-            if (err.status === 409 || (err.error_summary && err.error_summary.startsWith('path/conflict/folder'))) {
-                console.log(`✅ Dropbox 폴더가 이미 존재합니다: ${folder}`);
-            } else {
-                console.error(`❌ Dropbox 폴더 생성 중 오류 (${folder}):`, err);
-            }
-        });
-    });
-}
-
-// 기본 데이터베이스 연결
-const db = new sqlite3.Database(DB_MAIN_FILE, (err) => {
-    if (err) console.error('DB error:', err.message);
-    console.log('Connected to SQLite');
+// 서버 시작 시 Dropbox 초기화
+initializeDropbox().catch(err => {
+    console.error('❌ Dropbox 초기화 중 오류:', err);
 });
 
 // 데이터베이스 쿼리를 Promise로 래핑하는 유틸리티 함수
@@ -742,11 +753,16 @@ app.get('/api/search', (req, res) => {
 
 
 
-// 날짜 유효성 검사 함수 추가
+// 날짜 유효성 검사 함수 수정
 function isValidDate(dateStr) {
     const date = new Date(dateStr);
     const today = new Date();
-    return date instanceof Date && !isNaN(date) && date <= today;
+    const minDate = new Date('2024-05-07'); // 최소 날짜를 5월 7일로 수정
+    
+    return date instanceof Date && 
+           !isNaN(date) && 
+           date >= minDate && 
+           date <= today;
 }
 
 // 마지막 크롤링 시간 조회 API (last-crawled로 변경)
@@ -770,54 +786,73 @@ app.get('/api/last-crawled', (req, res) => {
     );
 });
 
-// 날짜 범위 랭킹 조회 API 수정
-app.get('/api/rankings-range', (req, res) => {
+// 날짜 범위로 랭킹 조회 API 수정
+app.get('/api/rankings-range', async (req, res) => {
     const { category, startDate, endDate } = req.query;
     
-    // 필수 파라미터 검증
     if (!category || !startDate || !endDate) {
-        return res.status(400).json({
+        return res.status(400).json({ 
             success: false,
-            error: '카테고리와 날짜 범위를 모두 선택하세요.'
+            error: '필수 파라미터가 누락되었습니다.' 
         });
     }
 
-    // 날짜 유효성 검사
-    if (!isValidDate(startDate) || !isValidDate(endDate)) {
-        return res.status(400).json({
-            success: false,
-            error: '유효하지 않은 날짜입니다. 미래 날짜는 사용할 수 없습니다.'
-        });
-    }
-
-    // 시작일이 종료일보다 늦은 경우
-    if (new Date(startDate) > new Date(endDate)) {
-        return res.status(400).json({
-            success: false,
-            error: '시작일은 종료일보다 이전이어야 합니다.'
-        });
-    }
-
-    db.all(`
-        SELECT date, rank, brand, product, salePrice, originalPrice, event, category
-        FROM rankings
-        WHERE category = ?
-        AND date BETWEEN ? AND ?
-        ORDER BY date ASC, rank ASC
-    `, [category, startDate, endDate], (err, rows) => {
-        if (err) {
-            console.error("DB 오류:", err);
-            return res.status(500).json({
+    try {
+        // 날짜 유효성 검사
+        if (!isValidDate(startDate) || !isValidDate(endDate)) {
+            return res.status(400).json({ 
                 success: false,
-                error: '데이터 조회 중 오류가 발생했습니다.'
+                error: '유효하지 않은 날짜입니다. 2024년 5월 7일 이후의 날짜만 조회 가능합니다.' 
             });
         }
+
+        // 시작일이 종료일보다 늦은 경우
+        if (new Date(startDate) > new Date(endDate)) {
+            return res.status(400).json({ 
+                success: false,
+                error: '시작일은 종료일보다 이전이어야 합니다.' 
+            });
+        }
+
+        const query = `
+            SELECT 
+                date,
+                category,
+                rank,
+                brand,
+                product,
+                salePrice,
+                originalPrice,
+                event,
+                strftime('%Y-%m-%d %H:%M', updated_at) as crawled_at_formatted
+            FROM rankings 
+            WHERE category = ? 
+            AND date BETWEEN ? AND ?
+            ORDER BY date DESC, rank ASC
+        `;
         
-        res.json({
+        const rankings = await db.all(query, [category, startDate, endDate]);
+        
+        // 최신 크롤링 시간 조회
+        const latestCrawl = await db.get(`
+            SELECT updated_at 
+            FROM update_logs 
+            ORDER BY updated_at DESC 
+            LIMIT 1
+        `);
+        
+        res.json({ 
             success: true,
-            data: rows
+            rankings, 
+            latestCrawl: latestCrawl ? latestCrawl.updated_at : null 
         });
-    });
+    } catch (err) {
+        console.error('랭킹 조회 오류:', err);
+        res.status(500).json({ 
+            success: false,
+            error: '랭킹 조회 실패' 
+        });
+    }
 });
 
 // 검색 범위 API 수정
@@ -1886,71 +1921,6 @@ app.get('/api/last-crawled', async (req, res) => {
         res.status(500).json({ 
             success: false,
             error: '마지막 크롤링 시간 조회 실패' 
-        });
-    }
-});
-
-// 날짜 범위로 랭킹 조회 API 수정
-app.get('/api/rankings-range', async (req, res) => {
-    const { category, startDate, endDate } = req.query;
-    
-    if (!category || !startDate || !endDate) {
-        return res.status(400).json({ 
-            success: false,
-            error: '필수 파라미터가 누락되었습니다.' 
-        });
-    }
-
-    try {
-        // 미래 날짜 체크
-        const now = new Date();
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        
-        if (start > now || end > now) {
-            return res.status(400).json({ 
-                success: false,
-                error: '미래 날짜는 조회할 수 없습니다.' 
-            });
-        }
-
-        const query = `
-            SELECT 
-                date,
-                category,
-                rank,
-                brand,
-                product,
-                salePrice,
-                originalPrice,
-                event,
-                strftime('%Y-%m-%d %H:%M', updated_at) as crawled_at_formatted
-            FROM rankings 
-            WHERE category = ? 
-            AND date BETWEEN ? AND ?
-            ORDER BY date DESC, rank ASC
-        `;
-        
-        const rankings = await db.all(query, [category, startDate, endDate]);
-        
-        // 최신 크롤링 시간 조회
-        const latestCrawl = await db.get(`
-            SELECT updated_at 
-            FROM update_logs 
-            ORDER BY updated_at DESC 
-            LIMIT 1
-        `);
-        
-        res.json({ 
-            success: true,
-            rankings, 
-            latestCrawl: latestCrawl ? latestCrawl.updated_at : null 
-        });
-    } catch (err) {
-        console.error('랭킹 조회 오류:', err);
-        res.status(500).json({ 
-            success: false,
-            error: '랭킹 조회 실패' 
         });
     }
 });
