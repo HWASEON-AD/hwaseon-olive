@@ -1,833 +1,1105 @@
-// 메시지 억제: console.log, console.error, alert 비활성화
-console.log = () => {};
-console.error = () => {};
-window.alert = () => {};
-
-// Disable debug logs
-console.log = function() {};
-
-// API 엔드포인트 설정 제거 (상대경로 사용)
-
-// 특정 에러 메시지 로깅 억제
-;(function() {
-    const origConsoleError = console.error;
-    console.error = function(msg, ...args) {
-        if (typeof msg === 'string' && msg.includes('실시간 랭킹 조회 오류')) {
-            return; // 억제
-        }
-        origConsoleError.call(console, msg, ...args);
-    };
-})();
-
-async function searchByProductName() {
-    const keyword = document.getElementById('productSearchInput').value.trim();
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
-    const tbody = document.querySelector('#productSearchTable tbody');
-    tbody.innerHTML = '';
-
-    if (!keyword) {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="7">검색 결과가 없습니다.</td>`;
-        tbody.appendChild(row);
-        return;
+// 전역 이벤트 차단기 - 새로고침 및 폼 제출 방지 (다운로드 버튼 예외 처리)
+document.addEventListener('click', function(e) {
+    // 엑셀 다운로드 버튼은 예외 처리
+    if (e.target.id === 'productSearchDownloadBtn' || e.target.id === 'downloadExcelBtn' || 
+        e.target.id === 'showCapturesBtn') {
+        // 다운로드 버튼은 이벤트 차단하지 않음
+        return true;
     }
-    try {
-        // 서버에 요청 보내기 (상대경로 사용)
-        const res = await fetch(
-            `/api/search-range?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`
-        );
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error('서버 오류:', errorText); 
-            throw new Error('서버 오류');
-        }
-        const data = await res.json();
-        updateSearchTable(data);
-    } catch (err) {
-        console.error("검색 오류:", err);
-    }
-}
-
-
-
-// 제품명 검색 테이블
-function updateSearchTable(results) {
-    const tbody = document.querySelector('#productSearchTable tbody');
-    tbody.innerHTML = '';
-
-    if (!Array.isArray(results) || results.length === 0) {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="8">검색 결과가 없습니다.</td>`;
-        tbody.appendChild(row);
-        return;
-    }
-
-    results.forEach(item => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${formatDate(item.date)}</td>
-            <td>${item.category || '미분류'}</td>
-            <td>${item.rank || '-'}</td>
-            <td>${item.brand || '-'}</td>
-            <td>${item.product}</td>
-            <td>${formatPrice(item.originalPrice)}</td>
-            <td>${formatPrice(item.salePrice)}</td>
-            <td>${formatEvent(item.event || '-')}</td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
-// 가격 포맷팅 함수 추가
-function formatPrice(price) {
-    if (!price || price === '-' || price === 'X') return '-';
-    // 숫자만 추출
-    const numStr = price.toString().replace(/\D/g, '');
-    if (!numStr) return '-';
-    // 천 단위 콤마 추가
-    const formatted = numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return `${formatted}원`;
-}
-
-// 행사 정보 포맷팅 함수 추가
-function formatEvent(event) {
-    if (!event || event === '-' || event === 'X') return '-';
-    // 슬래시(/), 줄바꿈, 쉼표, 슬래시로 구분된 항목들을 분리
-    const items = event
-        .split(/[\,\n\/]+/)  // 쉼표, 줄바꿈, 슬래시로 분리
-        .map(item => item.trim())
-        .filter(item => item);
-    if (items.length === 0) return '-';
-    // pill 스타일로 통일
-    return items.map(item => `<span class="event-pill">${item}</span>`).join(' ');
-}
-
-// 랭킹 업데이트
-async function fetchRankings(category, date) {
-    try {
-        const res = await fetch(`/api/rankings?category=${encodeURIComponent(category)}&date=${encodeURIComponent(date)}`);
-        const data = await res.json();
-        updateTable(data.rankings, data.latestCrawl);
-    } catch (err) {
-        console.error("오류 발생:", err);
-    }
-}
-
-// 시간 경과 표시 함수
-function formatTimeAgo(dateString) {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now - date) / 1000);
     
-    if (diffInSeconds < 60) {
-        return '방금 전';
-    } else if (diffInSeconds < 3600) {
-        const minutes = Math.floor(diffInSeconds / 60);
-        return `${minutes}분 전`;
-    } else if (diffInSeconds < 86400) {
-        const hours = Math.floor(diffInSeconds / 3600);
-        const minutes = Math.floor((diffInSeconds % 3600) / 60);
-        return `${hours}시간 ${minutes}분 전`;
-    } else {
-        const days = Math.floor(diffInSeconds / 86400);
-        return `${days}일 전`;
+    // 다른 버튼이나 링크의 기본 동작은 방지
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') {
+        e.preventDefault();
+        return false;
     }
-}
+}, true);
 
-// 랭킹 테이블
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}.<br>${month}.${day}`;
-}
+document.addEventListener('submit', function(e) {
+    e.preventDefault();
+    return false;
+}, true);
 
-
-async function fetchRankingsByRange(category, startDate, endDate) {
-    // 파라미터 유효성 검사
-    if (!category || !startDate || !endDate) {
-        alert('카테고리와 날짜를 모두 선택하세요.');
-        return;
+// 백스페이스 키 방지 (새로고침 관련)
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Backspace' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+        e.preventDefault();
     }
-    console.log('카테고리/날짜 범위:', category, startDate, endDate);
-    try {
-        const res = await fetch(
-            `/api/rankings-range?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`
-        );
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error('실시간 랭킹 조회 오류:', errorText);
-            showNotification(`실시간 랭킹 조회 오류: ${errorText}`, 3000);
-            return;
-        }
-        let data;
-        try {
-            data = await res.json();
-        } catch (parseError) {
-            console.error('실시간 랭킹 조회 오류: 응답 파싱 실패', parseError);
-            showNotification('실시간 랭킹 조회 오류: 응답 파싱 실패', 3000);
-            return;
-        }
-        console.log('서버 응답 데이터:', data);
-        updateTable(data.rankings, data.latestCrawl);
-    } catch (err) {
-        console.error('실시간 랭킹 조회 오류:', err);
-        showNotification('실시간 랭킹 조회 오류', 3000);
-    }
-}
-
-document.getElementById('downloadExcelBtn').addEventListener('click', () => {
-    const category = document.getElementById('category').value;
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
-
-    if (!category || !startDate || !endDate) {
-        alert('카테고리와 날짜 범위를 선택하세요.');
-        return;
-    }
-
-    const url = `/api/download?category=${encodeURIComponent(category)}&startDate=${startDate}&endDate=${endDate}`;
-
-    fetch(url)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('엑셀 다운로드 실패');
-            }
-            return response.blob();
-        })
-        .then(blob => {
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `Oliveyoung_ranking_${startDate}~${endDate}.xlsx`;
-            link.click();
-        })
-        .catch(error => {
-            console.error('엑셀 다운로드 실패:', error);
-            alert('엑셀 다운로드 실패');
-        });
 });
 
+// 시간 표시 업데이트 함수
+function updateTimeDisplay(crawlTime) {
+    if (!crawlTime) {
+        // 크롤링 시간이 없으면 마지막 크롤링 시간을 가져오기
+        fetchLastCrawlTime();
+        return;
+    }
+    
+    const timeText = `최근 업데이트: ${crawlTime}`;
+    
+    const updateTime = document.getElementById('updateTime');
+    const rankingUpdateTime = document.getElementById('rankingUpdateTime');
+    
+    if (updateTime) updateTime.innerHTML = timeText;
+    if (rankingUpdateTime) rankingUpdateTime.innerHTML = timeText;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('productSearchDownloadBtn')?.addEventListener('click', () => {
-        const keyword = document.getElementById('productSearchInput').value.trim();
-        const startDate = document.getElementById('startDate').value;
-        const endDate = document.getElementById('endDate').value;
+    // 날짜 관련 함수 - 현재 한국 시간 기준으로 날짜 설정
+    function setCurrentDate() {
+        // 현재 날짜 객체 생성
+        const now = new Date();
+        
+        // 현재 날짜 포맷팅
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const formattedDate = `${year}-${month}-${day}`;
+        
+        console.log('현재 날짜 설정:', formattedDate);
+        
+        // 날짜 입력 필드 업데이트
+        const startDateEl = document.getElementById('startDate');
+        const endDateEl = document.getElementById('endDate');
+        
+        if (startDateEl) startDateEl.value = formattedDate;
+        if (endDateEl) endDateEl.value = formattedDate;
+    }
+    
+    // 초기 날짜 설정
+    setCurrentDate();
+    
+    // 자정에 날짜가 자동으로 변경되도록 타이머 설정
+    function scheduleNextMidnightUpdate() {
+        const now = new Date();
+        
+        // 다음 자정 시간 계산 (로컬 시간 기준)
+        const nextMidnight = new Date(now);
+        nextMidnight.setDate(nextMidnight.getDate() + 1);
+        nextMidnight.setHours(0, 0, 0, 0);
+        
+        // 다음 자정까지 남은 시간 (밀리초)
+        const timeUntilMidnight = nextMidnight - now;
+        
+        console.log(`다음 자정까지 ${Math.floor(timeUntilMidnight / 1000 / 60)} 분 남음`);
+        
+        // 자정에 날짜 업데이트 타이머 설정
+        setTimeout(() => {
+            // 날짜 업데이트
+            setCurrentDate();
+            
+            // 다음 자정 업데이트 스케줄링
+            scheduleNextMidnightUpdate();
+            
+            console.log('자정이 지나 날짜가 업데이트되었습니다.');
+        }, timeUntilMidnight);
+    }
+    
+    // 자정 업데이트 스케줄링 시작
+    scheduleNextMidnightUpdate();
+    
+    const searchBtn = document.getElementById('searchBtn');
+    const rankingTable = document.getElementById('rankingTable').getElementsByTagName('tbody')[0];
+    const rankingUpdateTime = document.getElementById('rankingUpdateTime');
+    const categorySelect = document.getElementById('category');
+    
+    // 제품명 검색 관련 요소
+    const productSearchBtn = document.getElementById('productSearchBtn');
+    const productSearchInput = document.getElementById('productSearchInput');
+    const productSearchTable = document.getElementById('productSearchTable').getElementsByTagName('tbody')[0];
+    const updateTime = document.getElementById('updateTime');
+    
+    // 날짜 선택 요소
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    
+    // 엑셀 다운로드 버튼
+    const productSearchDownloadBtn = document.getElementById('productSearchDownloadBtn');
+    const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+    
+    // 캡처 관련 요소
+    const showCapturesBtn = document.getElementById('showCapturesBtn');
+    const captureListModal = document.getElementById('captureListModal');
+    const captureListContainer = document.getElementById('captureListContainer');
 
-        if (!keyword || !startDate || !endDate) {
-            alert('검색어와 날짜 범위를 모두 입력하세요.');
-            return;
-        }
-        const url = `/api/download-search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}`;
+    // 초기 시간 표시 업데이트 - 서버에서 실제 크롤링 시간을 가져옴
+    fetchLastCrawlTime();
 
-        fetch(url)
+    
+
+    let isLoading = false;
+    let rankingData = []; // 전체 랭킹 데이터 저장
+    let searchResultData = []; // 검색 결과 데이터 저장
+    let capturesList = []; // 캡처 목록 저장
+
+    // 마지막 크롤링 시간 가져오기
+    function fetchLastCrawlTime() {
+        fetch('http://localhost:5001/api/last-crawl-time')
             .then(response => {
-                if (!response.ok) throw new Error('엑셀 다운로드 실패');
-                return response.blob();
+                if (!response.ok) {
+                    throw new Error('서버 연결 실패');
+                }
+                return response.json();
             })
-            .then(blob => {
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `제품명_검색_${startDate}~${endDate}.xlsx`;
-                link.click();
+            .then(data => {
+                if (data.success) {
+                    const lastCrawlTime = data.lastCrawlTime || '정보 없음';
+                    updateTimeDisplay(lastCrawlTime);
+                } else {
+                    updateTimeDisplay('서버 응답 오류');
+                }
             })
             .catch(error => {
-                console.error('엑셀 다운로드 실패:', error);
-                alert('엑셀 다운로드 실패');
+                console.error('마지막 크롤링 시간 가져오기 실패:', error);
+                updateTimeDisplay('서버 연결 오류');
             });
-    });
-});
+    }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const categoryEl = document.getElementById('category');
-    const startDateEl = document.getElementById('startDate');
-    const endDateEl = document.getElementById('endDate');
-    const searchBtn = document.getElementById('searchBtn');
-
-    const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    if (!startDateEl.value) startDateEl.value = today;
-    if (!endDateEl.value) endDateEl.value = today;
-
-    searchBtn.addEventListener('click', () => {
-        const category = categoryEl.value;
-        const startDate = startDateEl.value;
-        const endDate = endDateEl.value;
-
-        fetchRankingsByRange(category, startDate, endDate);
+    // 캡처 목록 보기 버튼 클릭 이벤트
+    showCapturesBtn.addEventListener('click', function(e) {
+        if (e) e.preventDefault();
+        
+        // 캡처 목록 모달을 열고 필터 UI 먼저 표시
+        showCaptureFilterUI();
+        
+        // 초기 캡처 목록 불러오기 (전체 카테고리)
+        loadCapturesFromServer('전체', null, null);
+        
+        return false;
     });
 
-});
-
-document.getElementById('productSearchBtn').addEventListener('click', searchByProductName);
-document.getElementById('productSearchInput').addEventListener('keydown', function (event) {
-    if (event.key === 'Enter') {
-        searchByProductName();
-    }
-});
-
-// DOM이 로드된 후에 이벤트 리스너 등록
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('문서 로드 완료');
-    
-    // 캡처 버튼 이벤트 리스너
-    const captureBtn = document.getElementById('captureBtn');
-    if (captureBtn) {
-        console.log('캡처 버튼 초기화');
-        captureBtn.addEventListener('click', captureScreen);
-    } else {
-        console.error('캡처 버튼을 찾을 수 없습니다');
-    }
-    
-    // 캡처 목록 버튼 이벤트 리스너
-    const showCapturesBtn = document.getElementById('showCapturesBtn');
-    if (showCapturesBtn) {
-        console.log('캡처 목록 버튼 초기화');
-        showCapturesBtn.addEventListener('click', showCaptureList);
-    } else {
-        console.error('캡처 목록 버튼을 찾을 수 없습니다');
-    }
-    
-    // 모달 닫기 버튼 이벤트 설정
-    const closeModalBtn = document.querySelector('#captureListModal .btn-close');
-    if (closeModalBtn) {
-        console.log('모달 닫기 버튼 초기화');
-        closeModalBtn.addEventListener('click', closeCaptureListModal);
-    }
-    
-    // 모달 닫기 푸터 버튼 이벤트 설정
-    const closeModalFooterBtn = document.querySelector('#captureListModal .btn-close-modal');
-    if (closeModalFooterBtn) {
-        console.log('모달 푸터 닫기 버튼 초기화');
-        closeModalFooterBtn.addEventListener('click', closeCaptureListModal);
-    }
-    
-    // IndexedDB 초기화
-    initIndexedDB().catch(error => console.error('IndexedDB 초기화 오류:', error));
-
-    // 날짜 선택 input 초기화
-    const today = new Date();
-    
-    // endDate input에 오늘 날짜 설정
-    const endDateInput = document.getElementById('endDate');
-    endDateInput.value = today.toISOString().split('T')[0];
-    
-    // startDate input에 3일 전 날짜 설정
-    const startDateInput = document.getElementById('startDate');
-    const threeDaysAgo = new Date(today);
-    threeDaysAgo.setDate(today.getDate() - 3);
-    startDateInput.value = threeDaysAgo.toISOString().split('T')[0];
-});
-
-// 타임스탬프를 사용자 친화적인 형식으로 포맷팅하는 함수
-function formatTimestamp(timestamp) {
-    const date = new Date(timestamp);
-    
-    // 날짜 및 시간 형식: YYYY-MM-DD HH:MM:SS
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-}
-
-// 캡처를 IndexedDB에 저장하는 함수
-function saveCaptureToDB(imageData, fileName, id) {
-    return new Promise((resolve, reject) => {
-        if (!db) {
-            console.error('IndexedDB가 초기화되지 않았습니다.');
-            return reject(new Error('IndexedDB가 초기화되지 않았습니다.'));
-        }
+    // 캡처 필터 UI 표시 함수
+    function showCaptureFilterUI() {
+        captureListModal.style.display = 'block';
         
-        try {
-            console.log('IndexedDB에 캡처 저장 시작');
-            const transaction = db.transaction(['captures'], 'readwrite');
-            const store = transaction.objectStore('captures');
+        // 필터 UI가 없으면 생성
+        if (!document.getElementById('captureFilterContainer')) {
+            const filterContainer = document.createElement('div');
+            filterContainer.id = 'captureFilterContainer';
+            filterContainer.style.padding = '10px';
+            filterContainer.style.backgroundColor = '#f8f9fa';
+            filterContainer.style.borderBottom = '1px solid #ddd';
+            filterContainer.style.marginBottom = '20px';
+            filterContainer.style.display = 'flex';
+            filterContainer.style.flexWrap = 'wrap';
+            filterContainer.style.gap = '10px';
+            filterContainer.style.alignItems = 'center';
             
-            // 저장할 데이터 구성
-            const dataToStore = {
-                id: id || Date.now(),
-                imageData: imageData,
-                fileName: fileName,
-                timestamp: new Date().toISOString(),
-                created: new Date().toISOString()
-            };
-            
-            console.log('저장할 데이터:', {
-                id: dataToStore.id,
-                fileName: dataToStore.fileName,
-                timestamp: dataToStore.timestamp
-            });
-            
-            const request = store.put(dataToStore);
-            
-            request.onsuccess = () => {
-                console.log('캡처가 IndexedDB에 성공적으로 저장되었습니다.');
-                // 오래된 데이터 정리
-                cleanupOldCaptures().then(() => resolve());
-            };
-            
-            request.onerror = (event) => {
-                console.error('IndexedDB 저장 오류:', event.target.error);
-                reject(event.target.error);
-            };
-            
-            transaction.oncomplete = () => {
-                console.log('IndexedDB 트랜잭션이 완료되었습니다.');
-            };
-            
-            transaction.onerror = (event) => {
-                console.error('IndexedDB 트랜잭션 오류:', event.target.error);
-                reject(event.target.error);
-            };
-        } catch (error) {
-            console.error('IndexedDB 작업 중 오류:', error);
-            reject(error);
-        }
-    });
-}
-
-// 알림 메시지 표시 함수 개선
-function showNotification(message, duration = 2000) {
-    // 기존 알림 제거
-    const existingNotification = document.querySelector('.notification');
-    if (existingNotification) {
-        existingNotification.remove();
-    }
-    
-    // 새 알림 생성
-    const notification = document.createElement('div');
-    notification.className = 'notification';
-    notification.textContent = message;
-    
-    // 문서에 추가
-    document.body.appendChild(notification);
-    
-    // 표시 애니메이션
-    setTimeout(() => {
-        notification.classList.add('show');
-    }, 10);
-    
-    // 일정 시간 후 제거
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => {
-            notification.remove();
-        }, 300);
-    }, duration);
-}
-
-// 캡처 목록을 보여주는 함수 업데이트 - 미리보기 버튼 제거
-function showCaptureList() {
-    console.log('캡처 목록 표시 함수 호출됨');
-    
-    const modal = document.getElementById('captureListModal');
-    const container = document.getElementById('captureListContainer');
-    
-    if (!modal || !container) {
-        console.error('캡처 목록 모달 또는 컨테이너를 찾을 수 없습니다');
-        return;
-    }
-    
-    // 모달 표시 (애니메이션 효과 적용)
-    modal.classList.add('show');
-    modal.style.display = 'block';
-    
-    // 컨테이너 초기화
-    container.innerHTML = '<p style="text-align: center; padding: 20px; color: #888;">캡처 목록을 불러오는 중...</p>';
-    
-    try {
-        // 로컬 스토리지에서 캡처 목록 불러오기
-        let captures = [];
-        const capturesJSON = localStorage.getItem('captures');
-        
-        if (capturesJSON) {
-            captures = JSON.parse(capturesJSON);
-            console.log(`로컬 스토리지에서 ${captures.length}개의 캡처 항목을 불러왔습니다:`, captures);
-        }
-        
-        // 컨테이너 내용 업데이트
-        container.innerHTML = '';
-        
-        // 전체 삭제 버튼 추가
-        const headerDiv = document.createElement('div');
-        headerDiv.style.display = 'flex';
-        headerDiv.style.justifyContent = 'space-between';
-        headerDiv.style.alignItems = 'center';
-        headerDiv.style.marginBottom = '15px';
-        headerDiv.style.padding = '10px';
-        headerDiv.style.borderBottom = '1px solid #ddd';
-        
-        headerDiv.innerHTML = `
-            <h3 style="margin: 0; font-size: 18px;"></h3>
-            <button onclick="resetCaptureData()" style="background-color: #ff4444; color: white; border: none; border-radius: 4px; padding: 8px 15px; cursor: pointer;">전체 삭제</button>
-        `;
-        container.appendChild(headerDiv);
-        
-        if (!captures || captures.length === 0) {
-            // 캡처 없을 경우 메시지 표시
-            container.innerHTML += '<p style="text-align: center; padding: 20px; color: #888;">저장된 캡처가 없습니다.</p>';
-            return;
-        }
-        
-        // 각 캡처 항목 렌더링
-        captures.forEach((capture, index) => {
-            // 이미지 데이터 접근 - 여러 가능한 필드명 대응
-            const imageUrl = capture.dataUrl || capture.imageData || capture.data;
-            if (!imageUrl) {
-                console.warn(`캡처 #${index}에 이미지 데이터가 없습니다:`, capture);
-                return;
-            }
-            
-            // 캡처 ID 설정
-            const captureId = capture.id || Date.now() + index;
-            
-            // 파일명 가져오기
-            let displayFileName = '이름 없음';
-            if (capture.customName) {
-                displayFileName = capture.customName;
-            } else if (capture.fileName) {
-                displayFileName = capture.fileName;
-            }
-            
-            // 날짜 포맷팅
-            let timestamp;
-            try {
-                timestamp = new Date(capture.timestamp || capture.created || Date.now());
-            } catch (e) {
-                timestamp = new Date();
-            }
-            
-            const formattedDate = `${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, '0')}-${String(timestamp.getDate()).padStart(2, '0')} ${String(timestamp.getHours()).padStart(2, '0')}:${String(timestamp.getMinutes()).padStart(2, '0')}:${String(timestamp.getSeconds()).padStart(2, '0')}`;
-            
-            // 캡처 항목 생성
-            const item = document.createElement('div');
-            item.className = 'capture-item';
-            item.setAttribute('data-id', captureId);
-            
-            item.innerHTML = `
-                <img src="${imageUrl}" alt="Capture ${index + 1}" onclick="enlargeImage(this.src)">
-                <div class="capture-info">
-                    <p class="capture-filename"><strong>파일명:</strong> ${displayFileName}</p>
-                    <p class="capture-timestamp"><strong>캡처 날짜:</strong> ${formattedDate}</p>
-                </div>
-                <div class="capture-actions">
-                    <button class="btn-download" onclick="downloadCapture('${captureId}')">다운로드</button>
-                    <button class="btn-delete" onclick="deleteCapture('${captureId}')">삭제</button>
+            // 카테고리 선택 드롭다운
+            let categoryFilter = `
+                <div style="margin-right: 20px;">
+                    <label for="captureCategory" style="font-weight: bold; margin-right: 8px;">카테고리:</label>
+                    <select id="captureCategory" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                        <option value="전체">전체</option>
+                        <option value="스킨케어">스킨케어</option>
+                        <option value="마스크팩">마스크팩</option>
+                        <option value="클렌징">클렌징</option>
+                        <option value="선케어">선케어</option>
+                        <option value="메이크업">메이크업</option>
+                        <option value="네일">네일</option>
+                        <option value="뷰티소품">뷰티소품</option>
+                        <option value="더모_코스메틱">더모 코스메틱</option>
+                        <option value="맨즈케어">맨즈케어</option>
+                        <option value="향수_디퓨저">향수/디퓨저</option>
+                        <option value="헤어케어">헤어케어</option>
+                        <option value="바디케어">바디케어</option>
+                        <option value="건강식품">건강식품</option>
+                        <option value="푸드">푸드</option>
+                        <option value="구강용품">구강용품</option>
+                        <option value="헬스_건강용품">헬스/건강용품</option>
+                        <option value="여성_위생용품">여성/위생용품</option>
+                        <option value="패션">패션</option>
+                        <option value="리빙_가전">리빙/가전</option>
+                        <option value="취미_팬시">취미/팬시</option>
+                    </select>
                 </div>
             `;
             
-            container.appendChild(item);
+            // 현재 날짜 가져오기 - 시작 날짜의 min 속성을 위해
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const today = `${year}-${month}-${day}`;
+            
+            // 2025-05-12 이전 날짜 선택 불가능하도록 설정 (홈페이지와 일치하게)
+            const minDate = "2025-05-12";
+            
+            // 날짜 필터
+            const dateFilter = `
+                <div>
+                    <label for="captureStartDate" style="font-weight: bold; margin-right: 8px;">날짜:</label>
+                    <input type="date" id="captureStartDate" min="${minDate}" value="${today}" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                    <span style="margin: 0 5px;">~</span>
+                    <input type="date" id="captureEndDate" min="${minDate}" value="${today}" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                    <button id="captureFilterBtn" style="margin-left: 10px; padding: 5px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">적용</button>
+                    <button id="captureFilterResetBtn" style="margin-left: 5px; padding: 5px 15px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">초기화</button>
+                </div>
+            `;
+            
+            // 안내 메시지 추가
+            const dateInfoText = `
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; margin-top: 10px;">
+                    <span style="color: rgba(0, 0, 0, 0.6); font-size: 14px;">
+                    ※ 2025.05.12 부터 데이터 조회 가능
+                    </span>
+                </div>
+            `;
+            
+            // 필터 UI 완성
+            filterContainer.innerHTML = categoryFilter + dateFilter + dateInfoText;
+            
+            // 모달 헤더와 바디 사이에 필터 컨테이너 삽입
+            const modalContent = document.querySelector('.modal-content');
+            const modalBody = document.querySelector('.modal-body');
+            modalContent.insertBefore(filterContainer, modalBody);
+            
+            // 필터 적용 버튼 이벤트
+            document.getElementById('captureFilterBtn').addEventListener('click', function() {
+                const category = document.getElementById('captureCategory').value;
+                const startDate = document.getElementById('captureStartDate').value;
+                const endDate = document.getElementById('captureEndDate').value;
+                
+                loadCapturesFromServer(category, startDate, endDate);
+            });
+            
+            // 필터 초기화 버튼 이벤트
+            document.getElementById('captureFilterResetBtn').addEventListener('click', function() {
+                document.getElementById('captureCategory').value = '전체';
+                document.getElementById('captureStartDate').value = today;
+                document.getElementById('captureEndDate').value = today;
+                
+                loadCapturesFromServer('전체', today, today);
+            });
+            
+            // 카테고리 선택 이벤트 제거
+            const categorySelect = document.getElementById('captureCategory');
+            if (categorySelect) {
+                const newSelect = categorySelect.cloneNode(true);
+                categorySelect.parentNode.replaceChild(newSelect, categorySelect);
+            }
+        }
+    }
+
+    // 서버에서 캡처 목록 불러오기
+    function loadCapturesFromServer(category, startDate, endDate) {
+        // 로딩 메시지 표시
+        captureListContainer.innerHTML = '<div style="text-align: center; padding: 20px;">캡처 목록을 불러오는 중...</div>';
+        
+        // API URL 생성
+        let url = 'http://localhost:5001/api/captures';
+        const params = [];
+        
+        if (category) {
+            params.push(`category=${encodeURIComponent(category)}`);
+        }
+        
+        if (startDate) {
+            params.push(`startDate=${encodeURIComponent(startDate)}`);
+        }
+        
+        if (endDate) {
+            params.push(`endDate=${encodeURIComponent(endDate)}`);
+        }
+        
+        if (params.length > 0) {
+            url += '?' + params.join('&');
+        }
+        
+        // 서버에서 캡처 목록 가져오기
+        fetch(url)
+            .then(response => response.json())
+            .then(response => {
+                if (response.success) {
+                    capturesList = response.data;
+                    showCaptureList(category);
+                } else {
+                    throw new Error(response.error || '데이터 로드 실패');
+                }
+            })
+            .catch(error => {
+                console.error('캡처 목록 로드 실패:', error);
+                capturesList = [];
+                showCaptureList(category);
+            });
+    }
+
+    // 캡처 목록 표시 함수
+    function showCaptureList(selectedCategory) {
+        captureListContainer.innerHTML = '';
+        
+        if (!capturesList || capturesList.length === 0) {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.style.width = '100%';
+            emptyMessage.style.textAlign = 'center';
+            emptyMessage.style.padding = '50px 0';
+            emptyMessage.style.fontSize = '18px';
+            emptyMessage.style.color = '#666';
+            emptyMessage.style.gridColumn = '1 / -1';
+            emptyMessage.innerHTML = '저장된 캡처가 없습니다.';
+            captureListContainer.appendChild(emptyMessage);
+            return;
+        }
+        
+        // 캡처들을 날짜별로 그룹화
+        const capturesByDate = {};
+        
+        // 선택된 카테고리의 캡처만 필터링
+        const filteredCaptures = selectedCategory ? 
+            capturesList.filter(capture => capture.category === selectedCategory) :
+            capturesList;
+        
+        if (filteredCaptures.length === 0) {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.style.width = '100%';
+            emptyMessage.style.textAlign = 'center';
+            emptyMessage.style.padding = '50px 0';
+            emptyMessage.style.fontSize = '18px';
+            emptyMessage.style.color = '#666';
+            emptyMessage.style.gridColumn = '1 / -1';
+            emptyMessage.innerHTML = selectedCategory ? 
+                `선택한 "${selectedCategory}" 카테고리의 캡처가 없습니다.` :
+                '저장된 캡처가 없습니다.';
+            captureListContainer.appendChild(emptyMessage);
+            return;
+        }
+        
+        filteredCaptures.forEach(capture => {
+            const dateParts = capture.date.split('-');
+            const formattedDate = `${dateParts[0]}년 ${dateParts[1]}월 ${dateParts[2]}일`;
+            
+            if (!capturesByDate[formattedDate]) {
+                capturesByDate[formattedDate] = [];
+            }
+            
+            capturesByDate[formattedDate].push(capture);
         });
         
-        // ESC 키로 모달 닫기 기능 추가
-        document.addEventListener('keydown', closeModalOnEscape);
+        // 날짜별로 정렬 (최신 날짜 먼저)
+        const sortedDates = Object.keys(capturesByDate).sort((a, b) => {
+            const dateA = new Date(a.replace(/년|월|일/g, '').split(' ').join('-'));
+            const dateB = new Date(b.replace(/년|월|일/g, '').split(' ').join('-'));
+            return dateB - dateA;
+        });
         
-        // 모달 외부 클릭 시 닫기 기능 추가
-        modal.addEventListener('click', closeModalOnOutsideClick);
-        
-    } catch (error) {
-        console.error('캡처 목록 표시 중 오류 발생:', error);
-        container.innerHTML = `<p style="text-align: center; padding: 20px; color: #ff4444;">
-            캡처 목록을 불러오는 중 오류가 발생했습니다.<br>
-            ${error.message}
-        </p>`;
-    }
-}
-
-// 모달 닫기 함수 개선
-function closeCaptureListModal() {
-    console.log('캡처 목록 모달 닫기 시도');
-    
-    const modal = document.getElementById('captureListModal');
-    if (modal) {
-        // 클래스와 스타일 모두 변경하여 확실히 닫히도록 함
-        modal.classList.remove('show');
-        modal.style.display = 'none';
-        
-        // 이벤트 리스너 제거
-        document.removeEventListener('keydown', closeModalOnEscape);
-        modal.removeEventListener('click', closeModalOnOutsideClick);
-        
-        // 스크롤 복원
-        document.body.style.overflow = '';
-        
-        console.log('캡처 목록 모달 닫기 완료');
-    } else {
-        console.error('캡처 목록 모달 요소를 찾을 수 없습니다');
-    }
-}
-
-// ESC 키로 모달 닫기
-function closeModalOnEscape(event) {
-    if (event.key === 'Escape') {
-        closeCaptureListModal();
-    }
-}
-
-// 모달 외부 클릭 시 닫기
-function closeModalOnOutsideClick(event) {
-    const modal = document.getElementById('captureListModal');
-    const modalContent = modal.querySelector('.modal-content');
-    
-    if (modal && modalContent && !modalContent.contains(event.target)) {
-        closeCaptureListModal();
-    }
-}
-
-// 이미지 확대 표시 함수 추가
-function enlargeImage(src) {
-    const modal = document.createElement('div');
-    modal.className = 'img-enlarged-modal';
-    modal.style.position = 'fixed';
-    modal.style.top = '0';
-    modal.style.left = '0';
-    modal.style.width = '100%';
-    modal.style.height = '100%';
-    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-    modal.style.zIndex = '2000';
-    modal.style.display = 'flex';
-    modal.style.justifyContent = 'center';
-    modal.style.alignItems = 'center';
-    modal.style.opacity = '0';
-    modal.style.transition = 'opacity 0.3s ease';
-    
-    const img = document.createElement('img');
-    img.src = src;
-    img.style.maxWidth = '90%';
-    img.style.maxHeight = '90%';
-    img.style.border = '2px solid white';
-    img.style.borderRadius = '5px';
-    img.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.7)';
-    img.style.transform = 'scale(0.9)';
-    img.style.transition = 'transform 0.3s ease';
-    
-    modal.appendChild(img);
-    document.body.appendChild(modal);
-    
-    // 애니메이션 효과
-    setTimeout(() => {
-        modal.style.opacity = '1';
-        img.style.transform = 'scale(1)';
-    }, 10);
-    
-    // 클릭 시 닫기
-    modal.addEventListener('click', () => {
-        modal.style.opacity = '0';
-        img.style.transform = 'scale(0.9)';
-        setTimeout(() => {
-            document.body.removeChild(modal);
-        }, 300);
-    });
-}
-
-// IndexedDB를 초기화하는 함수
-let db;
-function initIndexedDB() {
-    return new Promise((resolve, reject) => {
-        console.log('IndexedDB 초기화 시작');
-        
-        // 기존 로컬 스토리지의 captureList 항목 삭제 (이전 데이터로 인한 충돌 방지)
-        try {
-            localStorage.removeItem('captureList');
-            console.log('로컬 스토리지의 captureList 항목이 삭제되었습니다.');
-        } catch (e) {
-            console.warn('로컬 스토리지 삭제 실패:', e);
-        }
-        
-        // 이미 열려있는 연결이 있는지 확인
-        if (db) {
-            console.log('기존 IndexedDB 연결이 있습니다. 이 연결을 사용합니다.');
-            return resolve(db);
-        }
-        
-        // IndexedDB 열기
-        const request = indexedDB.open('CaptureDB', 1);
-        
-        request.onerror = (event) => {
-            console.error('IndexedDB 오류:', event.target.error);
-            reject(new Error('IndexedDB를 열 수 없습니다: ' + event.target.error));
-        };
-        
-        request.onupgradeneeded = (event) => {
-            console.log('IndexedDB 업그레이드 중...');
-            const db = event.target.result;
+        // 날짜별로 캡처 목록 표시
+        sortedDates.forEach(dateStr => {
+            // 날짜 헤더 추가
+            const dateHeader = document.createElement('div');
+            dateHeader.className = 'capture-date-header';
+            dateHeader.style.gridColumn = '1 / -1';
+            dateHeader.style.borderBottom = '2px solid #007BFF';
+            dateHeader.style.padding = '10px 5px';
+            dateHeader.style.marginTop = '20px';
+            dateHeader.style.marginBottom = '15px';
+            dateHeader.style.fontSize = '18px';
+            dateHeader.style.fontWeight = 'bold';
+            dateHeader.style.color = '#007BFF';
+            dateHeader.innerHTML = dateStr;
+            captureListContainer.appendChild(dateHeader);
             
-            // 객체 저장소(테이블) 생성, id를 키로 사용
-            if (!db.objectStoreNames.contains('captures')) {
-                const store = db.createObjectStore('captures', { keyPath: 'id', autoIncrement: true });
-                // 인덱스 생성
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-                console.log('captures 객체 저장소 생성됨');
+            // 해당 날짜의 캡처들 표시
+            capturesByDate[dateStr].forEach(capture => {
+                const captureItem = document.createElement('div');
+                
+                // 카테고리 이름 포맷팅 (underbar를 공백으로 변경)
+                const categoryName = capture.category.replace('_', ' ');
+                
+                // 이미지 URL 생성 - 전체 URL 사용
+                const imageUrl = `http://localhost:5001${capture.imageUrl}`;
+                
+                // 시간 포맷
+                const timeStr = capture.time || '';
+                
+                // 이미지 URL 로깅
+                console.log('캡처 정보:', capture);
+                
+                captureItem.innerHTML = `
+                    <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
+                        <div style="padding: 10px; background-color: #f8f9fa; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="font-weight: bold; margin-right: 10px;">${timeStr}</span>
+                                <span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${categoryName}</span>
+                            </div>
+                            <div>
+                                <button onclick="downloadImage('${capture.imageUrl}')" style="background: #4CAF50; color: white; border: none; border-radius: 3px; padding: 5px 10px; cursor: pointer; text-decoration: none; font-size: 12px;">다운로드</button>
+                            </div>
+                        </div>
+                        <div style="padding: 10px; text-align: center;">
+                            <img src="${imageUrl}" alt="캡처 이미지" style="max-width: 100%; cursor: pointer;" onclick="showFullImage('${imageUrl}')">
+                        </div>
+                    </div>
+                `;
+                
+                captureListContainer.appendChild(captureItem);
+            });
+        });
+    }
+
+    // 모달 닫기 함수
+    window.closeCaptureListModal = function() {
+        captureListModal.style.display = 'none';
+    };
+
+    // 캡처 목록에서 캡처 삭제 함수
+    window.deleteCapture = function(captureId) {
+        if (confirm('이 캡처를 삭제하시겠습니까?')) {
+            fetch(`http://localhost:5001/api/captures/${captureId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 현재 적용된 필터 상태 가져오기
+                    const category = document.getElementById('captureCategory')?.value || '전체';
+                    const startDate = document.getElementById('captureStartDate')?.value || '';
+                    const endDate = document.getElementById('captureEndDate')?.value || '';
+                    
+                    // 필터 상태 유지하면서 캡처 목록 다시 불러오기
+                    loadCapturesFromServer(category, startDate, endDate);
+                } else {
+                    throw new Error(data.error || '삭제 실패');
+                }
+            })
+            .catch(error => {
+                console.error('캡처 삭제 중 오류 발생:', error);
+                alert('캡처를 삭제하는데 실패했습니다.');
+            });
+        }
+    };
+
+    // 전체 이미지 보기 함수
+    window.showFullImage = function(imageUrl) {
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.9)';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '9999';
+        overlay.style.cursor = 'zoom-out';
+        
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.style.maxWidth = '90%';
+        img.style.maxHeight = '90%';
+        img.style.objectFit = 'contain';
+        img.style.border = '1px solid #ddd';
+        img.style.borderRadius = '5px';
+        img.style.boxShadow = '0 0 20px rgba(255,255,255,0.2)';
+        
+        overlay.appendChild(img);
+        document.body.appendChild(overlay);
+        
+        overlay.addEventListener('click', function() {
+            document.body.removeChild(overlay);
+        });
+    };
+    
+    // 이미지 다운로드 함수
+    window.downloadImage = function(imageUrl) {
+        console.log('다운로드 시도:', imageUrl);
+        
+        // 파일명 추출
+        const filename = imageUrl.split('/').pop();
+        
+        // 새 창에서 다운로드 API 호출
+        window.open(`http://localhost:5001/api/download/${filename}`, '_blank');
+    };
+
+    // 이전 이벤트 제거
+    searchBtn.onclick = null;
+    
+    // 랭킹 버튼 클릭 이벤트 처리
+    searchBtn.addEventListener('click', function(e) {
+        // 이벤트 기본 동작 방지
+        if (e) e.preventDefault();
+        
+        // 데이터 가져오기
+        fetchRankingData();
+        
+        // 기본 동작 차단
+        return false;
+    });
+    
+    // 제품명 검색 버튼 클릭 이벤트 처리
+    productSearchBtn.addEventListener('click', function(e) {
+        // 이벤트 기본 동작 방지
+        if (e) e.preventDefault();
+        
+        // 제품명 검색 실행
+        searchProductByName();
+        
+        // 기본 동작 차단
+        return false;
+    });
+    
+    // 제품명 엑셀 다운로드 버튼 클릭 이벤트
+    productSearchDownloadBtn.addEventListener('click', function(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        if (searchResultData.length === 0) {
+            alert('먼저 제품명 검색을 실행해주세요.');
+            return;
+        }
+        
+        downloadExcel(searchResultData, '올리브영_제품검색결과');
+        return false;
+    });
+    
+    // 랭킹 엑셀 다운로드 버튼 클릭 이벤트
+    downloadExcelBtn.addEventListener('click', function(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        if (rankingData.length === 0) {
+            alert('먼저 랭킹 데이터를 조회해주세요.');
+            return;
+        }
+        
+        downloadExcel(rankingData, '올리브영_랭킹데이터');
+        return false;
+    });
+    
+    // 엑셀 다운로드 함수
+    async function downloadExcel(data, fileName) {
+        try {
+            // ExcelJS가 로드되지 않았을 경우에 대한 처리
+            if (typeof ExcelJS === 'undefined') {
+                console.error('ExcelJS library is not loaded');
+                alert('엑셀 라이브러리가 로드되지 않았습니다. 페이지를 새로고침한 후 다시 시도해주세요.');
+                return;
             }
-        };
-        
-        request.onsuccess = (event) => {
-            db = event.target.result;
-            console.log('IndexedDB가 성공적으로 열렸습니다.');
             
-            // DB 연결 오류 시 이벤트 핸들러
-            db.onerror = (event) => {
-                console.error('IndexedDB 오류:', event.target.error);
-            };
+            // FileSaver가 로드되지 않았을 경우에 대한 처리
+            if (typeof saveAs === 'undefined') {
+                console.error('FileSaver library is not loaded');
+                alert('파일 저장 라이브러리가 로드되지 않았습니다. 페이지를 새로고침한 후 다시 시도해주세요.');
+                return;
+            }
             
-            resolve(db);
-        };
-    });
-}
-
-// IndexedDB에서 모든 캡처를 가져오는 함수
-function loadCapturesFromDB() {
-    return new Promise((resolve, reject) => {
-        if (!db) {
-            console.error('IndexedDB가 초기화되지 않았습니다.');
-            return reject(new Error('IndexedDB가 초기화되지 않았습니다.'));
-        }
-        
-        try {
-            console.log('IndexedDB에서 캡처 데이터 로드 시작');
-            const transaction = db.transaction(['captures'], 'readonly');
-            const store = transaction.objectStore('captures');
+            console.log('엑셀 다운로드 시작', data.length + '개 항목');
             
-            // 모든 캡처 가져오기
-            const request = store.getAll();
+            // ExcelJS 워크북 생성
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Sheet1');
             
-            request.onsuccess = () => {
-                const captures = request.result || [];
+            // 헤더 설정
+            worksheet.columns = [
+                { header: '날짜', key: 'date', width: 12 },
+                { header: '시간', key: 'time', width: 8 },
+                { header: '카테고리', key: 'category', width: 15 },
+                { header: '순위', key: 'rank', width: 8, alignment: { horizontal: 'center' } },
+                { header: '브랜드', key: 'brand', width: 20 },
+                { header: '제품명', key: 'name', width: 50 },
+                { header: '소비자가', key: 'originalPrice', width: 12, alignment: { horizontal: 'right' } },
+                { header: '판매가', key: 'salePrice', width: 12, alignment: { horizontal: 'right' } },
+                { header: '행사', key: 'promotion', width: 25 }
+            ];
+            
+            // 헤더 스타일 설정
+            worksheet.getRow(1).eachCell(cell => {
+                cell.font = { bold: true };
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFE0E0E0' }
+                };
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            });
+            
+            // 데이터 추가
+            data.forEach(item => {
+                // 행사 정보 가공 - 쉼표로 구분된 형태로 변환
+                let formattedPromotion = '';
                 
-                // 타임스탬프로 정렬 (최신 순)
-                captures.sort((a, b) => {
-                    return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
-                });
-                
-                console.log(`IndexedDB에서 ${captures.length}개의 캡처를 로드했습니다.`);
-                
-                if (captures.length === 0) {
-                    // 데이터가 없는 경우 로컬 스토리지 확인
-                    try {
-                        const localCaptures = JSON.parse(localStorage.getItem('captureList') || '[]');
-                        if (localCaptures.length > 0) {
-                            console.log(`로컬 스토리지에서 ${localCaptures.length}개의 캡처를 찾았습니다.`);
-                            // 로컬 스토리지 데이터를 IndexedDB로 이전
-                            localCaptures.forEach(capture => {
-                                saveCaptureToDB({
-                                    ...capture,
-                                    timestamp: capture.timestamp || new Date().toISOString()
-                                }).catch(e => console.warn('로컬 데이터 이전 실패:', e));
-                            });
-                            return resolve(localCaptures);
-                        }
-                    } catch (e) {
-                        console.warn('로컬 스토리지 확인 실패:', e);
+                if (item.promotion && item.promotion !== '없음' && item.promotion !== '-') {
+                    const promotion = item.promotion.toLowerCase();
+                    const promotionList = [];
+                    
+                    if (promotion.includes('쿠폰')) promotionList.push('쿠폰');
+                    if (promotion.includes('증정')) promotionList.push('증정');
+                    if (promotion.includes('세일')) promotionList.push('세일');
+                    if (promotion.includes('오늘드림') || promotion.includes('드림')) promotionList.push('오늘드림');
+                    
+                    // 위 조건에 해당하지 않는 경우 원본 텍스트 사용
+                    if (promotionList.length === 0 && item.promotion.trim()) {
+                        formattedPromotion = item.promotion.trim();
+                    } else {
+                        formattedPromotion = promotionList.join(', ');
                     }
                 }
                 
-                resolve(captures);
-            };
+                worksheet.addRow({
+                    date: item.date || '',
+                    time: item.time || '',
+                    category: item.category || '',
+                    rank: { text: item.rank || '', alignment: { horizontal: 'center' } },
+                    brand: item.brand || '',
+                    name: item.name || '',
+                    originalPrice: { text: item.originalPrice || '', alignment: { horizontal: 'right' } },
+                    salePrice: { text: item.salePrice || item.price || '', alignment: { horizontal: 'right' } },
+                    promotion: formattedPromotion
+                });
+            });
             
-            request.onerror = (event) => {
-                console.error('캡처 로드 중 오류:', event.target.error);
-                reject(new Error('캡처 데이터를 로드할 수 없습니다: ' + event.target.error));
-            };
+            // 모든 셀에 테두리 추가 및 정렬 설정
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber > 1) { // 헤더 이후의 행
+                    row.eachCell((cell, colNumber) => {
+                        cell.border = {
+                            top: { style: 'thin' },
+                            left: { style: 'thin' },
+                            bottom: { style: 'thin' },
+                            right: { style: 'thin' }
+                        };
+                        // 순위 열은 가운데 정렬
+                        if (colNumber === 4) {
+                            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        }
+                        // 가격 열은 오른쪽 정렬
+                        if (colNumber === 7 || colNumber === 8) {
+                            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                        }
+                    });
+                }
+            });
             
-            transaction.oncomplete = () => {
-                console.log('IndexedDB 읽기 트랜잭션 완료');
-            };
+            // FileSaver.js를 사용하여 엑셀 파일 다운로드
+            const today = new Date().toISOString().split('T')[0];
+            const excelFileName = `${fileName}_${today}.xlsx`;
             
-            transaction.onerror = (event) => {
-                console.error('IndexedDB 트랜잭션 오류:', event.target.error);
-                reject(new Error('IndexedDB 트랜잭션 오류: ' + event.target.error));
-            };
+            // 엑셀 파일 생성
+            workbook.xlsx.writeBuffer().then(buffer => {
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                saveAs(blob, excelFileName);
+                alert(`${excelFileName} 파일이 다운로드 되었습니다.`);
+            });
+            
         } catch (error) {
-            console.error('캡처 로드 중 오류:', error);
-            reject(new Error('캡처 데이터 로드 중 예외 발생: ' + error.message));
+            console.error('Excel download error:', error);
+            alert('엑셀 다운로드 중 오류가 발생했습니다: ' + error.message);
+        }
+    }
+    
+    // Enter 키로 검색 가능하도록 설정
+    productSearchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchProductByName();
         }
     });
-}
-
-// 데이터베이스 초기화 함수 (긴급 상황용)
-function resetCaptureDB() {
-    if (confirm('주의: 이 작업은 모든 캡처 데이터를 삭제합니다. 계속하시겠습니까?')) {
-        // 전역 DB 변수 초기화
-        if (db) {
-            db.close();
-            db = null;
+    
+    // 제품명으로 검색하는 함수
+    async function searchProductByName() {
+        const searchTerm = productSearchInput.value.trim();
+        
+        if (searchTerm === '') {
+            alert('검색어를 입력해주세요.');
+            return;
         }
         
-        // IndexedDB 삭제
-        const deleteRequest = indexedDB.deleteDatabase('CaptureDB');
-        
-        deleteRequest.onsuccess = () => {
-            console.log('IndexedDB 삭제 성공');
-            alert('데이터베이스가 초기화되었습니다. 페이지를 새로고침 합니다.');
-            // 페이지 새로고침
-            window.location.reload();
-        };
-        
-        deleteRequest.onerror = (event) => {
-            console.error('IndexedDB 삭제 오류:', event.target.error);
-            alert('데이터베이스 초기화 중 오류가 발생했습니다: ' + event.target.error);
-        };
-    }
-}
-
-// 전역 함수로 등록
-window.resetCaptureDB = resetCaptureDB;
-
-// 오래된 캡처를 정리하는 함수 (최신 5개만 유지)
-function cleanupOldCaptures() {
-    return new Promise((resolve, reject) => {
-        if (!db) {
-            return resolve(); // DB가 초기화되지 않았으면 건너뜀
-        }
+        if (isLoading) return;
         
         try {
-            const transaction = db.transaction(['captures'], 'readwrite');
-            const store = transaction.objectStore('captures');
-            const index = store.index('timestamp');
+            isLoading = true;
+            productSearchBtn.disabled = true;
             
-            // 모든 캡처 가져오기
-            const request = index.getAll();
+            // 로딩 표시
+            productSearchTable.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 20px;">
+                        검색 중...
+                    </td>
+                </tr>
+            `;
             
-            request.onsuccess = () => {
-                const captures = request.result;
+            const category = categorySelect.value;
+            const startDate = startDateInput.value;
+            const endDate = endDateInput.value;
+            
+            // 서버에 검색 요청
+            const response = await fetch(`http://localhost:5001/api/search?keyword=${encodeURIComponent(searchTerm)}&category=${category}&startDate=${startDate}&endDate=${endDate}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`서버 오류: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.error || '검색 실패');
+            }
+            
+            // 전역 데이터 저장
+            searchResultData = result.data;
+            
+            // 검색 결과 표시
+            displaySearchResults(result.data);
+            
+            // 마지막 크롤링 시간 가져오기 (랭킹 데이터 업데이트마다 다시 가져오지는 않음)
+            // fetchLastCrawlTime(); // 제거: 크롤링 시에만 업데이트되도록
+
+        } catch (error) {
+            console.error('Search Error:', error);
+            // 에러 표시
+            productSearchTable.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align: center; color: red; padding: 20px;">
+                        ${error.message}
+                    </td>
+                </tr>
+            `;
+            // 검색 결과 데이터 초기화
+            searchResultData = [];
+        } finally {
+            isLoading = false;
+            productSearchBtn.disabled = false;
+        }
+    }
+    
+    // 검색 결과 표시 함수 - 제품명 전체 표시
+    function displaySearchResults(data) {
+        productSearchTable.innerHTML = '';
+        
+        // 현재 시간 표시 업데이트는 제거 (크롤링 시간만 표시)
+        
+        if (!data || data.length === 0) {
+            productSearchTable.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 20px;">
+                        검색 결과가 없습니다.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        // 데이터 정렬: 1. 순위(오름차순) 2. 날짜+시간(내림차순)
+        const sortedData = [...data].sort((a, b) => {
+            // 순위를 숫자로 변환하여 정렬 (순위가 없는 경우 999로 처리)
+            const rankA = parseInt(a.rank) || 999;
+            const rankB = parseInt(b.rank) || 999;
+            
+            if (rankA !== rankB) {
+                return rankA - rankB;
+            }
+            
+            // 같은 순위라면 날짜 기준으로 정렬 (최신 데이터 우선)
+            const dateCompare = (b.date || '') > (a.date || '');
+            if (dateCompare) return 1;
+            if (dateCompare === false) return -1;
+            
+            // 날짜까지 같다면 시간으로 정렬 (최신 시간 우선)
+            return (b.time || '') > (a.time || '') ? 1 : -1;
+        });
+        
+        // 검색어 가져오기
+        const searchTerm = productSearchInput.value.trim();
+        
+        sortedData.forEach((product, index) => {
+            // 행사 정보 포맷팅
+            let promotionDisplay = '';
+            
+            // 행사 정보를 개별 태그로 분리하여 표시
+            if (product.promotion && product.promotion !== '없음' && product.promotion !== '-') {
+                const promotion = product.promotion.toLowerCase();
                 
-                if (captures.length > 5) {
-                    console.log(`총 ${captures.length}개 캡처 중 오래된 항목 정리 중...`);
-                    
-                    // 타임스탬프로 정렬 (최신 순)
-                    captures.sort((a, b) => {
-                        return new Date(b.timestamp) - new Date(a.timestamp);
-                    });
-                    
-                    // 오래된 항목 삭제 (최신 5개 이후의 항목)
-                    const keysToDelete = captures.slice(5).map(item => item.id);
-                    
-                    keysToDelete.forEach(key => {
-                        store.delete(key);
-                    });
-                    
-                    console.log(`${keysToDelete.length}개의 오래된 캡처가 삭제되었습니다.`);
+                // 쿠폰 체크
+                if (promotion.includes('쿠폰')) {
+                    promotionDisplay += `<span style="display: inline-block; background-color: #96D165; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">쿠폰</span>`;
                 }
                 
-                resolve();
-            };
+                // 증정 체크
+                if (promotion.includes('증정')) {
+                    promotionDisplay += `<span style="display: inline-block; background-color: #82CAFA; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">증정</span>`;
+                }
+                
+                // 오늘드림 체크
+                if (promotion.includes('오늘드림') || promotion.includes('드림')) {
+                    promotionDisplay += `<span style="display: inline-block; background-color: #F574B8; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">오늘드림</span>`;
+                }
+                
+                // 세일 체크
+                if (promotion.includes('세일')) {
+                    promotionDisplay += `<span style="display: inline-block; background-color: #FF6B6B; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">세일</span>`;
+                }
+                
+                // 기타 행사가 있는 경우 (위 조건에 해당하지 않는 경우)
+                if (!promotionDisplay && product.promotion.trim()) {
+                    promotionDisplay = `<span style="display: inline-block; background-color: #ADB5BD; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">${product.promotion}</span>`;
+                }
+            }
             
-            request.onerror = (event) => {
-                console.error('캡처 정리 중 오류:', event.target.error);
-                reject(event.target.error);
-            };
-        } catch (error) {
-            console.error('캡처 정리 중 오류:', error);
-            resolve(); // 오류가 있어도 진행
-        }
-    });
-}
+            if (!promotionDisplay) {
+                promotionDisplay = `<span style="color: #999; font-size: 12px;">-</span>`;
+            }
+            
+            const row = productSearchTable.insertRow();
+            const date = product.date || new Date().toISOString().split('T')[0];
+            
+            // 날짜와 시간을 한 줄로 표시
+            const dateTimeStr = product.time ? `${date} ${product.time}` : date;
+            
+            // 제품명 길이 제한 제거 - 전체 표시
+            const displayName = product.name || '';
+            
+            // 검색어 강조 표시 (제품명에만 적용)
+            let highlightedName = displayName;
+            if (searchTerm && product.name) {
+                // 대소문자 구분 없이 검색 (case insensitive)
+                const regex = new RegExp(searchTerm, 'gi');
+                highlightedName = displayName.replace(regex, match => 
+                    `<span style="color: #0066CC; font-weight: bold;">${match}</span>`
+                );
+            }
+            
+            row.innerHTML = `
+                <td style="width: 140px; text-align: center; font-weight: bold; color: #333;">${dateTimeStr}</td>
+                <td style="width: 120px; text-align: center;"><span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${product.category || '전체'}</span></td>
+                <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
+                <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
+                <td style="min-width: 400px; text-align: left; white-space: normal; word-break: break-word;">${highlightedName}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px;">${product.originalPrice || '-'}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${product.salePrice || product.price || ''}</td>
+                <td style="width: 180px; text-align: left;">${promotionDisplay}</td>
+            `;
+        });
+    }
+    
+    // 랭킹 데이터 가져오기 함수
+    async function fetchRankingData() {
+        if (isLoading) return;
 
-// 캡처 다운로드 함수
-function downloadCapture(captureId, fileName) {
-    console.log("캡처 다운로드 시작");
-}
+        try {
+            isLoading = true;
+            searchBtn.disabled = true;
+            searchBtn.textContent = '로딩 중...';
+
+            const category = categorySelect.value;
+            // 선택된 날짜 값 가져오기 (선택하지 않았다면 빈 문자열)
+            const startDate = startDateInput.value || '';
+            const endDate = endDateInput.value || '';
+            
+            console.log('요청 날짜 범위:', startDate, endDate);
+            
+            // URL 매개변수 생성
+            let url = `http://localhost:5001/api/ranking?category=${category}`;
+            if (startDate) url += `&startDate=${startDate}`;
+            if (endDate) url += `&endDate=${endDate}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`서버 오류: ${response.status}`);
+            }
+            
+            const result = await response.json();
+
+            if (!result.success) {
+                throw new Error(result.error || '데이터 로드 실패');
+            }
+
+            // 전역 데이터 저장
+            rankingData = result.data;
+            
+            // 데이터가 없는 경우 메시지 표시
+            if (result.data.length === 0) {
+                displayRankingError('선택한 날짜에 해당하는 데이터가 없습니다.');
+                rankingData = [];
+                return;
+            }
+            
+            // 테이블에 데이터 표시
+            displayRankingData(result.data, category);
+            
+            // 마지막 크롤링 시간 가져오기 (랭킹 데이터 업데이트마다 다시 가져오지는 않음)
+            // fetchLastCrawlTime(); // 제거: 크롤링 시에만 업데이트되도록
+
+        } catch (error) {
+            console.error('Error:', error);
+            displayRankingError(error.message);
+            // 랭킹 데이터 초기화
+            rankingData = [];
+        } finally {
+            isLoading = false;
+            searchBtn.disabled = false;
+            searchBtn.textContent = '랭킹 데이터';
+        }
+    }
+
+    // 랭킹 데이터 표시 - 제품명 전체 표시
+    function displayRankingData(data, category) {
+        rankingTable.innerHTML = '';
+        
+        // 시간 업데이트 제거 (크롤링 시간만 표시)
+        
+        if (!data || data.length === 0) {
+            rankingTable.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 20px;">
+                        데이터가 없습니다.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        // 데이터 정렬: 1. 순위(오름차순) 2. 날짜+시간(내림차순)
+        const sortedData = [...data].sort((a, b) => {
+            // 순위를 숫자로 변환하여 정렬 (순위가 없는 경우 999로 처리)
+            const rankA = parseInt(a.rank) || 999;
+            const rankB = parseInt(b.rank) || 999;
+            
+            if (rankA !== rankB) {
+                return rankA - rankB;
+            }
+            
+            // 같은 순위라면 날짜 기준으로 정렬 (최신 데이터 우선)
+            const dateCompare = (b.date || '') > (a.date || '');
+            if (dateCompare) return 1;
+            if (dateCompare === false) return -1;
+            
+            // 날짜까지 같다면 시간으로 정렬 (최신 시간 우선)
+            return (b.time || '') > (a.time || '') ? 1 : -1;
+        });
+
+        sortedData.forEach((product, index) => {
+            // 행사 정보 포맷팅
+            let promotionDisplay = '';
+            
+            // 행사 정보를 개별 태그로 분리하여 표시
+            if (product.promotion && product.promotion !== '없음' && product.promotion !== '-') {
+                const promotion = product.promotion.toLowerCase();
+                
+                // 쿠폰 체크
+                if (promotion.includes('쿠폰')) {
+                    promotionDisplay += `<span style="display: inline-block; background-color: #96D165; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">쿠폰</span>`;
+                }
+                
+                // 증정 체크
+                if (promotion.includes('증정')) {
+                    promotionDisplay += `<span style="display: inline-block; background-color: #82CAFA; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">증정</span>`;
+                }
+                
+                // 오늘드림 체크
+                if (promotion.includes('오늘드림') || promotion.includes('드림')) {
+                    promotionDisplay += `<span style="display: inline-block; background-color: #F574B8; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">오늘드림</span>`;
+                }
+                
+                // 세일 체크
+                if (promotion.includes('세일')) {
+                    promotionDisplay += `<span style="display: inline-block; background-color: #FF6B6B; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">세일</span>`;
+                }
+                
+                // 기타 행사가 있는 경우 (위 조건에 해당하지 않는 경우)
+                if (!promotionDisplay && product.promotion.trim()) {
+                    promotionDisplay = `<span style="display: inline-block; background-color: #ADB5BD; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">${product.promotion}</span>`;
+                }
+            }
+            
+            if (!promotionDisplay) {
+                promotionDisplay = `<span style="color: #999; font-size: 12px;">-</span>`;
+            }
+            
+            const row = rankingTable.insertRow();
+            
+            // 날짜와 시간을 한 줄로 표시
+            const dateTimeStr = product.time ? `${product.date} ${product.time}` : product.date;
+            
+            // 제품명 길이 제한 제거 - 전체 표시
+            const displayName = product.name || '';
+            
+            // 판매가 셀에 더 큰 글자 크기와 강조 적용
+            row.innerHTML = `
+                <td style="width: 140px; text-align: center; font-weight: bold; color: #333;">${dateTimeStr}</td>
+                <td style="width: 120px; text-align: center;"><span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${product.category || '전체'}</span></td>
+                <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
+                <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
+                <td style="min-width: 400px; text-align: left; white-space: normal; word-break: break-word;">${displayName}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px;">${product.originalPrice || '-'}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${product.salePrice || product.price || ''}</td>
+                <td style="width: 180px; text-align: left;">${promotionDisplay}</td>
+            `;
+        });
+
+        // 테이블 헤더도 동일한 스타일 적용
+        const tableHeader = document.querySelector('#rankingTable thead tr') || document.querySelector('#productSearchTable thead tr');
+        if (tableHeader) {
+            tableHeader.innerHTML = `
+                <th style="width: 140px; text-align: center;">날짜/시간</th>
+                <th style="width: 120px; text-align: center;">카테고리</th>
+                <th style="width: 60px; text-align: left;">순위</th>
+                <th style="width: 120px; text-align: left;">브랜드</th>
+                <th style="min-width: 400px; text-align: left;">제품명</th>
+                <th style="width: 85px; text-align: left;">소비자가</th>
+                <th style="width: 85px; text-align: left;">판매가</th>
+                <th style="width: 180px; text-align: left;">행사</th>
+            `;
+        }
+    }
+
+    // 랭킹 에러 표시
+    function displayRankingError(message) {
+        rankingTable.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; color: red; padding: 20px;">
+                    ${message}
+                </td>
+            </tr>
+        `;
+    }
+
+    // 버튼 호버 효과 추가
+    const buttons = document.querySelectorAll('.button-container button');
+    buttons.forEach(button => {
+        button.addEventListener('mouseover', function() {
+            this.style.transform = 'translateY(-3px)';
+            this.style.boxShadow = '0 6px 8px rgba(0,0,0,0.2)';
+        });
+        
+        button.addEventListener('mouseout', function() {
+            this.style.transform = '';
+            this.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+        });
+        
+        button.addEventListener('mousedown', function() {
+            this.style.transform = 'translateY(1px)';
+            this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        });
+        
+        button.addEventListener('mouseup', function() {
+            this.style.transform = 'translateY(-3px)';
+            this.style.boxShadow = '0 6px 8px rgba(0,0,0,0.2)';
+        });
+    });
+
+    // 초기 캡처 목록 로드 (숨겨둠)
+    loadCapturesFromServer();
+});

@@ -5,94 +5,97 @@
         <meta charset="UTF-8">
         <title>올리브영 랭킹</title>
         <link rel="stylesheet" href="olive.css">
-    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <div class="container">
         <header>
-            <h1>올리브영 랭킹</h1>
-            <h2>HWASEON</h2>
-            <p id="lastCrawled" class="last-crawled"></p>
+            <h1>올리브영 실시간 랭킹</h1>
+            <div class="logo-container">
+                <img src="Hwaseon.png" alt="HWASEON" class="hwaseon-logo">
+            </div>
         </header>
         
         <div class="filters">
-            <label for="category">카테고리 :</label>
-            <select id="category">
-                <option value="스킨케어">스킨케어</option>
-                <option value="마스크팩">마스크팩</option>
-                <option value="클렌징">클렌징</option>
-                <option value="선케어">선케어</option>
-                <option value="메이크업">메이크업</option>
-                <option value="네일">네일</option>
-                <option value="뷰티소품">뷰티소품</option>
-                <option value="더모_코스메틱">더모 코스메틱</option>
-                <option value="맨즈케어">맨즈케어</option>
-                <option value="향수_디퓨저">향수/디퓨저</option>
-                <option value="헤어케어">헤어케어</option>
-                <option value="바디케어">바디케어</option>
-                <option value="건강식품">건강식품</option>
-                <option value="푸드">푸드</option>
-                <option value="구강용품">구강용품</option>
-                <option value="헬스_건강용품">헬스/건강용품</option>
-                <option value="여성_위생용품">여성/위생용품</option>
-                <option value="패션">패션</option>
-                <option value="리빙_가전">리빙/가전</option>
-                <option value="취미_팬시">취미/팬시</option>
-            </select>
+            <div class="filter-group">
+                <label for="category">카테고리 :</label>
+                <select id="category">
+                    <option value="전체">전체</option>
+                    <option value="스킨케어">스킨케어</option>
+                    <option value="마스크팩">마스크팩</option>
+                    <option value="클렌징">클렌징</option>
+                    <option value="선케어">선케어</option>
+                    <option value="메이크업">메이크업</option>
+                    <option value="네일">네일</option>
+                    <option value="뷰티소품">뷰티소품</option>
+                    <option value="더모_코스메틱">더모 코스메틱</option>
+                    <option value="맨즈케어">맨즈케어</option>
+                    <option value="향수_디퓨저">향수/디퓨저</option>
+                    <option value="헤어케어">헤어케어</option>
+                    <option value="바디케어">바디케어</option>
+                    <option value="건강식품">건강식품</option>
+                    <option value="푸드">푸드</option>
+                    <option value="구강용품">구강용품</option>
+                    <option value="헬스_건강용품">헬스/건강용품</option>
+                    <option value="여성_위생용품">여성/위생용품</option>
+                    <option value="패션">패션</option>
+                    <option value="리빙_가전">리빙/가전</option>
+                    <option value="취미_팬시">취미/팬시</option>
+                </select>
+            </div>
 
-            <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
-            <label for="startDate"> 날짜 선택 :</label>
-            <input type="date" id="startDate">
-            <label>~</label>
-            <input type="date" id="endDate">
-            <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
-            <label>제품명 검색 : </label>
-            <input type="text" id="productSearchInput" placeholder="예시 : 세럼 , 앰플"/>
-            <button id="productSearchBtn">🔍</button>
-            
-            
+            <div class="filter-group">
+                <label for="startDate"> 날짜 선택 :</label>
+                <input type="date" id="startDate" min="2025-05-12">
+                <label>~</label>
+                <input type="date" id="endDate" min="2025-05-12">
+            </div>
+
+            <div class="filter-group">
+                <label>제품명 검색 : </label>
+                <input type="text" id="productSearchInput" placeholder="예시 : 세럼 , 앰플"/>
+                <button id="productSearchBtn">🔍</button>
+            </div>
         </div>
 
         <div style="display: flex; align-items: center; justify-content: center; height: 32px; margin-top: -15px;">
             <span style="color: rgba(0, 0, 0, 0.6); font-size: 17px;">
-            ※ 2024.05.03 부터 데이터 조회 가능
+            ※ 2025.05.12 부터 데이터 조회 가능
             </span>
         </div>
+        
 
-
-        <div style="text-align: center; margin-top:50px;">
-            <button id="searchBtn">랭킹 데이터</button>
-            <button id="productSearchDownloadBtn" style="margin-left:80px;">제품명 : Excel 다운로드</button>
-            <button id="downloadExcelBtn" style="margin-left:80px;">랭킹 : Excel 다운로드</button>
-            <button id="captureBtn" style="margin-left:80px;">캡처</button>
-            <button id="showCapturesBtn" style="margin-left:2cap;">캡처 목록</button>
+        <div class="button-container" style="text-align: center; margin-top:50px;">
+            <button type="button" id="searchBtn" onclick="return false;">랭킹 데이터</button>
+            <button type="button" id="productSearchDownloadBtn" style="margin-left:80px;">제품명 : Excel 다운로드</button>
+            <button type="button" id="downloadExcelBtn" style="margin-left:80px;">랭킹 : Excel 다운로드</button>
+            <button type="button" id="showCapturesBtn" style="margin-left:80px;">캡처 목록</button>
         </div>
 
         <!-- 캡처 목록 모달 -->
         <div id="captureListModal" class="modal">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3 class="modal-title">캡처 목록</h3>
-                        <button type="button" class="btn-close" onclick="closeCaptureListModal();">&times;</button>
+            <div class="modal-dialog" style="width: 90%; max-width: 1200px; margin: 30px auto;">
+                <div class="modal-content" style="background-color: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); overflow: hidden;">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background-color: #f8f9fa; border-bottom: 1px solid #e9ecef;">
+                        <h3 class="modal-title" style="margin: 0; font-size: 22px; color: #212529;">캡처 목록</h3>
+                        <button type="button" class="btn-close" onclick="closeCaptureListModal();" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d;">&times;</button>
                     </div>
-                    <div class="modal-body">
-                        <div id="captureListContainer">
+                    <div class="modal-body" style="padding: 20px; max-height: 75vh; overflow-y: auto;">
+                        <div id="captureListContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px;">
                             <!-- 캡처 목록이 여기에 동적으로 로드됩니다 -->
                         </div>
                     </div>
                 </div>
             </div>
-                </div>
+        </div>
                 
         <div class="table-container">
-                <h2>제품명 데이터</h2>
             <div id="updateTime" style="text-align: right; margin-bottom: 10px; color: #666; font-size: 14px;"></div>
+            <h2>제품명 데이터</h2>
             <table id="productSearchTable">
                 <thead>
                         <tr>
-                            <th>날짜</th>
+                            <th>날짜/시간</th>
                             <th>카테고리</th>
                             <th>순위</th>
                             <th>브랜드</th>
@@ -108,6 +111,7 @@
             </table>
         </div>
 
+
         <div class="table-container">
         <div style="margin-top: 30px;"></div>
             <h2>랭킹 데이터</h2>
@@ -115,7 +119,7 @@
             <table id="rankingTable">
                 <thead>
                     <tr>
-                        <th>날짜</th>
+                        <th>날짜/시간</th>
                         <th>카테고리</th>
                         <th>순위</th>
                         <th>브랜드</th>
@@ -133,8 +137,9 @@
     </div>
     
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-    <script src="script.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
-
+    <script src="https://unpkg.com/exceljs@4.3.0/dist/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

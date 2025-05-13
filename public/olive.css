@@ -26,7 +26,7 @@ body {
 h1 {
     text-align: center;
     color: #333;
-    font-size: 2.7rem; 
+    font-size: 2.3rem; 
     margin-bottom: -2.5%;
     font-weight: 600;
 }
@@ -43,21 +43,28 @@ h4{
 }
 
 
-
 .filters {
     display: flex;
-    gap: 15px;
-    margin: 30px;
+    gap: 70px;
+    margin: 30px;   
+    margin-top: 70px;
     margin-left: 100px;
     justify-content: center;
     align-items: center;
+
+}   
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 20px; /* 그룹 내부 간격 */
 }
 
 
 
 
 label {
-    margin-left:0px;
+    margin-left: 0px;
     font-size: 1.2rem;
     font-weight: bold;
     color: #555;
@@ -228,48 +235,66 @@ table {
 }
 
 
-th, td {
-    padding: 18px;
+th {
+    padding: 12px;
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: bold;
+    color: #495057;
+    text-align: center;
+}
+
+td {
+    padding: 15px;
     text-align: left;
-    font-size: 1.1rem;
+    font-size: 0.85rem; /* Unified font size */
     border-bottom: 1px solid #ddd;
     word-wrap: break-word;
     white-space: normal;
 }
 
-
-th:nth-child(1), td:nth-child(1) { 
-    max-width: 100px;
+th:nth-child(1), td:nth-child(1) { /* 날짜/시간 */
+    width: 140px;
+    text-align: center;
 }
 
-th:nth-child(3), td:nth-child(3) {
-    max-width: 100px;
+th:nth-child(2), td:nth-child(2) { /* 카테고리 */
+    width: 120px;
+    text-align: center;
+
 }
 
-th:nth-child(4), td:nth-child(4) {
-    max-width: 400px;
-}
-
-th:nth-child(5), td:nth-child(5) {
-    max-width: 100px;
-}
-
-th:nth-child(6), td:nth-child(6) {
-    width: 150px;
-    min-width: 150px;
-}
-
-th:nth-child(7), td:nth-child(7) {
-    width: 150px;
-    min-width: 150px;
+th:nth-child(3), td:nth-child(3) { /* 순위 */
+    width: 60px;
+    text-align: left;
 }
 
 
-th {
-    background-color: #f8f9fa;
-    color: #333;
-    font-size: 1.2rem;
-    font-weight: 600;
+th:nth-child(4), td:nth-child(4) { /* 브랜드 */
+    width: 120px;
+    text-align: center;
+}
+
+th:nth-child(5), td:nth-child(5) { /* 제품명 */
+    min-width: 400px;
+    text-align: left;
+}
+
+th:nth-child(6), td:nth-child(6) { /* 소비자가 */
+    width: 85px;
+    text-align: left;
+    padding-left: 15px;
+}
+
+th:nth-child(7), td:nth-child(7) { /* 판매가 */
+    width: 85px;
+    text-align: left;
+    padding-left: 15px;
+}
+
+th:nth-child(8), td:nth-child(8) { /* 행사 */
+    width: 180px;
+    text-align: left;
 }
 
 tbody tr:hover {
@@ -340,24 +365,27 @@ tbody tr:hover {
 #rankingTable td:nth-child(5), #productSearchTable td:nth-child(5) {  /* 제품명 데이터 */
     text-align: left;
     word-break: break-word;
+    white-space: normal;
+    line-height: 1.4;
+    padding: 15px 10px;
 }
 
 #rankingTable td:nth-child(8), #productSearchTable td:nth-child(8) {  /* 이벤트 데이터 */
     text-align: left;
     word-break: break-word;
-    color: #28a745;
-    font-weight: 500;
+    color: #333;
+    font-weight: normal;
     width: 10%;
 }
 
 #rankingTable td:nth-child(8) span, #productSearchTable td:nth-child(8) span {
     display: inline-block;
     margin-right: 5px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    background-color: #e8f5e9;
-    color: #28a745;
-    font-size: 0.9rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
 }
 
 #searchBtn, #downloadExcelBtn {
@@ -577,6 +605,7 @@ tbody tr:hover {
 .btn-download {
     background-color: #4CAF50;
     color: white;
+    text-decoration: none;
 }
 
 .btn-delete:hover, .btn-download:hover {
@@ -592,19 +621,6 @@ tbody tr:hover {
 }
 
 
-#captureBtn{
-    background: linear-gradient(45deg, #28a745, #218838);
-    border: none;
-    border-radius: 5px;
-    color: #fff;
-    padding: 14px 25px;
-    font-size: 1.1rem;
-    cursor: pointer;
-    width: 120px;
-    transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
 
 /* 캡처 버튼 및 캡처 목록 버튼 스타일 */
 #showCapturesBtn {
@@ -615,7 +631,7 @@ tbody tr:hover {
     padding: 14px 25px;
     font-size: 1.1rem;
     cursor: pointer;
-    width: 150px;
+    width: 250px;
     transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
@@ -657,7 +673,11 @@ th:nth-child(4), td:nth-child(4) { /* 브랜드 */
 th:nth-child(5), td:nth-child(5) { /* 제품명 */
     width: 40%;
     min-width: 300px;
-    word-break: break-word;
+    min-height: 50px; /* 최소 높이 설정 */
+    padding: 15px 10px; /* 좌우 패딩 조정 */
+    white-space: normal; /* 줄바꿈 허용 */
+    word-break: break-word; /* 단어 중간에서도 줄바꿈 가능 */
+    line-height: 1.4; /* 줄 간격 늘려서 가독성 향상 */
 }
 
 th:nth-child(6), td:nth-child(6) { /* 소비자가 */
@@ -733,4 +753,52 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
     font-size: 0.9em;
     margin: 5px 0;
     text-align: center;
+}
+
+/* 로고 스타일 */
+.logo h4 {
+    font-family: Arial, sans-serif;
+    font-size: 48px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    margin-top: 10px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    color: #000;
+}
+
+.logo-container {
+    text-align: right;
+    margin-right: 150px;
+    margin-top: -20px;
+    margin-bottom: 30px;
+}
+
+.hwaseon-logo {
+    max-width: 150px;
+    height: auto;
+}
+
+/* Ensure product search table has the same styling */
+#productSearchTable th, #productSearchTable td,
+#rankingTable th, #rankingTable td {
+    font-size: 0.85rem; /* Maintain unified font size */
+    padding: 10px 8px;
+}
+
+/* 최근 업데이트 시간 스타일 */
+#updateTime, #rankingUpdateTime {
+    text-align: right;
+    margin-bottom: 15px;
+    margin-top: 5px;
+    color: #333;
+    font-size: 0.95rem;
+    font-weight: 600;
+    background-color: #e8f4fe;
+    padding: 5px 10px;
+    border-radius: 4px;
+    display: block;
+    float: right;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-left: 3px solid #4285f4;
 }
