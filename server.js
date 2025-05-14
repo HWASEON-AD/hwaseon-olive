@@ -42,15 +42,10 @@ const puppeteerOptions = {
         '--disable-gpu',
         '--window-size=1920x1080',
         '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-notifications'
+        '--disable-features=IsolateOrigins,site-per-process'
     ],
     headless: 'new',
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    ignoreHTTPSErrors: true,
-    timeout: 30000
+    executablePath: process.env.CHROME_PATH || '/Users/hammin0808/.cache/puppeteer/chrome/mac_arm-136.0.7103.92/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
 };
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
