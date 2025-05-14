@@ -3,6 +3,12 @@ const BASE_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:5001' 
     : window.location.origin;
 
+// 전역 변수 선언
+let isLoading = false;
+let rankingData = []; // 전체 랭킹 데이터 저장
+let searchResultData = []; // 검색 결과 데이터 저장
+let capturesList = []; // 캡처 목록 저장
+
 // 전역 이벤트 차단기 - 새로고침 및 폼 제출 방지 (다운로드 버튼 예외 처리)
 document.addEventListener('click', function(e) {
     // 엑셀 다운로드 버튼은 예외 처리
@@ -75,6 +81,26 @@ function formatDateTime(dateTimeStr) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // DOM 요소 참조
+    const searchBtn = document.getElementById('searchBtn');
+    const rankingTable = document.getElementById('rankingTable').getElementsByTagName('tbody')[0];
+    const rankingUpdateTime = document.getElementById('rankingUpdateTime');
+    const categorySelect = document.getElementById('category');
+    const productSearchBtn = document.getElementById('productSearchBtn');
+    const productSearchInput = document.getElementById('productSearchInput');
+    const productSearchTable = document.getElementById('productSearchTable').getElementsByTagName('tbody')[0];
+    const updateTime = document.getElementById('updateTime');
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    const productSearchDownloadBtn = document.getElementById('productSearchDownloadBtn');
+    const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+    const showCapturesBtn = document.getElementById('showCapturesBtn');
+    const captureListModal = document.getElementById('captureListModal');
+    const captureListContainer = document.getElementById('captureListContainer');
+
+    // 초기 시간 표시 업데이트
+    fetchLastCrawlTime();
+
     // 날짜 관련 함수 - 현재 한국 시간 기준으로 날짜 설정
     function setCurrentDate() {
         // 현재 날짜 객체 생성
@@ -127,40 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 자정 업데이트 스케줄링 시작
     scheduleNextMidnightUpdate();
-    
-    const searchBtn = document.getElementById('searchBtn');
-    const rankingTable = document.getElementById('rankingTable').getElementsByTagName('tbody')[0];
-    const rankingUpdateTime = document.getElementById('rankingUpdateTime');
-    const categorySelect = document.getElementById('category');
-    
-    // 제품명 검색 관련 요소
-    const productSearchBtn = document.getElementById('productSearchBtn');
-    const productSearchInput = document.getElementById('productSearchInput');
-    const productSearchTable = document.getElementById('productSearchTable').getElementsByTagName('tbody')[0];
-    const updateTime = document.getElementById('updateTime');
-    
-    // 날짜 선택 요소
-    const startDateInput = document.getElementById('startDate');
-    const endDateInput = document.getElementById('endDate');
-    
-    // 엑셀 다운로드 버튼
-    const productSearchDownloadBtn = document.getElementById('productSearchDownloadBtn');
-    const downloadExcelBtn = document.getElementById('downloadExcelBtn');
-    
-    // 캡처 관련 요소
-    const showCapturesBtn = document.getElementById('showCapturesBtn');
-    const captureListModal = document.getElementById('captureListModal');
-    const captureListContainer = document.getElementById('captureListContainer');
-
-    // 초기 시간 표시 업데이트 - 서버에서 실제 크롤링 시간을 가져옴
-    fetchLastCrawlTime();
-
-    
-
-    let isLoading = false;
-    let rankingData = []; // 전체 랭킹 데이터 저장
-    let searchResultData = []; // 검색 결과 데이터 저장
-    let capturesList = []; // 캡처 목록 저장
 
     // API 기본 URL 설정
     const BASE_URL = window.location.hostname === 'localhost' 

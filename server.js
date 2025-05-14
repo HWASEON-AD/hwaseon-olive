@@ -11,15 +11,13 @@ const app = express();
 const port = process.env.PORT || 5001;
 
 // CORS 미들웨어 설정
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(cors());
 
 // 정적 파일 서빙을 위한 미들웨어 설정
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
+
+
 
 // 캡처 저장 디렉토리 설정
 const capturesDir = path.join(__dirname, 'public', 'captures');
@@ -50,25 +48,20 @@ const puppeteerOptions = {
 
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
-    // 현재 시간을 KST로 변환
     const now = new Date();
-    const kstOffset = 9 * 60; // KST is UTC+9
-    const kstNow = new Date(now.getTime() + (kstOffset * 60000));
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
     const scheduledMinutes = 30;
     
     // 현재 시간과 가장 가까운 다음 크롤링 시간 찾기
-    let nextCrawlTime = new Date(kstNow);
+    let nextCrawlTime = new Date(now);
     let found = false;
     
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     for (const hour of scheduledHours) {
-        nextCrawlTime = new Date(kstNow);
         nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
-        
-        if (nextCrawlTime > kstNow) {
+        if (nextCrawlTime > now) {
             found = true;
             break;
         }
@@ -76,7 +69,6 @@ function getNextCrawlTime() {
     
     // 오늘 남은 크롤링 시간이 없으면 내일 첫 크롤링 시간으로 설정
     if (!found) {
-        nextCrawlTime = new Date(kstNow);
         nextCrawlTime.setDate(nextCrawlTime.getDate() + 1);
         nextCrawlTime.setHours(scheduledHours[0], scheduledMinutes, 0, 0);
     }
@@ -87,34 +79,22 @@ function getNextCrawlTime() {
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
 function getCurrentTimeFormat() {
     const now = new Date();
-    const kstOffset = 9 * 60; // KST is UTC+9
-    const localTime = new Date(now.getTime() + (kstOffset * 60000));
-    const hours = String(localTime.getUTCHours()).padStart(2, '0');
-    const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
 }
 
-// 날짜/시간 포맷 함수
-function getFormattedDateTime() {
-    const now = new Date();
-    const kstOffset = 9 * 60;
-    const localTime = new Date(now.getTime() + (kstOffset * 60000));
-    
-    return localTime.toLocaleString('ko-KR', {
+// 모든 카테고리 크롤링 함수
+async function crawlAllCategories() {
+    console.log(`[${new Date().toLocaleString('ko-KR', {
         year: 'numeric',
         month: 'numeric',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Seoul'
-    });
-}
-
-// 모든 카테고리 크롤링 함수
-async function crawlAllCategories() {
-    console.log(`[${getFormattedDateTime()}] 3시간 정기 크롤링 시작`);
+        hour12: false
+    })}] 3시간 정기 크롤링 시작`);
     
     // 현재 시간 (크롤링 시간)
     const now = new Date();
@@ -222,7 +202,15 @@ async function crawlAllCategories() {
         });
         
         productCache.timestamp = now;
-        console.log(`[${getFormattedDateTime()}] 3시간 정기 크롤링 완료`);
+        console.log(`[${new Date().toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        })}] 3시간 정기 크롤링 완료`);
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
@@ -254,6 +242,8 @@ async function findChrome() {
     }
     throw new Error('Chrome 브라우저를 찾을 수 없습니다.');
 }
+
+
 
 async function captureOliveyoungMainRanking() {
     console.log('='.repeat(50));
@@ -448,14 +438,15 @@ function scheduleNextCrawl() {
     const timeUntilNextCrawl = Math.max(0, nextCrawlTime - new Date());
     
     // 다음 크롤링 시간을 보다 명확하게 표시 - 24시간제로 변경
-    const nextTimeFormatted = nextCrawlTime.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
+    const nextTimeFormatted = nextCrawlTime.toLocaleTimeString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Seoul'
+        hour12: false
+    });
+    const nextDateFormatted = nextCrawlTime.toLocaleDateString('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
     });
     
     const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
@@ -463,7 +454,7 @@ function scheduleNextCrawl() {
     const remainingMinutes = minutesUntilNext % 60;
     
     console.log('='.repeat(50));
-    console.log(`다음 작업 예정 시간: ${nextTimeFormatted}`);
+    console.log(`다음 작업 예정 시간: ${nextDateFormatted} ${nextTimeFormatted}`);
     console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
     console.log('예정된 작업:');
     console.log('- 전체 카테고리 크롤링');
@@ -861,21 +852,15 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log('='.repeat(50));
-    console.log(`[${getFormattedDateTime()}] 서버 시작`);
-    console.log(`서버 주소: http://localhost:${port}`);
-    console.log(`환경: ${process.env.NODE_ENV || 'development'}`);
-    console.log('='.repeat(50));
-
+    console.log(`Server running at http://localhost:${port}`);
+    
     // 캡처 디렉토리 확인 및 생성
     if (!fs.existsSync(capturesDir)) {
         fs.mkdirSync(capturesDir, { recursive: true });
-        console.log(`캡처 디렉토리 생성: ${capturesDir}`);
     }
-
+    
     // 서버 시작 시 자동 크롤링 스케줄링 활성화
-    console.log(`[${getFormattedDateTime()}] 3시간 단위 자동 크롤링 스케줄링을 시작합니다...`);
-    crawlAllCategories().catch(error => {
-        console.error('Initial crawling failed:', error);
-    });
+    console.log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
+    console.log('첫 번째 크롤링을 시작합니다...');
+    crawlAllCategories();
 });
