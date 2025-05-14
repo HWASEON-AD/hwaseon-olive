@@ -5,11 +5,10 @@ const cheerio = require('cheerio');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
 const puppeteer = require('puppeteer-core');
 
 const app = express();
-const port = 5001;
+const port = process.env.PORT || 5001;
 
 // CORS 미들웨어 설정
 app.use(cors());
@@ -32,6 +31,20 @@ let productCache = {
 
 // 크롤링 스케줄링 관련 변수
 let scheduledCrawlTimer;
+
+// Puppeteer 실행 옵션
+const puppeteerOptions = {
+    args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--window-size=1920x1080'
+    ],
+    headless: 'new',
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'
+};
 
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
@@ -252,24 +265,7 @@ async function captureOliveyoungMainRanking() {
         console.log('Chrome 경로:', chromePath);
         
         // 브라우저 연결 시도
-        browser = await puppeteer.launch({
-            executablePath: chromePath,
-            headless: 'new',
-            pipe: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--window-size=1920,1080',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--disable-websockets',
-                '--no-zygote',
-            ],
-            ignoreHTTPSErrors: true,
-            timeout: 60000
-        });
+        browser = await puppeteer.launch(puppeteerOptions);
         
         const page = await browser.newPage();
         

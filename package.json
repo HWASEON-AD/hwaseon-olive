@@ -3,28 +3,29 @@
   "version": "1.0.0",
   "description": "Olive Young ranking crawler",
   "main": "server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "start": "node server.js",
-    "crawl": "node crawler.js"
+    "build": "mkdir -p public/captures"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.9.0",
-    "cheerio": "^1.0.0",
-    "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "puppeteer": "^21.11.0",
-    "sqlite3": "^5.1.7",
-    "uuid": "^9.0.1"
+    "axios": "1.9.0",
+    "cheerio": "1.0.0-rc.12",
+    "cors": "2.8.5",
+    "express": "4.18.2",
+    "puppeteer-core": "21.11.0",
+    "sqlite3": "5.1.7"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hammin0808/hwaseonad.git"
+    "url": "git+https://github.com/hammin0808/hwaseon-olive.git"
   },
   "bugs": {
-    "url": "https://github.com/hammin0808/hwaseonad/issues"
-  },
-  "homepage": "https://github.com/hammin0808/hwaseonad#readme"
+    "url": "https://github.com/hammin0808/hwaseon-olive/issues"
+  }
 }
