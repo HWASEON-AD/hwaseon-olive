@@ -65,9 +65,7 @@ function getCurrentTimeFormat() {
 }
 
 function getKSTTime() {
-    const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    return new Date(utc + (9 * 60 * 60 * 1000));
+    return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
 }
 
 // 다음 크롤링 시간 계산 함수
