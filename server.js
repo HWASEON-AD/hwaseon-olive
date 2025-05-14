@@ -50,20 +50,25 @@ const puppeteerOptions = {
 
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
+    // 현재 시간을 KST로 변환
     const now = new Date();
+    const kstOffset = 9 * 60; // KST is UTC+9
+    const kstNow = new Date(now.getTime() + (kstOffset * 60000));
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
     const scheduledMinutes = 30;
     
     // 현재 시간과 가장 가까운 다음 크롤링 시간 찾기
-    let nextCrawlTime = new Date(now);
+    let nextCrawlTime = new Date(kstNow);
     let found = false;
     
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     for (const hour of scheduledHours) {
+        nextCrawlTime = new Date(kstNow);
         nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
-        if (nextCrawlTime > now) {
+        
+        if (nextCrawlTime > kstNow) {
             found = true;
             break;
         }
@@ -71,6 +76,7 @@ function getNextCrawlTime() {
     
     // 오늘 남은 크롤링 시간이 없으면 내일 첫 크롤링 시간으로 설정
     if (!found) {
+        nextCrawlTime = new Date(kstNow);
         nextCrawlTime.setDate(nextCrawlTime.getDate() + 1);
         nextCrawlTime.setHours(scheduledHours[0], scheduledMinutes, 0, 0);
     }
@@ -442,15 +448,14 @@ function scheduleNextCrawl() {
     const timeUntilNextCrawl = Math.max(0, nextCrawlTime - new Date());
     
     // 다음 크롤링 시간을 보다 명확하게 표시 - 24시간제로 변경
-    const nextTimeFormatted = nextCrawlTime.toLocaleTimeString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
-    const nextDateFormatted = nextCrawlTime.toLocaleDateString('ko-KR', {
+    const nextTimeFormatted = nextCrawlTime.toLocaleString('ko-KR', {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Seoul'
     });
     
     const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
@@ -458,7 +463,7 @@ function scheduleNextCrawl() {
     const remainingMinutes = minutesUntilNext % 60;
     
     console.log('='.repeat(50));
-    console.log(`다음 작업 예정 시간: ${nextDateFormatted} ${nextTimeFormatted}`);
+    console.log(`다음 작업 예정 시간: ${nextTimeFormatted}`);
     console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
     console.log('예정된 작업:');
     console.log('- 전체 카테고리 크롤링');

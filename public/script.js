@@ -1,3 +1,8 @@
+// API 기본 URL 설정
+const BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:5001' 
+    : window.location.origin;
+
 // 전역 이벤트 차단기 - 새로고침 및 폼 제출 방지 (다운로드 버튼 예외 처리)
 document.addEventListener('click', function(e) {
     // 엑셀 다운로드 버튼은 예외 처리
@@ -29,18 +34,44 @@ document.addEventListener('keydown', function(e) {
 // 시간 표시 업데이트 함수
 function updateTimeDisplay(crawlTime) {
     if (!crawlTime) {
-        // 크롤링 시간이 없으면 마지막 크롤링 시간을 가져오기
         fetchLastCrawlTime();
         return;
     }
     
-    const timeText = `최근 업데이트: ${crawlTime}`;
+    // 날짜 형식 변환
+    const timeText = `최근 업데이트: ${formatDateTime(crawlTime)}`;
     
     const updateTime = document.getElementById('updateTime');
     const rankingUpdateTime = document.getElementById('rankingUpdateTime');
     
     if (updateTime) updateTime.innerHTML = timeText;
     if (rankingUpdateTime) rankingUpdateTime.innerHTML = timeText;
+}
+
+// 날짜/시간 포맷 함수
+function formatDateTime(dateTimeStr) {
+    try {
+        const date = new Date(dateTimeStr);
+        if (isNaN(date.getTime())) {
+            return dateTimeStr; // 파싱 실패시 원본 반환
+        }
+        
+        // 한국 시간으로 변환
+        const kstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+        
+        return kstDate.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+    } catch (error) {
+        console.error('Date formatting error:', error);
+        return dateTimeStr;
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
