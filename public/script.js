@@ -617,11 +617,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 { header: '날짜', key: 'date', width: 12 },
                 { header: '시간', key: 'time', width: 8 },
                 { header: '카테고리', key: 'category', width: 15 },
-                { header: '순위', key: 'rank', width: 8, alignment: { horizontal: 'center' } },
+                { header: '순위', key: 'rank', width: 8, style: { numFmt: '0', alignment: { horizontal: 'center' } } },
                 { header: '브랜드', key: 'brand', width: 20 },
                 { header: '제품명', key: 'name', width: 50 },
-                { header: '소비자가', key: 'originalPrice', width: 12, alignment: { horizontal: 'right' } },
-                { header: '판매가', key: 'salePrice', width: 12, alignment: { horizontal: 'right' } },
+                { header: '소비자가', key: 'originalPrice', width: 12, style: { numFmt: '#,##0"원"', alignment: { horizontal: 'right' } } },
+                { header: '판매가', key: 'salePrice', width: 12, style: { numFmt: '#,##0"원"', alignment: { horizontal: 'right' } } },
                 { header: '행사', key: 'promotion', width: 25 }
             ];
             
@@ -644,9 +644,22 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 데이터 추가
             data.forEach(item => {
-                // 행사 정보 가공 - 쉼표로 구분된 형태로 변환
-                let formattedPromotion = '';
+                // 가격에서 숫자만 추출하는 함수
+                const extractNumber = (price) => {
+                    if (!price || price === '없음') return null;
+                    const num = parseInt(price.toString().replace(/[^0-9]/g, ''));
+                    return isNaN(num) ? null : num;
+                };
                 
+                // 순위를 숫자로 변환
+                const rankNum = parseInt(item.rank) || null;
+                
+                // 가격 데이터 변환
+                const originalPrice = extractNumber(item.originalPrice);
+                const salePrice = extractNumber(item.salePrice);
+                
+                // 행사 정보 가공
+                let formattedPromotion = '';
                 if (item.promotion && item.promotion !== '없음' && item.promotion !== '-') {
                     const promotion = item.promotion.toLowerCase();
                     const promotionList = [];
@@ -656,47 +669,50 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (promotion.includes('세일')) promotionList.push('세일');
                     if (promotion.includes('오늘드림') || promotion.includes('드림')) promotionList.push('오늘드림');
                     
-                    // 위 조건에 해당하지 않는 경우 원본 텍스트 사용
-                    if (promotionList.length === 0 && item.promotion.trim()) {
-                        formattedPromotion = item.promotion.trim();
-                    } else {
-                        formattedPromotion = promotionList.join(', ');
-                    }
+                    formattedPromotion = promotionList.length > 0 ? promotionList.join(', ') : item.promotion.trim();
                 }
                 
-                worksheet.addRow({
+                // 행 추가
+                const row = worksheet.addRow({
                     date: item.date || '',
                     time: item.time || '',
                     category: item.category || '',
-                    rank: { text: item.rank || '', alignment: { horizontal: 'center' } },
+                    rank: rankNum,
                     brand: item.brand || '',
                     name: item.name || '',
-                    originalPrice: { text: item.originalPrice || '', alignment: { horizontal: 'right' } },
-                    salePrice: { text: item.salePrice || item.price || '', alignment: { horizontal: 'right' } },
-                    promotion: formattedPromotion
+                    originalPrice: originalPrice || '없음',
+                    salePrice: salePrice || '없음',
+                    promotion: formattedPromotion || '-'
                 });
-            });
-            
-            // 모든 셀에 테두리 추가 및 정렬 설정
-            worksheet.eachRow((row, rowNumber) => {
-                if (rowNumber > 1) { // 헤더 이후의 행
-                    row.eachCell((cell, colNumber) => {
-                        cell.border = {
-                            top: { style: 'thin' },
-                            left: { style: 'thin' },
-                            bottom: { style: 'thin' },
-                            right: { style: 'thin' }
-                        };
-                        // 순위 열은 가운데 정렬
-                        if (colNumber === 4) {
+                
+                // 셀 스타일 적용
+                row.eachCell((cell, colNumber) => {
+                    cell.border = {
+                        top: { style: 'thin' },
+                        left: { style: 'thin' },
+                        bottom: { style: 'thin' },
+                        right: { style: 'thin' }
+                    };
+                    
+                    // 컬럼별 특수 스타일 적용
+                    switch(colNumber) {
+                        case 4: // 순위
                             cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                        }
-                        // 가격 열은 오른쪽 정렬
-                        if (colNumber === 7 || colNumber === 8) {
+                            if (typeof cell.value === 'number') {
+                                cell.numFmt = '0';
+                            }
+                            break;
+                        case 7: // 소비자가
+                        case 8: // 판매가
                             cell.alignment = { horizontal: 'right', vertical: 'middle' };
-                        }
-                    });
-                }
+                            if (typeof cell.value === 'number') {
+                                cell.numFmt = '#,##0"원"';
+                            }
+                            break;
+                        default:
+                            cell.alignment = { vertical: 'middle' };
+                    }
+                });
             });
             
             // FileSaver.js를 사용하여 엑셀 파일 다운로드

@@ -5,7 +5,8 @@ const cheerio = require('cheerio');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const puppeteer = require('puppeteer-core');
+const { Builder, By, until } = require('selenium-webdriver');
+const chrome = require('selenium-webdriver/chrome');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -34,7 +35,22 @@ let scheduledCrawlTimer;
 
 // Chrome 실행 경로 설정
 async function findChrome() {
-    return '/usr/bin/google-chrome-stable';
+    try {
+        // which 명령어로 Chrome 경로 찾기
+        const { execSync } = require('child_process');
+        const chromePath = execSync('which google-chrome-stable').toString().trim();
+        console.log('Chrome 경로 찾음:', chromePath);
+        
+        // Chrome 버전 확인
+        const version = execSync('google-chrome-stable --version').toString().trim();
+        console.log('Chrome 버전:', version);
+        
+        return chromePath;
+    } catch (error) {
+        console.error('Chrome 확인 중 오류:', error.message);
+        console.log('기본 Chrome 경로 사용');
+        return '/usr/bin/google-chrome-stable';
+    }
 }
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
@@ -237,7 +253,7 @@ async function crawlAllCategories() {
 async function captureOliveyoungMainRanking() {
     let retryCount = 0;
     const maxRetries = 3;
-    let browser = null;
+    let driver = null;
     
     async function attemptCapture() {
         console.log('='.repeat(50));
@@ -260,38 +276,27 @@ async function captureOliveyoungMainRanking() {
         const errors = [];
         
         try {
-            // Puppeteer 옵션 설정
-            const options = {
-                headless: 'new',
-                executablePath: '/usr/bin/google-chrome-stable',
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox'
-                ]
-            };
-
+            // Selenium 설정
+            const options = new chrome.Options()
+                .addArguments('--headless')
+                .addArguments('--no-sandbox')
+                .addArguments('--disable-dev-shm-usage')
+                .addArguments('--window-size=1920,1080');
+            
+            if (process.env.CHROME_BIN) {
+                options.setChromeBinaryPath(process.env.CHROME_BIN);
+            }
+            
+            console.log('Chrome 옵션:', options);
             console.log('브라우저 실행 시도...');
-            browser = await puppeteer.launch(options);
+            
+            driver = await new Builder()
+                .forBrowser('chrome')
+                .setChromeOptions(options)
+                .build();
+                
             console.log('브라우저 실행 성공!');
             
-            const page = await browser.newPage();
-            console.log('새 페이지 생성 성공!');
-            
-            // 브라우저 설정
-            await page.setViewport({
-                width: 1920,
-                height: 1080,
-                deviceScaleFactor: 1,
-            });
-            
-            await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
-            
-            // 캡처 디렉토리 확인 및 생성
-            if (!fs.existsSync(capturesDir)) {
-                fs.mkdirSync(capturesDir, { recursive: true });
-                console.log('캡처 디렉토리 생성:', capturesDir);
-            }
-
             // 각 카테고리별 캡처
             for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
                 try {
@@ -299,29 +304,16 @@ async function captureOliveyoungMainRanking() {
                     
                     console.log(`${category} 랭킹 페이지로 이동...`);
                     
-                    await page.goto(url, {
-                        waitUntil: ['networkidle0', 'domcontentloaded'],
-                        timeout: 60000
-                    });
+                    await driver.get(url);
+                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 30000);
+                    await driver.sleep(5000); // 페이지 로딩 대기
                     
-                    // 페이지 로딩 대기
-                    await page.waitForTimeout(8000);
-                    
-                    // 페이지가 완전히 로드될 때까지 대기
-                    await page.waitForFunction(() => {
-                        const element = document.querySelector('.TabsConts');
-                        return element && element.children.length > 0;
-                    }, { timeout: 30000 });
-                    
-                    const fileName = `ranking_${category}_${dateTimeStr}.jpg`;
+                    const fileName = `ranking_${category}_${dateTimeStr}.png`;
                     const filePath = path.join(capturesDir, fileName);
                     
-                    await page.screenshot({
-                        path: filePath,
-                        type: 'jpeg',
-                        quality: 80,
-                        fullPage: true
-                    });
+                    // 스크린샷 캡처
+                    const screenshot = await driver.takeScreenshot();
+                    await fs.promises.writeFile(filePath, screenshot, 'base64');
                     
                     capturedCount++;
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
@@ -329,7 +321,7 @@ async function captureOliveyoungMainRanking() {
                     console.log('-'.repeat(50));
                     
                     // 카테고리 간 대기 시간
-                    await page.waitForTimeout(2000);
+                    await driver.sleep(2000);
                     
                 } catch (error) {
                     errors.push({
@@ -359,9 +351,9 @@ async function captureOliveyoungMainRanking() {
             };
             
         } finally {
-            if (browser) {
+            if (driver) {
                 try {
-                    await browser.close();
+                    await driver.quit();
                     console.log('브라우저가 정상적으로 종료되었습니다.');
                 } catch (closeError) {
                     console.error('브라우저 종료 중 오류:', closeError.message);
@@ -827,17 +819,16 @@ app.use((err, req, res, next) => {
 app.get('/health', async (req, res) => {
     try {
         const chromePath = await findChrome();
-        const browser = await puppeteer.launch({
-            headless: 'new',
-            executablePath: chromePath,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--no-zygote',
-                '--single-process'
-            ]
-        });
-        await browser.close();
+        const driver = await new Builder()
+            .forBrowser('chrome')
+            .setChromeOptions(new chrome.Options()
+                .addArguments('--headless')
+                .addArguments('--no-sandbox')
+                .addArguments('--disable-dev-shm-usage')
+                .addArguments('--window-size=1920,1080')
+            )
+            .build();
+        await driver.close();
         res.json({
             status: 'healthy',
             chrome_path: chromePath,

@@ -1,17 +1,16 @@
 FROM node:20-slim
 
-# Install Chrome
-RUN apt-get update \
-    && apt-get install -y wget gnupg \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && apt-get install -y fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
+# Install Chrome and ChromeDriver
+RUN apt-get update && apt-get install -y \
+    wget \
+    unzip \
+    chromium \
+    chromium-driver \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify Chrome installation
-RUN google-chrome-stable --version
+# Set Chrome and ChromeDriver paths
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -27,4 +26,9 @@ COPY . .
 RUN mkdir -p public/captures && chmod -R 777 public/captures
 
 EXPOSE 5001
+
+# Use dumb-init to handle signals properly
+RUN apt-get update && apt-get install -y dumb-init && rm -rf /var/lib/apt/lists/*
+ENTRYPOINT ["dumb-init", "--"]
+
 CMD [ "node", "server.js" ] 
