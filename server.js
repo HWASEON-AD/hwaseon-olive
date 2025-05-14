@@ -84,9 +84,7 @@ function getNextCrawlTime() {
     // 현재 시간
     const currentHour = kstNow.getHours();
     const currentMinute = kstNow.getMinutes();
-    
-    console.log('현재 KST 시간:', `${currentHour}:${currentMinute}`);
-    
+        
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     let nextCrawlTime = new Date(kstNow);
     let found = false;
@@ -95,7 +93,6 @@ function getNextCrawlTime() {
         if (hour > currentHour || (hour === currentHour && scheduledMinutes > currentMinute)) {
             nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
             found = true;
-            console.log('오늘 다음 크롤링 시간 찾음:', `${hour}:${scheduledMinutes}`);
             break;
         }
     }
@@ -448,23 +445,12 @@ function scheduleNextCrawl() {
     // 시간 차이 계산 (밀리초)
     const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
     
-    // 다음 크롤링 시간 포맷팅
-    const nextTimeFormatted = nextCrawlTime.toLocaleString('ko-KR', {
-        timeZone: 'Asia/Seoul',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
     
     const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
     const hoursUntilNext = Math.floor(minutesUntilNext/60);
     const remainingMinutes = minutesUntilNext % 60;
     
     console.log('='.repeat(50));
-    console.log(`다음 작업 예정 시간: ${nextTimeFormatted}`);
     console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
     console.log('예정된 작업:');
     console.log('- 전체 카테고리 크롤링');
