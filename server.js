@@ -77,10 +77,15 @@ function getNextCrawlTime() {
     let nextCrawlTime = new Date(kstNow);
     let found = false;
     
+    // 현재 시간
+    const currentHour = kstNow.getHours();
+    const currentMinute = kstNow.getMinutes();
+    
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     for (const hour of scheduledHours) {
-        nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
-        if (nextCrawlTime > kstNow) {
+        // 현재 시간이 크롤링 예정 시간과 같거나 이전이면 해당 시간으로 설정
+        if (hour > currentHour || (hour === currentHour && currentMinute <= scheduledMinutes)) {
+            nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
             found = true;
             break;
         }
@@ -487,18 +492,19 @@ function scheduleNextCrawl() {
     
     // 다음 크롤링 시간 계산
     const nextCrawlTime = getNextCrawlTime();
-    const timeUntilNextCrawl = Math.max(0, nextCrawlTime - new Date());
+    const now = new Date();
+    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const timeUntilNextCrawl = Math.max(0, nextCrawlTime - kstNow);
     
     // 다음 크롤링 시간을 보다 명확하게 표시 - 24시간제로 변경
-    const nextTimeFormatted = nextCrawlTime.toLocaleTimeString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
-    const nextDateFormatted = nextCrawlTime.toLocaleDateString('ko-KR', {
+    const nextTimeFormatted = nextCrawlTime.toLocaleString('ko-KR', {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Seoul'
     });
     
     const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
@@ -506,7 +512,7 @@ function scheduleNextCrawl() {
     const remainingMinutes = minutesUntilNext % 60;
     
     console.log('='.repeat(50));
-    console.log(`다음 작업 예정 시간: ${nextDateFormatted} ${nextTimeFormatted}`);
+    console.log(`다음 작업 예정 시간: ${nextTimeFormatted}`);
     console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
     console.log('예정된 작업:');
     console.log('- 전체 카테고리 크롤링');
@@ -514,7 +520,9 @@ function scheduleNextCrawl() {
     console.log('='.repeat(50));
     
     // 다음 크롤링 스케줄링
-    scheduledCrawlTimer = setTimeout(crawlAllCategories, timeUntilNextCrawl);
+    scheduledCrawlTimer = setTimeout(() => {
+        crawlAllCategories();
+    }, timeUntilNextCrawl);
 }
 
 // 카테고리별 상품 코드
@@ -931,6 +939,7 @@ app.listen(port, () => {
     
     // 서버 시작 시 자동 크롤링 스케줄링 활성화
     console.log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
-    console.log('첫 번째 크롤링을 시작합니다...');
+    
+    // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
     crawlAllCategories();
 });

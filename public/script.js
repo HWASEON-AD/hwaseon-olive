@@ -57,22 +57,24 @@ function updateTimeDisplay(crawlTime) {
 // 날짜/시간 포맷 함수
 function formatDateTime(dateTimeStr) {
     try {
-        const date = new Date(dateTimeStr);
-        if (isNaN(date.getTime())) {
-            return dateTimeStr; // 파싱 실패시 원본 반환
+        if (typeof dateTimeStr === 'string' && dateTimeStr.includes('서버')) {
+            return dateTimeStr;
         }
         
-        // 한국 시간으로 변환
-        const kstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+        const date = new Date(dateTimeStr);
+        if (isNaN(date.getTime())) {
+            return dateTimeStr;
+        }
         
-        return kstDate.toLocaleString('ko-KR', {
+        return date.toLocaleString('ko-KR', {
             year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false
+            hour12: false,
+            timeZone: 'Asia/Seoul'
         });
     } catch (error) {
         console.error('Date formatting error:', error);
