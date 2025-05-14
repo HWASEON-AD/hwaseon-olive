@@ -5,7 +5,7 @@ const cheerio = require('cheerio');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -118,7 +118,6 @@ async function crawlAllCategories() {
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: false
     })}] 3시간 정기 크롤링 시작`);
     
@@ -126,7 +125,6 @@ async function crawlAllCategories() {
     const crawlTime = kstNow.toLocaleString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: false
     });
     
@@ -293,121 +291,74 @@ async function findChrome() {
 }
 
 async function captureOliveyoungMainRanking() {
-    console.log('='.repeat(50));
-    console.log('올리브영 랭킹 페이지 캡처 시작...');
-    console.log('총 21개 카테고리 캡처 예정');
-    console.log('='.repeat(50));
+    let retryCount = 0;
+    const maxRetries = 3;
     
-    const now = getKSTTime();
-    const dateTimeStr = now.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    }).replace(/[. :]/g, '-');
-    
-    let browser = null;
-    let capturedCount = 0;
-    const totalCategories = Object.keys(CATEGORY_CODES).length;
-    
-    try {
-        // Puppeteer 옵션 설정
-        const options = {
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--window-size=1920x1080',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process'
-            ],
-            headless: 'new',
-            ignoreHTTPSErrors: true,
-            timeout: 30000
-        };
+    async function attemptCapture() {
+        console.log('='.repeat(50));
+        console.log('올리브영 랭킹 페이지 캡처 시작...');
+        console.log('총 21개 카테고리 캡처 예정');
+        console.log('='.repeat(50));
+        
+        const now = getKSTTime();
+        const dateTimeStr = now.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).replace(/[. :]/g, '-');
+        
+        let browser = null;
+        let capturedCount = 0;
+        const totalCategories = Object.keys(CATEGORY_CODES).length;
+        
+        try {
+            // Puppeteer 옵션 설정
+            const options = {
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--disable-gpu',
+                    '--window-size=1920x1080'
+                ],
+                headless: 'new'
+            };
 
-        console.log('Puppeteer 실행 옵션:', JSON.stringify(options, null, 2));
-        
-        // 브라우저 실행 시도
-        console.log('브라우저 실행 시도...');
-        browser = await puppeteer.launch(options);
-        console.log('브라우저 실행 성공!');
-        
-        const page = await browser.newPage();
-        console.log('새 페이지 생성 성공!');
-        
-        // 브라우저 설정
-        await page.setViewport({
-            width: 1920,
-            height: 1080,
-            deviceScaleFactor: 1,
-        });
-        
-        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
-        
-        // 먼저 전체 랭킹 캡처
-        let retryCount = 0;
-        const maxRetries = 3;
-        
-        while (retryCount < maxRetries) {
-            try {
-                const url = 'https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=24&selectType=N';
-                
-                console.log(`전체 랭킹 페이지로 이동 시도 ${retryCount + 1}/${maxRetries}`);
-                
-                await page.goto(url, {
-                    waitUntil: ['networkidle0', 'domcontentloaded'],
-                    timeout: 60000
-                });
-                
-                // 페이지 로딩 대기
-                await page.waitForTimeout(6000);
-                
-                // 페이지가 완전히 로드될 때까지 대기
-                await page.waitForFunction(() => {
-                    const element = document.querySelector('.TabsConts');
-                    return element && element.children.length > 0;
-                }, { timeout: 30000 });
-                
-                const fileName = `ranking_전체_${dateTimeStr}.jpg`;
-                const filePath = path.join(capturesDir, fileName);
-                
-                await page.screenshot({
-                    path: filePath,
-                    type: 'jpeg',
-                    quality: 80,
-                    fullPage: true
-                });
-                
-                console.log(`전체 랭킹 페이지 캡처 완료: ${fileName}`);
-                break;
-                
-            } catch (error) {
-                console.error(`전체 랭킹 캡처 시도 ${retryCount + 1}/${maxRetries} 실패:`, error.message);
-                retryCount++;
-                
-                if (retryCount < maxRetries) {
-                    console.log(`${retryCount + 1}번째 재시도 준비 중... (5초 대기)`);
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                }
+            console.log('Puppeteer 실행 옵션:', JSON.stringify(options, null, 2));
+            
+            // 브라우저 실행 시도
+            console.log('브라우저 실행 시도...');
+            browser = await puppeteer.launch(options);
+            console.log('브라우저 실행 성공!');
+            
+            const page = await browser.newPage();
+            console.log('새 페이지 생성 성공!');
+            
+            // 브라우저 설정
+            await page.setViewport({
+                width: 1920,
+                height: 1080,
+                deviceScaleFactor: 1,
+            });
+            
+            await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+            
+            // 캡처 디렉토리 확인 및 생성
+            if (!fs.existsSync(capturesDir)) {
+                fs.mkdirSync(capturesDir, { recursive: true });
+                console.log('캡처 디렉토리 생성:', capturesDir);
             }
-        }
 
-        // 각 카테고리별 캡처
-        for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
-            if (category === '전체') continue;
-            
-            retryCount = 0;
-            
-            while (retryCount < maxRetries) {
+            // 각 카테고리별 캡처
+            for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
                 try {
                     const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
                     
-                    console.log(`${category} 랭킹 페이지로 이동 시도 ${retryCount + 1}/${maxRetries}`);
+                    console.log(`${category} 랭킹 페이지로 이동...`);
                     
                     await page.goto(url, {
                         waitUntil: ['networkidle0', 'domcontentloaded'],
@@ -437,44 +388,49 @@ async function captureOliveyoungMainRanking() {
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
                     console.log(`진행률: ${capturedCount}/${totalCategories} (${Math.round(capturedCount/totalCategories*100)}%)`);
                     console.log('-'.repeat(50));
-                    break;
+                    
+                    // 카테고리 간 대기 시간
+                    await page.waitForTimeout(2000);
                     
                 } catch (error) {
-                    console.error(`${category} 캡처 시도 ${retryCount + 1}/${maxRetries} 실패:`, error.message);
-                    retryCount++;
-                    
-                    if (retryCount < maxRetries) {
-                        console.log(`${retryCount + 1}번째 재시도 준비 중... (5초 대기)`);
-                        await new Promise(resolve => setTimeout(resolve, 5000));
-                    }
+                    console.error(`${category} 캡처 중 오류:`, error.message);
                 }
             }
             
-            if (retryCount >= maxRetries) {
-                console.error(`${category}: 최대 재시도 횟수(${maxRetries})를 초과했습니다.`);
-                continue;
-            }
+            return true; // 성공적으로 완료
             
-            // 카테고리 간 대기 시간
-            await page.waitForTimeout(2000);
+        } catch (error) {
+            console.error('캡처 프로세스 오류:', error.message);
+            return false; // 실패
+            
+        } finally {
+            if (browser) {
+                try {
+                    await browser.close();
+                    console.log('브라우저가 정상적으로 종료되었습니다.');
+                } catch (closeError) {
+                    console.error('브라우저 종료 중 오류:', closeError.message);
+                }
+            }
+        }
+    }
+    
+    // 최대 3번까지 재시도
+    while (retryCount < maxRetries) {
+        console.log(`캡처 시도 ${retryCount + 1}/${maxRetries}`);
+        const success = await attemptCapture();
+        
+        if (success) {
+            console.log('캡처 작업 성공!');
+            break;
         }
         
-    } catch (error) {
-        console.error('캡처 프로세스 오류:', error.message);
-        console.error('상세 에러 정보:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name,
-            code: error.code
-        });
-    } finally {
-        if (browser) {
-            try {
-                await browser.close();
-                console.log('브라우저가 정상적으로 종료되었습니다.');
-            } catch (closeError) {
-                console.error('브라우저 종료 중 오류:', closeError.message);
-            }
+        retryCount++;
+        if (retryCount < maxRetries) {
+            console.log(`캡처 실패, ${retryCount + 1}번째 재시도 준비 중... (5초 대기)`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        } else {
+            console.log('최대 재시도 횟수 초과, 캡처 작업을 중단합니다.');
         }
     }
 }
