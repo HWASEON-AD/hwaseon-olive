@@ -5,7 +5,7 @@ const cheerio = require('cheerio');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -32,13 +32,39 @@ let productCache = {
 // 크롤링 스케줄링 관련 변수
 let scheduledCrawlTimer;
 
-// Puppeteer 실행 옵션
-const CHROME_PATH = '/Users/hammin0808/.cache/puppeteer/chrome/mac_arm-136.0.7103.92/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+// Chrome 실행 경로 설정
+async function findChrome() {
+    const paths = [
+        '/usr/bin/google-chrome',                                      // Linux (Render)
+        '/usr/bin/google-chrome-stable',                              // Linux alternative
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',  // Windows
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+    ];
+
+    // Render 환경인 경우
+    if (process.env.RENDER) {
+        console.log('Render 환경에서 실행 중입니다.');
+        return '/usr/bin/google-chrome-stable';
+    }
+
+    for (const path of paths) {
+        if (fs.existsSync(path)) {
+            console.log('Chrome 경로를 찾았습니다:', path);
+            return path;
+        }
+    }
+    throw new Error('Chrome 브라우저를 찾을 수 없습니다.');
+}
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
 function getCurrentTimeFormat() {
     const now = new Date();
-    return now.toLocaleString('ko-KR', {
+    const utc = now.getTime();
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(utc + kstOffset);
+    
+    return kstNow.toLocaleTimeString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
@@ -53,7 +79,10 @@ function getKSTTime() {
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
     // 현재 KST 시간 가져오기
-    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const now = new Date();
+    const utc = now.getTime();
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(utc + kstOffset);
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
@@ -235,41 +264,6 @@ async function crawlAllCategories() {
     }
 }
 
-// Chrome 경로 찾기 함수 수정
-async function findChrome() {
-    const possiblePaths = [
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',  // macOS
-        '/usr/bin/google-chrome',                                       // Linux
-        '/usr/bin/google-chrome-stable',                               // Linux alternative
-        '/usr/bin/chromium',                                           // Linux chromium
-        '/usr/bin/chromium-browser',                                   // Linux chromium alternative
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',   // Windows
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32bit
-    ];
-
-    // Render 환경인 경우
-    if (process.env.RENDER) {
-        console.log('Render 환경에서 실행 중입니다.');
-        return '/usr/bin/google-chrome-stable';
-    }
-
-    // 각 경로 확인
-    for (const path of possiblePaths) {
-        try {
-            if (fs.existsSync(path)) {
-                console.log('Chrome 경로를 찾았습니다:', path);
-                return path;
-            }
-        } catch (error) {
-            console.log(`${path} 확인 중 오류:`, error.message);
-        }
-    }
-
-    // 기본값 반환
-    console.log('Chrome을 찾을 수 없어 기본 Linux 경로를 사용합니다.');
-    return '/usr/bin/google-chrome-stable';
-}
-
 async function captureOliveyoungMainRanking() {
     let retryCount = 0;
     const maxRetries = 3;
@@ -295,26 +289,29 @@ async function captureOliveyoungMainRanking() {
         const totalCategories = Object.keys(CATEGORY_CODES).length;
         
         try {
+            // Chrome 경로 찾기
+            const chromePath = await findChrome();
+            console.log('Chrome 실행 경로:', chromePath);
+            
             // Puppeteer 옵션 설정
             const options = {
                 headless: 'new',
-                executablePath: CHROME_PATH,
+                executablePath: chromePath,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-accelerated-2d-canvas',
                     '--disable-gpu',
-                    '--window-size=1920x1080'
+                    '--window-size=1920x1080',
+                    '--disable-web-security',
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--no-zygote',
+                    '--single-process'
                 ],
-                defaultViewport: {
-                    width: 1920,
-                    height: 1080,
-                    deviceScaleFactor: 1
-                }
+                ignoreHTTPSErrors: true
             };
 
-            console.log('Chrome 실행 경로:', CHROME_PATH);
             console.log('Puppeteer 실행 옵션:', JSON.stringify(options, null, 2));
             
             // 브라우저 실행 시도
@@ -384,11 +381,11 @@ async function captureOliveyoungMainRanking() {
                 }
             }
             
-            return true; // 성공적으로 완료
+            return true;
             
         } catch (error) {
             console.error('캡처 프로세스 오류:', error.message);
-            return false; // 실패
+            return false;
             
         } finally {
             if (browser) {
@@ -430,10 +427,13 @@ function scheduleNextCrawl() {
     }
     
     const nextCrawlTime = getNextCrawlTime();
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const now = new Date();
+    const utc = now.getTime();
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(utc + kstOffset);
     
     // 시간 차이 계산 (밀리초)
-    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
+    const timeUntilNextCrawl = nextCrawlTime.getTime() - kstNow.getTime();
     
     // 다음 크롤링 시간 포맷팅
     const nextTimeFormatted = nextCrawlTime.toLocaleString('ko-KR', {
@@ -449,6 +449,10 @@ function scheduleNextCrawl() {
     const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
     const hoursUntilNext = Math.floor(minutesUntilNext/60);
     const remainingMinutes = minutesUntilNext % 60;
+    
+    // 현재 시간 디버그 로깅
+    console.log('현재 서버 시간:', now.toLocaleString());
+    console.log('현재 KST 시간:', kstNow.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
     
     console.log('='.repeat(50));
     console.log(`다음 작업 예정 시간: ${nextTimeFormatted}`);
