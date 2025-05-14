@@ -359,79 +359,94 @@ document.addEventListener('DOMContentLoaded', () => {
             captureListContainer.appendChild(emptyMessage);
             return;
         }
-
-        // 카테고리별로 캡처 그룹화
-        const capturesByCategory = {};
         
-        // 캡처들을 카테고리별로 분류
-        capturesList.forEach(capture => {
-            const category = capture.category;
-            if (!capturesByCategory[category]) {
-                capturesByCategory[category] = [];
+        // 캡처들을 날짜별로 그룹화
+        const capturesByDate = {};
+        
+        // 선택된 카테고리의 캡처만 필터링
+        const filteredCaptures = selectedCategory ? 
+            capturesList.filter(capture => capture.category === selectedCategory) :
+            capturesList;
+        
+        if (filteredCaptures.length === 0) {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.style.width = '100%';
+            emptyMessage.style.textAlign = 'center';
+            emptyMessage.style.padding = '50px 0';
+            emptyMessage.style.fontSize = '18px';
+            emptyMessage.style.color = '#666';
+            emptyMessage.style.gridColumn = '1 / -1';
+            emptyMessage.innerHTML = selectedCategory ? 
+                `선택한 "${selectedCategory}" 카테고리의 캡처가 없습니다.` :
+                '저장된 캡처가 없습니다.';
+            captureListContainer.appendChild(emptyMessage);
+            return;
+        }
+        
+        filteredCaptures.forEach(capture => {
+            const dateParts = capture.date.split('-');
+            const formattedDate = `${dateParts[0]}년 ${dateParts[1]}월 ${dateParts[2]}일`;
+            
+            if (!capturesByDate[formattedDate]) {
+                capturesByDate[formattedDate] = [];
             }
-            capturesByCategory[category].push(capture);
+            
+            capturesByDate[formattedDate].push(capture);
         });
-
-        // 카테고리별로 캡처 표시
-        Object.keys(capturesByCategory).sort().forEach(category => {
-            // 선택된 카테고리가 있고, 현재 카테고리가 선택된 것이 아니면 건너뛰기
-            if (selectedCategory && category !== selectedCategory) {
-                return;
-            }
-
-            // 카테고리 헤더 생성
-            const categoryHeader = document.createElement('div');
-            categoryHeader.style.gridColumn = '1 / -1';
-            categoryHeader.style.marginTop = '30px';
-            categoryHeader.style.marginBottom = '20px';
-            categoryHeader.style.padding = '10px 20px';
-            categoryHeader.style.backgroundColor = '#f8f9fa';
-            categoryHeader.style.borderRadius = '8px';
-            categoryHeader.style.fontSize = '20px';
-            categoryHeader.style.fontWeight = 'bold';
-            categoryHeader.style.color = '#333';
-            categoryHeader.innerHTML = `${category} 카테고리`;
-            captureListContainer.appendChild(categoryHeader);
-
-            // 해당 카테고리의 캡처들을 날짜별로 정렬
-            const sortedCaptures = capturesByCategory[category].sort((a, b) => {
-                if (a.date !== b.date) {
-                    return b.date.localeCompare(a.date);
-                }
-                return b.time.localeCompare(a.time);
-            });
-
-            // 캡처 아이템들을 표시
-            sortedCaptures.forEach(capture => {
+        
+        // 날짜별로 정렬 (최신 날짜 먼저)
+        const sortedDates = Object.keys(capturesByDate).sort((a, b) => {
+            const dateA = new Date(a.replace(/년|월|일/g, '').split(' ').join('-'));
+            const dateB = new Date(b.replace(/년|월|일/g, '').split(' ').join('-'));
+            return dateB - dateA;
+        });
+        
+        // 날짜별로 캡처 목록 표시
+        sortedDates.forEach(dateStr => {
+            // 날짜 헤더 추가
+            const dateHeader = document.createElement('div');
+            dateHeader.className = 'capture-date-header';
+            dateHeader.style.gridColumn = '1 / -1';
+            dateHeader.style.borderBottom = '2px solid #007BFF';
+            dateHeader.style.padding = '10px 5px';
+            dateHeader.style.marginTop = '20px';
+            dateHeader.style.marginBottom = '15px';
+            dateHeader.style.fontSize = '18px';
+            dateHeader.style.fontWeight = 'bold';
+            dateHeader.style.color = '#007BFF';
+            dateHeader.innerHTML = dateStr;
+            captureListContainer.appendChild(dateHeader);
+            
+            // 해당 날짜의 캡처들 표시
+            capturesByDate[dateStr].forEach(capture => {
                 const captureItem = document.createElement('div');
-                captureItem.className = 'capture-item';
-                captureItem.style.border = '1px solid #eee';
-                captureItem.style.borderRadius = '8px';
-                captureItem.style.overflow = 'hidden';
-                captureItem.style.backgroundColor = '#fff';
-                captureItem.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
                 
-                const captureDate = new Date(capture.date + 'T' + capture.time);
-                const formattedDate = captureDate.toLocaleString('ko-KR', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                });
-
+                // 카테고리 이름 포맷팅 (underbar를 공백으로 변경)
+                const categoryName = capture.category.replace('_', ' ');
+                
+                // 이미지 URL 생성 - 전체 URL 사용
+                const imageUrl = `${BASE_URL}${capture.imageUrl}`;
+                
+                // 시간 포맷
+                const timeStr = capture.time || '';
+                
+                // 이미지 URL 로깅
+                console.log('캡처 정보:', capture);
+                
                 captureItem.innerHTML = `
-                    <img src="${capture.imageUrl}" alt="캡처 이미지" style="width: 100%; height: auto; display: block;">
-                    <div style="padding: 15px;">
-                        <div style="margin-bottom: 10px; color: #666;">
-                            캡처 시간: ${formattedDate}
+                    <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
+                        <div style="padding: 10px; background-color: #f8f9fa; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="font-weight: bold; margin-right: 10px;">${timeStr}</span>
+                                <span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${categoryName}</span>
+                            </div>
+                            <div>
+                                <button onclick="downloadImage('${capture.imageUrl}')" style="background: #4CAF50; color: white; border: none; border-radius: 3px; padding: 5px 10px; cursor: pointer; text-decoration: none; font-size: 12px;">다운로드</button>
+                            </div>
                         </div>
-                        <button onclick="deleteCapture('${capture.id}')" 
-                                style="background-color: #dc3545; color: white; border: none; 
-                                       padding: 5px 10px; border-radius: 4px; cursor: pointer;">
-                            삭제
-                        </button>
+                        <div style="padding: 10px; text-align: center;">
+                            <img src="${imageUrl}" alt="캡처 이미지" style="max-width: 100%; cursor: pointer;" onclick="showFullImage('${imageUrl}')">
+                        </div>
                     </div>
                 `;
                 
