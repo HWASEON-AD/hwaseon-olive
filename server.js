@@ -252,40 +252,40 @@ async function crawlAllCategories() {
     }
 }
 
+// Chrome 경로 찾기 함수 수정
 async function findChrome() {
+    const possiblePaths = [
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',  // macOS
+        '/usr/bin/google-chrome',                                       // Linux
+        '/usr/bin/google-chrome-stable',                               // Linux alternative
+        '/usr/bin/chromium',                                           // Linux chromium
+        '/usr/bin/chromium-browser',                                   // Linux chromium alternative
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',   // Windows
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32bit
+    ];
+
     // Render 환경인 경우
     if (process.env.RENDER) {
         console.log('Render 환경에서 실행 중입니다.');
-        return '/usr/bin/google-chrome';
+        return '/usr/bin/google-chrome-stable';
     }
 
-    // macOS의 Chrome 기본 경로
-    const macChromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-    
-    if (fs.existsSync(macChromePath)) {
-        console.log('Chrome 경로를 찾았습니다:', macChromePath);
-        return macChromePath;
-    }
-    
-    // 다른 가능한 경로들 시도
-    const paths = [
-        '/usr/bin/google-chrome',                // Linux
-        '/usr/bin/google-chrome-stable',         // Linux alternative
-        '/usr/bin/chromium-browser'             // Linux
-    ];
-
-    for (const path of paths) {
-        if (fs.existsSync(path)) {
-            console.log('Chrome 경로를 찾았습니다:', path);
-            return path;
+    // 각 경로 확인
+    for (const path of possiblePaths) {
+        try {
+            if (fs.existsSync(path)) {
+                console.log('Chrome 경로를 찾았습니다:', path);
+                return path;
+            }
+        } catch (error) {
+            console.log(`${path} 확인 중 오류:`, error.message);
         }
     }
-    
-    console.log('Chrome을 찾을 수 없어 기본 macOS 경로를 사용합니다.');
-    return macChromePath;
+
+    // 기본값 반환
+    console.log('Chrome을 찾을 수 없어 기본 Linux 경로를 사용합니다.');
+    return '/usr/bin/google-chrome-stable';
 }
-
-
 
 async function captureOliveyoungMainRanking() {
     console.log('='.repeat(50));
@@ -293,12 +293,15 @@ async function captureOliveyoungMainRanking() {
     console.log('총 21개 카테고리 캡처 예정');
     console.log('='.repeat(50));
     
-    const now = new Date();
-    // 한국 시간으로 변환
-    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    const today = kstNow.toISOString().split('T')[0];
-    const timeStr = getCurrentTimeFormat();
-    const dateTimeStr = `${today}_${timeStr.replace(':', '-')}`;
+    const now = getKSTTime();
+    const dateTimeStr = now.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).replace(/[. :]/g, '-');
     
     let browser = null;
     let capturedCount = 0;
@@ -306,23 +309,35 @@ async function captureOliveyoungMainRanking() {
     
     try {
         // Chrome 설치 확인
-        const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome';
+        const chromePath = await findChrome();
         console.log('Chrome 경로:', chromePath);
         
-        try {
-            const { execSync } = require('child_process');
-            const chromeVersion = execSync(`${chromePath} --version`).toString();
-            console.log('설치된 Chrome 버전:', chromeVersion);
-        } catch (error) {
-            console.error('Chrome 버전 확인 실패:', error.message);
-        }
+        // Puppeteer 옵션 설정
+        const options = {
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu',
+                '--window-size=1920x1080',
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-notifications'
+            ],
+            headless: 'new',
+            executablePath: chromePath,
+            ignoreHTTPSErrors: true,
+            timeout: 30000
+        };
 
-        // Puppeteer 옵션 로깅
-        console.log('Puppeteer 실행 옵션:', JSON.stringify(puppeteerOptions, null, 2));
+        console.log('Puppeteer 실행 옵션:', JSON.stringify(options, null, 2));
         
         // 브라우저 실행 시도
         console.log('브라우저 실행 시도...');
-        browser = await puppeteer.launch(puppeteerOptions);
+        browser = await puppeteer.launch(options);
         console.log('브라우저 실행 성공!');
         
         const page = await browser.newPage();
@@ -473,19 +488,27 @@ async function captureOliveyoungMainRanking() {
         }
         
     } catch (error) {
-        console.error('캡처 프로세스 전체 오류:', error);
+        console.error('캡처 프로세스 오류:', error.message);
         console.error('상세 에러 정보:', {
             message: error.message,
             stack: error.stack,
-            name: error.name
+            name: error.name,
+            code: error.code
         });
+        
+        // 에러 발생 시 재시도 로직
+        if (!browser) {
+            console.log('브라우저 실행 실패, 5초 후 재시도...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            return captureOliveyoungMainRanking();
+        }
     } finally {
         if (browser) {
             try {
                 await browser.close();
                 console.log('브라우저가 정상적으로 종료되었습니다.');
             } catch (closeError) {
-                console.error('브라우저 종료 중 오류:', closeError);
+                console.error('브라우저 종료 중 오류:', closeError.message);
             }
         }
     }
