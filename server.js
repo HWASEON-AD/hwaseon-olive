@@ -281,10 +281,12 @@ async function captureOliveyoungMainRanking() {
                 .addArguments('--headless')
                 .addArguments('--no-sandbox')
                 .addArguments('--disable-dev-shm-usage')
-                .addArguments('--start-maximized')  // 브라우저 최대화
-                .addArguments('--window-size=1920,1080')  // 기본 창 크기 설정
-                .addArguments('--hide-scrollbars')  // 스크롤바 숨기기
-                .addArguments('--force-device-scale-factor=1');  // 화면 배율 1로 설정
+                .addArguments('--start-maximized')
+                .addArguments('--window-size=1920,1080')
+                .addArguments('--hide-scrollbars')
+                .addArguments('--force-device-scale-factor=1')
+                .addArguments('--screenshot-format=jpeg')  // JPEG 형식으로 스크린샷 설정
+                .addArguments('--screenshot-quality=80');  // JPEG 품질 설정 (0-100)
             
             if (process.env.CHROME_BIN) {
                 options.setChromeBinaryPath(process.env.CHROME_BIN);
@@ -375,7 +377,7 @@ async function captureOliveyoungMainRanking() {
                         `);
                     }, 10000, '이미지 로딩 시간 초과');
                     
-                    const fileName = `ranking_${category}_${dateTimeStr}.png`;
+                    const fileName = `ranking_${category}_${dateTimeStr}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
                     
                     // 스크린샷 캡처
