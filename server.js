@@ -272,7 +272,6 @@ async function captureOliveyoungMainRanking() {
         }).replace(/[. :]/g, '-');
         
         let capturedCount = 0;
-        const totalCategories = Object.keys(CATEGORY_CODES).length;
         const errors = [];
         
         try {
@@ -285,9 +284,12 @@ async function captureOliveyoungMainRanking() {
                 .addArguments('--window-size=1920,1080')
                 .addArguments('--hide-scrollbars')
                 .addArguments('--force-device-scale-factor=1')
-                .addArguments('--screenshot-format=jpeg')  // JPEG 형식으로 스크린샷 설정
-                .addArguments('--screenshot-quality=80');  // JPEG 품질 설정 (0-100)
-            
+                .addArguments('--screenshot-format=jpeg')
+                .addArguments('--screenshot-quality=80')
+                .addArguments('--disable-gpu')
+                .addArguments('--disable-extensions')
+                .addArguments('--disable-notifications');
+
             if (process.env.CHROME_BIN) {
                 options.setChromeBinaryPath(process.env.CHROME_BIN);
             }
@@ -302,7 +304,7 @@ async function captureOliveyoungMainRanking() {
                 
             console.log('브라우저 실행 성공!');
             
-            // 각 카테고리별 캡처
+            // 순차적으로 각 카테고리 처리
             for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
                 try {
                     const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
@@ -312,100 +314,71 @@ async function captureOliveyoungMainRanking() {
                     await driver.get(url);
                     
                     // 페이지 로딩 대기
-                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 30000);
+                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 20000);
                     
-                    // 추가 대기 시간으로 동적 콘텐츠 로딩 보장
-                    await driver.sleep(5000);
-
-                    // 카테고리 이름 표시 div 삽입
+                    // 필수 요소 로딩 대기
+                    await driver.wait(async () => {
+                        const products = await driver.findElements(By.css('.TabsConts .prd_info'));
+                        return products.length > 0;
+                    }, 20000, '상품 목록 로딩 시간 초과');
+                    
+                    // 추가 대기 시간
+                    await driver.sleep(2000);
+                    
+                    // 카테고리 헤더 추가
                     await driver.executeScript(`
-                        // 기존 카테고리 표시 div 제거
-                        const existingCategoryDiv = document.getElementById('custom-category-header');
-                        if (existingCategoryDiv) {
-                            existingCategoryDiv.remove();
-                        }
-
-                        // 새로운 카테고리 표시 div 생성
                         const categoryDiv = document.createElement('div');
                         categoryDiv.id = 'custom-category-header';
-                        categoryDiv.style.cssText = \`
-                            position: fixed;
-                            top: 0;
-                            left: 0;
-                            width: 100%;
-                            background-color: #333333;
-                            color: white;
-                            text-align: center;
-                            padding: 10px 0;
-                            font-size: 16px;
-                            font-weight: bold;
-                            z-index: 9999;
-                        \`;
-                        
-                        // 카테고리 이름 설정 (언더바를 공백으로 변경)
+                        categoryDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background-color:#333;color:white;text-align:center;padding:10px 0;font-size:16px;font-weight:bold;z-index:9999;';
                         categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
-                        
-                        // 문서에 추가
                         document.body.insertBefore(categoryDiv, document.body.firstChild);
-
-                        // 기존 컨텐츠를 카테고리 헤더 아래로 이동
                         document.body.style.marginTop = '40px';
                     `);
-
-                    // 전체 페이지 높이 구하기 (카테고리 헤더 높이 포함)
-                    const pageHeight = await driver.executeScript('return Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);');
-                    
-                    // viewport 크기 설정
-                    await driver.manage().window().setRect({
-                        width: 1920,
-                        height: Math.max(1080, pageHeight)
-                    });
-                    
-                    // 페이지 맨 위로 스크롤
-                    await driver.executeScript('window.scrollTo(0, 0);');
-                    
-                    // 모든 이미지가 로드될 때까지 대기
-                    await driver.wait(async () => {
-                        return await driver.executeScript(`
-                            const images = document.getElementsByTagName('img');
-                            for (let img of images) {
-                                if (!img.complete) {
-                                    return false;
-                                }
-                            }
-                            return true;
-                        `);
-                    }, 10000, '이미지 로딩 시간 초과');
-                    
-                    const fileName = `ranking_${category}_${dateTimeStr}.jpeg`;
-                    const filePath = path.join(capturesDir, fileName);
                     
                     // 스크린샷 캡처
+                    const fileName = `ranking_${category}_${dateTimeStr}.jpeg`;
+                    const filePath = path.join(capturesDir, fileName);
                     const screenshot = await driver.takeScreenshot();
                     await fs.promises.writeFile(filePath, screenshot, 'base64');
                     
                     capturedCount++;
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
-                    console.log(`진행률: ${capturedCount}/${totalCategories} (${Math.round(capturedCount/totalCategories*100)}%)`);
+                    console.log(`진행률: ${capturedCount}/${Object.keys(CATEGORY_CODES).length} (${Math.round(capturedCount/Object.keys(CATEGORY_CODES).length*100)}%)`);
                     console.log('-'.repeat(50));
                     
                     // 카테고리 간 대기 시간
-                    await driver.sleep(2000);
+                    await driver.sleep(1000);
                     
                 } catch (error) {
+                    console.error(`${category} 캡처 중 오류:`, error.message);
                     errors.push({
                         category,
                         error: error.message,
                         timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
                     });
-                    console.error(`${category} 캡처 중 오류:`, error.message);
+                    
+                    // 오류 발생 시 브라우저 재시작
+                    try {
+                        await driver.quit();
+                    } catch (e) {
+                        console.error('브라우저 종료 중 오류:', e.message);
+                    }
+                    
+                    // 새 브라우저 세션 시작
+                    driver = await new Builder()
+                        .forBrowser('chrome')
+                        .setChromeOptions(options)
+                        .build();
+                        
+                    // 오류 후 잠시 대기
+                    await driver.sleep(2000);
                 }
             }
             
             return {
                 success: capturedCount > 0,
                 capturedCount,
-                totalCategories,
+                totalCategories: Object.keys(CATEGORY_CODES).length,
                 errors: errors.length > 0 ? errors : null
             };
             
@@ -415,7 +388,7 @@ async function captureOliveyoungMainRanking() {
                 success: false,
                 error: error.message,
                 capturedCount,
-                totalCategories,
+                totalCategories: Object.keys(CATEGORY_CODES).length,
                 errors
             };
             
