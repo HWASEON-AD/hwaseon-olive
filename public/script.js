@@ -131,27 +131,27 @@ document.addEventListener('DOMContentLoaded', () => {
     let searchResultData = []; // 검색 결과 데이터 저장
     let capturesList = []; // 캡처 목록 저장
 
-    // 마지막 크롤링 시간 가져오기
-    function fetchLastCrawlTime() {
-        fetch('http://localhost:5001/api/last-crawl-time')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('서버 연결 실패');
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    const lastCrawlTime = data.lastCrawlTime || '정보 없음';
-                    updateTimeDisplay(lastCrawlTime);
-                } else {
-                    updateTimeDisplay('서버 응답 오류');
-                }
-            })
-            .catch(error => {
-                console.error('마지막 크롤링 시간 가져오기 실패:', error);
-                updateTimeDisplay('서버 연결 오류');
-            });
+    // API 기본 URL 설정
+    const BASE_URL = window.location.hostname === 'localhost' 
+        ? 'http://localhost:5001' 
+        : window.location.origin;
+
+    // API 엔드포인트 함수들
+    async function fetchLastCrawlTime() {
+        try {
+            const response = await fetch(`${BASE_URL}/api/last-crawl-time`);
+            if (!response.ok) throw new Error('Server response was not ok');
+            const data = await response.json();
+            if (data.success) {
+                const lastCrawlTime = data.lastCrawlTime || '정보 없음';
+                updateTimeDisplay(lastCrawlTime);
+            } else {
+                updateTimeDisplay('서버 응답 오류');
+            }
+        } catch (error) {
+            console.error('마지막 크롤링 시간 가져오기 실패:', error);
+            updateTimeDisplay('서버 연결 오류');
+        }
     }
 
     // 캡처 목록 보기 버튼 클릭 이벤트
@@ -286,7 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
         captureListContainer.innerHTML = '<div style="text-align: center; padding: 20px;">캡처 목록을 불러오는 중...</div>';
         
         // API URL 생성
-        let url = 'http://localhost:5001/api/captures';
+        let url = `${BASE_URL}/api/captures`;
         const params = [];
         
         if (category) {
@@ -405,7 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const categoryName = capture.category.replace('_', ' ');
                 
                 // 이미지 URL 생성 - 전체 URL 사용
-                const imageUrl = `http://localhost:5001${capture.imageUrl}`;
+                const imageUrl = `${BASE_URL}${capture.imageUrl}`;
                 
                 // 시간 포맷
                 const timeStr = capture.time || '';
@@ -443,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 캡처 목록에서 캡처 삭제 함수
     window.deleteCapture = function(captureId) {
         if (confirm('이 캡처를 삭제하시겠습니까?')) {
-            fetch(`http://localhost:5001/api/captures/${captureId}`, {
+            fetch(`${BASE_URL}/api/captures/${captureId}`, {
                 method: 'DELETE'
             })
             .then(response => response.json())
@@ -507,7 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const filename = imageUrl.split('/').pop();
         
         // 새 창에서 다운로드 API 호출
-        window.open(`http://localhost:5001/api/download/${filename}`, '_blank');
+        window.open(`${BASE_URL}/api/download/${filename}`, '_blank');
     };
 
     // 이전 이벤트 제거
@@ -733,7 +733,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const endDate = endDateInput.value;
             
             // 서버에 검색 요청
-            const response = await fetch(`http://localhost:5001/api/search?keyword=${encodeURIComponent(searchTerm)}&category=${category}&startDate=${startDate}&endDate=${endDate}`, {
+            const response = await fetch(`${BASE_URL}/api/search?keyword=${encodeURIComponent(searchTerm)}&category=${category}&startDate=${startDate}&endDate=${endDate}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -904,7 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('요청 날짜 범위:', startDate, endDate);
             
             // URL 매개변수 생성
-            let url = `http://localhost:5001/api/ranking?category=${category}`;
+            let url = `${BASE_URL}/api/ranking?category=${category}`;
             if (startDate) url += `&startDate=${startDate}`;
             if (endDate) url += `&endDate=${endDate}`;
             

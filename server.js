@@ -11,13 +11,15 @@ const app = express();
 const port = process.env.PORT || 5001;
 
 // CORS 미들웨어 설정
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // 정적 파일 서빙을 위한 미들웨어 설정
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
-
-
 
 // 캡처 저장 디렉토리 설정
 const capturesDir = path.join(__dirname, 'public', 'captures');
@@ -79,22 +81,34 @@ function getNextCrawlTime() {
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
 function getCurrentTimeFormat() {
     const now = new Date();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const kstOffset = 9 * 60; // KST is UTC+9
+    const localTime = new Date(now.getTime() + (kstOffset * 60000));
+    const hours = String(localTime.getUTCHours()).padStart(2, '0');
+    const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
 }
 
-// 모든 카테고리 크롤링 함수
-async function crawlAllCategories() {
-    console.log(`[${new Date().toLocaleString('ko-KR', {
+// 날짜/시간 포맷 함수
+function getFormattedDateTime() {
+    const now = new Date();
+    const kstOffset = 9 * 60;
+    const localTime = new Date(now.getTime() + (kstOffset * 60000));
+    
+    return localTime.toLocaleString('ko-KR', {
         year: 'numeric',
         month: 'numeric',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false
-    })}] 3시간 정기 크롤링 시작`);
+        hour12: false,
+        timeZone: 'Asia/Seoul'
+    });
+}
+
+// 모든 카테고리 크롤링 함수
+async function crawlAllCategories() {
+    console.log(`[${getFormattedDateTime()}] 3시간 정기 크롤링 시작`);
     
     // 현재 시간 (크롤링 시간)
     const now = new Date();
@@ -202,15 +216,7 @@ async function crawlAllCategories() {
         });
         
         productCache.timestamp = now;
-        console.log(`[${new Date().toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-        })}] 3시간 정기 크롤링 완료`);
+        console.log(`[${getFormattedDateTime()}] 3시간 정기 크롤링 완료`);
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
@@ -242,8 +248,6 @@ async function findChrome() {
     }
     throw new Error('Chrome 브라우저를 찾을 수 없습니다.');
 }
-
-
 
 async function captureOliveyoungMainRanking() {
     console.log('='.repeat(50));
@@ -834,16 +838,39 @@ app.get('/api/download/:filename', (req, res) => {
     }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(500).json({ 
+        error: 'Internal server error', 
+        message: err.message 
+    });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'ok',
+        time: getFormattedDateTime()
+    });
+});
+
 app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-    
+    console.log('='.repeat(50));
+    console.log(`[${getFormattedDateTime()}] 서버 시작`);
+    console.log(`서버 주소: http://localhost:${port}`);
+    console.log(`환경: ${process.env.NODE_ENV || 'development'}`);
+    console.log('='.repeat(50));
+
     // 캡처 디렉토리 확인 및 생성
     if (!fs.existsSync(capturesDir)) {
         fs.mkdirSync(capturesDir, { recursive: true });
+        console.log(`캡처 디렉토리 생성: ${capturesDir}`);
     }
-    
+
     // 서버 시작 시 자동 크롤링 스케줄링 활성화
-    console.log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
-    console.log('첫 번째 크롤링을 시작합니다...');
-    crawlAllCategories();
+    console.log(`[${getFormattedDateTime()}] 3시간 단위 자동 크롤링 스케줄링을 시작합니다...`);
+    crawlAllCategories().catch(error => {
+        console.error('Initial crawling failed:', error);
+    });
 });
