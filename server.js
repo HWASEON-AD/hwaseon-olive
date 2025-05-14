@@ -40,10 +40,19 @@ const puppeteerOptions = {
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
-        '--window-size=1920x1080'
+        '--window-size=1920x1080',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--allow-running-insecure-content',
+        '--enable-features=NetworkService',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-notifications'
     ],
     headless: 'new',
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome'
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome',
+    ignoreHTTPSErrors: true,
+    timeout: 30000
 };
 
 // 다음 크롤링 시간 계산 함수
@@ -229,13 +238,15 @@ async function crawlAllCategories() {
 async function findChrome() {
     // Render 환경인 경우
     if (process.env.RENDER) {
-        return '/usr/bin/google-chrome';
+        console.log('Render 환경에서 실행 중입니다.');
+        return process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome';
     }
 
     // 로컬 환경인 경우 여러 경로 시도
     const paths = [
         '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
         '/usr/bin/google-chrome',                                      // Linux
+        '/usr/bin/google-chrome-stable',                              // Linux alternative
         '/usr/bin/chromium-browser',                                  // Linux
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',  // Windows
         'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
@@ -243,11 +254,12 @@ async function findChrome() {
 
     for (const path of paths) {
         if (fs.existsSync(path)) {
+            console.log('Chrome 경로를 찾았습니다:', path);
             return path;
         }
     }
     
-    // Chrome을 찾을 수 없는 경우 puppeteer-core의 기본 Chrome 사용
+    console.log('로컬 Chrome을 찾을 수 없어 기본 경로를 사용합니다.');
     return process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome';
 }
 
