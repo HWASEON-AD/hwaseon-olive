@@ -34,27 +34,7 @@ let scheduledCrawlTimer;
 
 // Chrome 실행 경로 설정
 async function findChrome() {
-    const paths = [
-        '/usr/bin/google-chrome',                                      // Linux (Render)
-        '/usr/bin/google-chrome-stable',                              // Linux alternative
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',  // Windows
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
-    ];
-
-    // Render 환경인 경우
-    if (process.env.RENDER) {
-        console.log('Render 환경에서 실행 중입니다.');
-        return '/usr/bin/google-chrome-stable';
-    }
-
-    for (const path of paths) {
-        if (fs.existsSync(path)) {
-            console.log('Chrome 경로를 찾았습니다:', path);
-            return path;
-        }
-    }
-    throw new Error('Chrome 브라우저를 찾을 수 없습니다.');
+    return '/usr/bin/google-chrome-stable';
 }
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
@@ -280,32 +260,16 @@ async function captureOliveyoungMainRanking() {
         const errors = [];
         
         try {
-            // Chrome 경로 찾기
-            const chromePath = await findChrome();
-            console.log('Chrome 실행 경로:', chromePath);
-            
             // Puppeteer 옵션 설정
             const options = {
                 headless: 'new',
-                executablePath: chromePath,
+                executablePath: '/usr/bin/google-chrome-stable',
                 args: [
                     '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-accelerated-2d-canvas',
-                    '--disable-gpu',
-                    '--window-size=1920x1080',
-                    '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process',
-                    '--no-zygote',
-                    '--single-process'
-                ],
-                ignoreHTTPSErrors: true
+                    '--disable-setuid-sandbox'
+                ]
             };
 
-            console.log('Puppeteer 실행 옵션:', JSON.stringify(options, null, 2));
-            
-            // 브라우저 실행 시도
             console.log('브라우저 실행 시도...');
             browser = await puppeteer.launch(options);
             console.log('브라우저 실행 성공!');
