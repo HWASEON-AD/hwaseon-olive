@@ -64,10 +64,14 @@ function getCurrentTimeFormat() {
     });
 }
 
+function getCurrentKSTTime() {
+    return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+}
+
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
-    const now = new Date();
-    const kstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    const currentTime = getCurrentKSTTime();
+    const kstNow = new Date(currentTime);
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
@@ -101,23 +105,13 @@ function getNextCrawlTime() {
 
 // 모든 카테고리 크롤링 함수
 async function crawlAllCategories() {
-    const now = new Date();
-    // KST 시간으로 직접 설정
-    const kstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    const currentTime = getCurrentKSTTime();
+    const kstNow = new Date(currentTime);
     
-    console.log(`[${kstNow.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Seoul'
-    })}] 3시간 정기 크롤링 시작`);
+    console.log(`[${currentTime}] 3시간 정기 크롤링 시작`);
     
-    const today = kstNow.toISOString().split('T')[0];
-    const crawlTime = kstNow.toLocaleString('ko-KR', {
+    const today = kstNow.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }).split('.').slice(0, 3).join('-');
+    const crawlTime = kstNow.toLocaleTimeString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
@@ -225,17 +219,8 @@ async function crawlAllCategories() {
         });
         
         // 현재 KST 시간을 정확하게 저장
-        productCache.timestamp = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-        console.log(`[${new Date().toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-            timeZone: 'Asia/Seoul'
-        })}] 3시간 정기 크롤링 완료`);
+        productCache.timestamp = new Date(getCurrentKSTTime());
+        console.log(`[${currentTime}] 3시간 정기 크롤링 완료`);
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
@@ -864,7 +849,7 @@ app.get('/api/last-crawl-time', (req, res) => {
         }
         
         // 마지막 크롤링 시간을 한국 시간으로 표시
-        const formattedTime = new Date(productCache.timestamp).toLocaleString('ko-KR', {
+        const formattedTime = productCache.timestamp.toLocaleString('ko-KR', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
