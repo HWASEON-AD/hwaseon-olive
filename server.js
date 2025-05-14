@@ -314,8 +314,43 @@ async function captureOliveyoungMainRanking() {
                     
                     // 추가 대기 시간으로 동적 콘텐츠 로딩 보장
                     await driver.sleep(5000);
-                    
-                    // 전체 페이지 높이 구하기
+
+                    // 카테고리 이름 표시 div 삽입
+                    await driver.executeScript(`
+                        // 기존 카테고리 표시 div 제거
+                        const existingCategoryDiv = document.getElementById('custom-category-header');
+                        if (existingCategoryDiv) {
+                            existingCategoryDiv.remove();
+                        }
+
+                        // 새로운 카테고리 표시 div 생성
+                        const categoryDiv = document.createElement('div');
+                        categoryDiv.id = 'custom-category-header';
+                        categoryDiv.style.cssText = \`
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            background-color: #333333;
+                            color: white;
+                            text-align: center;
+                            padding: 10px 0;
+                            font-size: 16px;
+                            font-weight: bold;
+                            z-index: 9999;
+                        \`;
+                        
+                        // 카테고리 이름 설정 (언더바를 공백으로 변경)
+                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
+                        
+                        // 문서에 추가
+                        document.body.insertBefore(categoryDiv, document.body.firstChild);
+
+                        // 기존 컨텐츠를 카테고리 헤더 아래로 이동
+                        document.body.style.marginTop = '40px';
+                    `);
+
+                    // 전체 페이지 높이 구하기 (카테고리 헤더 높이 포함)
                     const pageHeight = await driver.executeScript('return Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);');
                     
                     // viewport 크기 설정
