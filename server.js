@@ -60,11 +60,7 @@ async function findChrome() {
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
 function getCurrentTimeFormat() {
     const now = new Date();
-    const utc = now.getTime();
-    const kstOffset = 9 * 60 * 60 * 1000;
-    const kstNow = new Date(utc + kstOffset);
-    
-    return kstNow.toLocaleTimeString('ko-KR', {
+    return now.toLocaleString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
@@ -79,10 +75,7 @@ function getKSTTime() {
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
     // 현재 KST 시간 가져오기
-    const now = new Date();
-    const utc = now.getTime();
-    const kstOffset = 9 * 60 * 60 * 1000;
-    const kstNow = new Date(utc + kstOffset);
+    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
@@ -267,6 +260,7 @@ async function crawlAllCategories() {
 async function captureOliveyoungMainRanking() {
     let retryCount = 0;
     const maxRetries = 3;
+    let browser = null;
     
     async function attemptCapture() {
         console.log('='.repeat(50));
@@ -284,9 +278,9 @@ async function captureOliveyoungMainRanking() {
             hour12: false
         }).replace(/[. :]/g, '-');
         
-        let browser = null;
         let capturedCount = 0;
         const totalCategories = Object.keys(CATEGORY_CODES).length;
+        const errors = [];
         
         try {
             // Chrome 경로 찾기
@@ -377,15 +371,31 @@ async function captureOliveyoungMainRanking() {
                     await page.waitForTimeout(2000);
                     
                 } catch (error) {
+                    errors.push({
+                        category,
+                        error: error.message,
+                        timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+                    });
                     console.error(`${category} 캡처 중 오류:`, error.message);
                 }
             }
             
-            return true;
+            return {
+                success: capturedCount > 0,
+                capturedCount,
+                totalCategories,
+                errors: errors.length > 0 ? errors : null
+            };
             
         } catch (error) {
             console.error('캡처 프로세스 오류:', error.message);
-            return false;
+            return {
+                success: false,
+                error: error.message,
+                capturedCount,
+                totalCategories,
+                errors
+            };
             
         } finally {
             if (browser) {
@@ -402,19 +412,25 @@ async function captureOliveyoungMainRanking() {
     // 최대 3번까지 재시도
     while (retryCount < maxRetries) {
         console.log(`캡처 시도 ${retryCount + 1}/${maxRetries}`);
-        const success = await attemptCapture();
+        const result = await attemptCapture();
         
-        if (success) {
+        if (result.success) {
             console.log('캡처 작업 성공!');
+            console.log(`총 ${result.capturedCount}/${result.totalCategories} 카테고리 캡처 완료`);
+            if (result.errors) {
+                console.log('일부 카테고리 캡처 실패:', result.errors);
+            }
             break;
         }
         
         retryCount++;
         if (retryCount < maxRetries) {
             console.log(`캡처 실패, ${retryCount + 1}번째 재시도 준비 중... (5초 대기)`);
+            console.log('실패 원인:', result.error);
             await new Promise(resolve => setTimeout(resolve, 5000));
         } else {
             console.log('최대 재시도 횟수 초과, 캡처 작업을 중단합니다.');
+            console.log('최종 실패 원인:', result.error);
         }
     }
 }
@@ -427,13 +443,10 @@ function scheduleNextCrawl() {
     }
     
     const nextCrawlTime = getNextCrawlTime();
-    const now = new Date();
-    const utc = now.getTime();
-    const kstOffset = 9 * 60 * 60 * 1000;
-    const kstNow = new Date(utc + kstOffset);
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     
     // 시간 차이 계산 (밀리초)
-    const timeUntilNextCrawl = nextCrawlTime.getTime() - kstNow.getTime();
+    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
     
     // 다음 크롤링 시간 포맷팅
     const nextTimeFormatted = nextCrawlTime.toLocaleString('ko-KR', {
@@ -449,10 +462,6 @@ function scheduleNextCrawl() {
     const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
     const hoursUntilNext = Math.floor(minutesUntilNext/60);
     const remainingMinutes = minutesUntilNext % 60;
-    
-    // 현재 시간 디버그 로깅
-    console.log('현재 서버 시간:', now.toLocaleString());
-    console.log('현재 KST 시간:', kstNow.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
     
     console.log('='.repeat(50));
     console.log(`다음 작업 예정 시간: ${nextTimeFormatted}`);
@@ -865,11 +874,36 @@ app.use((err, req, res, next) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'ok',
-        time: getFormattedDateTime()
-    });
+app.get('/health', async (req, res) => {
+    try {
+        const chromePath = await findChrome();
+        const browser = await puppeteer.launch({
+            headless: 'new',
+            executablePath: chromePath,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--no-zygote',
+                '--single-process'
+            ]
+        });
+        await browser.close();
+        res.json({
+            status: 'healthy',
+            chrome_path: chromePath,
+            timestamp: new Date().toLocaleString('ko-KR', {
+                timeZone: 'Asia/Seoul'
+            })
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toLocaleString('ko-KR', {
+                timeZone: 'Asia/Seoul'
+            })
+        });
+    }
 });
 
 app.listen(port, () => {
