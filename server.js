@@ -33,20 +33,7 @@ let productCache = {
 let scheduledCrawlTimer;
 
 // Puppeteer 실행 옵션
-const puppeteerOptions = {
-    args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920x1080',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process'
-    ],
-    headless: 'new',
-    executablePath: process.env.CHROME_PATH || '/Users/hammin0808/.cache/puppeteer/chrome/mac_arm-136.0.7103.92/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
-};
+const CHROME_PATH = '/Users/hammin0808/.cache/puppeteer/chrome/mac_arm-136.0.7103.92/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
 function getCurrentTimeFormat() {
@@ -65,28 +52,28 @@ function getKSTTime() {
 
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
-    const kstNow = getKSTTime();
+    // 현재 KST 시간 가져오기
+    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
     const scheduledMinutes = 30;
     
-    // 현재 시간과 가장 가까운 다음 크롤링 시간 찾기
-    let nextCrawlTime = new Date(kstNow);
-    let found = false;
-    
     // 현재 시간
     const currentHour = kstNow.getHours();
     const currentMinute = kstNow.getMinutes();
     
-    console.log('현재 시간 (KST):', currentHour + ':' + currentMinute);
+    console.log('현재 KST 시간:', `${currentHour}:${currentMinute}`);
     
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
+    let nextCrawlTime = new Date(kstNow);
+    let found = false;
+    
     for (const hour of scheduledHours) {
-        if (hour > currentHour || (hour === currentHour && currentMinute < scheduledMinutes)) {
+        if (hour > currentHour || (hour === currentHour && scheduledMinutes > currentMinute)) {
             nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
             found = true;
-            console.log('다음 크롤링 시간 찾음:', hour + ':' + scheduledMinutes);
+            console.log('오늘 다음 크롤링 시간 찾음:', `${hour}:${scheduledMinutes}`);
             break;
         }
     }
@@ -95,7 +82,7 @@ function getNextCrawlTime() {
     if (!found) {
         nextCrawlTime.setDate(nextCrawlTime.getDate() + 1);
         nextCrawlTime.setHours(scheduledHours[0], scheduledMinutes, 0, 0);
-        console.log('내일 첫 크롤링 시간으로 설정:', scheduledHours[0] + ':' + scheduledMinutes);
+        console.log('내일 첫 크롤링 시간으로 설정:', `${scheduledHours[0]}:${scheduledMinutes}`);
     }
     
     return nextCrawlTime;
@@ -310,6 +297,8 @@ async function captureOliveyoungMainRanking() {
         try {
             // Puppeteer 옵션 설정
             const options = {
+                headless: 'new',
+                executablePath: CHROME_PATH,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -318,9 +307,14 @@ async function captureOliveyoungMainRanking() {
                     '--disable-gpu',
                     '--window-size=1920x1080'
                 ],
-                headless: 'new'
+                defaultViewport: {
+                    width: 1920,
+                    height: 1080,
+                    deviceScaleFactor: 1
+                }
             };
 
+            console.log('Chrome 실행 경로:', CHROME_PATH);
             console.log('Puppeteer 실행 옵션:', JSON.stringify(options, null, 2));
             
             // 브라우저 실행 시도
@@ -435,23 +429,21 @@ function scheduleNextCrawl() {
         clearTimeout(scheduledCrawlTimer);
     }
     
-    // 현재 시간과 다음 크롤링 시간 계산 (KST 기준)
-    const now = new Date();
-    const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const nextCrawlTime = getNextCrawlTime();
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     
     // 시간 차이 계산 (밀리초)
-    const timeUntilNextCrawl = nextCrawlTime.getTime() - kstNow.getTime();
+    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
     
     // 다음 크롤링 시간 포맷팅
     const nextTimeFormatted = nextCrawlTime.toLocaleString('ko-KR', {
+        timeZone: 'Asia/Seoul',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Seoul'
+        hour12: false
     });
     
     const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
