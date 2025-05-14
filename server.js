@@ -86,11 +86,14 @@ function getNextCrawlTime() {
     const currentHour = kstNow.getHours();
     const currentMinute = kstNow.getMinutes();
     
+    console.log('현재 시간 (KST):', currentHour + ':' + currentMinute);
+    
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     for (const hour of scheduledHours) {
         if (hour > currentHour || (hour === currentHour && currentMinute < scheduledMinutes)) {
             nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
             found = true;
+            console.log('다음 크롤링 시간 찾음:', hour + ':' + scheduledMinutes);
             break;
         }
     }
@@ -99,6 +102,7 @@ function getNextCrawlTime() {
     if (!found) {
         nextCrawlTime.setDate(nextCrawlTime.getDate() + 1);
         nextCrawlTime.setHours(scheduledHours[0], scheduledMinutes, 0, 0);
+        console.log('내일 첫 크롤링 시간으로 설정:', scheduledHours[0] + ':' + scheduledMinutes);
     }
     
     return nextCrawlTime;
@@ -122,6 +126,7 @@ async function crawlAllCategories() {
     const crawlTime = kstNow.toLocaleString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
+        second: '2-digit',
         hour12: false
     });
     
@@ -308,10 +313,6 @@ async function captureOliveyoungMainRanking() {
     const totalCategories = Object.keys(CATEGORY_CODES).length;
     
     try {
-        // Chrome 설치 확인
-        const chromePath = await findChrome();
-        console.log('Chrome 경로:', chromePath);
-        
         // Puppeteer 옵션 설정
         const options = {
             args: [
@@ -322,13 +323,9 @@ async function captureOliveyoungMainRanking() {
                 '--disable-gpu',
                 '--window-size=1920x1080',
                 '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--no-first-run',
-                '--no-default-browser-check',
-                '--disable-notifications'
+                '--disable-features=IsolateOrigins,site-per-process'
             ],
             headless: 'new',
-            executablePath: chromePath,
             ignoreHTTPSErrors: true,
             timeout: 30000
         };
@@ -343,40 +340,15 @@ async function captureOliveyoungMainRanking() {
         const page = await browser.newPage();
         console.log('새 페이지 생성 성공!');
         
-        // 브라우저 지문 설정
-        await page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, 'webdriver', { get: () => false });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['ko-KR', 'ko', 'en-US', 'en'] });
-        });
-        
-        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
-        
+        // 브라우저 설정
         await page.setViewport({
             width: 1920,
             height: 1080,
             deviceScaleFactor: 1,
         });
         
-        await page.setExtraHTTPHeaders({
-            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'sec-ch-ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"macOS"'
-        });
-
-        await page.setCookie({
-            name: 'JSESSIONID',
-            value: 'dummy',
-            domain: '.oliveyoung.co.kr',
-            path: '/'
-        });
-
+        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+        
         // 먼저 전체 랭킹 캡처
         let retryCount = 0;
         const maxRetries = 3;
@@ -385,14 +357,14 @@ async function captureOliveyoungMainRanking() {
             try {
                 const url = 'https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=24&selectType=N';
                 
-                console.log(`전체 랭킹 페이지로 이동 시도 ${retryCount + 1}/${maxRetries}: ${url}`);
+                console.log(`전체 랭킹 페이지로 이동 시도 ${retryCount + 1}/${maxRetries}`);
                 
                 await page.goto(url, {
                     waitUntil: ['networkidle0', 'domcontentloaded'],
                     timeout: 60000
                 });
                 
-                // 페이지 로딩 대기 시간 증가 및 엘리먼트 대기 조건 수정
+                // 페이지 로딩 대기
                 await page.waitForTimeout(6000);
                 
                 // 페이지가 완전히 로드될 때까지 대기
@@ -415,7 +387,7 @@ async function captureOliveyoungMainRanking() {
                 break;
                 
             } catch (error) {
-                console.error(`전체 랭킹 캡처 시도 ${retryCount + 1}/${maxRetries} 실패:`, error);
+                console.error(`전체 랭킹 캡처 시도 ${retryCount + 1}/${maxRetries} 실패:`, error.message);
                 retryCount++;
                 
                 if (retryCount < maxRetries) {
@@ -425,9 +397,8 @@ async function captureOliveyoungMainRanking() {
             }
         }
 
-        // 각 카테고리별 캡처 수행
+        // 각 카테고리별 캡처
         for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
-            // 전체는 이미 캡처했으므로 스킵
             if (category === '전체') continue;
             
             retryCount = 0;
@@ -436,14 +407,14 @@ async function captureOliveyoungMainRanking() {
                 try {
                     const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
                     
-                    console.log(`${category} 랭킹 페이지로 이동 시도 ${retryCount + 1}/${maxRetries}: ${url}`);
+                    console.log(`${category} 랭킹 페이지로 이동 시도 ${retryCount + 1}/${maxRetries}`);
                     
                     await page.goto(url, {
                         waitUntil: ['networkidle0', 'domcontentloaded'],
                         timeout: 60000
                     });
                     
-                    // 페이지 로딩 대기 시간 증가 및 엘리먼트 대기 조건 수정
+                    // 페이지 로딩 대기
                     await page.waitForTimeout(8000);
                     
                     // 페이지가 완전히 로드될 때까지 대기
@@ -469,7 +440,7 @@ async function captureOliveyoungMainRanking() {
                     break;
                     
                 } catch (error) {
-                    console.error(`${category} 캡처 시도 ${retryCount + 1}/${maxRetries} 실패:`, error);
+                    console.error(`${category} 캡처 시도 ${retryCount + 1}/${maxRetries} 실패:`, error.message);
                     retryCount++;
                     
                     if (retryCount < maxRetries) {
@@ -481,9 +452,10 @@ async function captureOliveyoungMainRanking() {
             
             if (retryCount >= maxRetries) {
                 console.error(`${category}: 최대 재시도 횟수(${maxRetries})를 초과했습니다.`);
+                continue;
             }
             
-            // 카테고리 간 대기 시간 추가
+            // 카테고리 간 대기 시간
             await page.waitForTimeout(2000);
         }
         
@@ -495,13 +467,6 @@ async function captureOliveyoungMainRanking() {
             name: error.name,
             code: error.code
         });
-        
-        // 에러 발생 시 재시도 로직
-        if (!browser) {
-            console.log('브라우저 실행 실패, 5초 후 재시도...');
-            await new Promise(resolve => setTimeout(resolve, 5000));
-            return captureOliveyoungMainRanking();
-        }
     } finally {
         if (browser) {
             try {
@@ -893,6 +858,7 @@ app.get('/api/last-crawl-time', (req, res) => {
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
+            second: '2-digit',
             hour12: false
         });
         
@@ -904,7 +870,13 @@ app.get('/api/last-crawl-time', (req, res) => {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
-        });
+        }).replace(/\./g, '').replace(/\s+/g, ' ');
+        
+        // 디버그용 로그
+        console.log('현재 서버 시간:', new Date().toLocaleString());
+        console.log('현재 KST 시간:', getKSTTime().toLocaleString());
+        console.log('마지막 크롤링 시간:', formattedTime);
+        console.log('다음 크롤링 예정 시간:', nextTime);
         
         return res.json({
             success: true,
