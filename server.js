@@ -55,7 +55,8 @@ const puppeteerOptions = {
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
 function getCurrentTimeFormat() {
-    return new Date().toLocaleString('ko-KR', {
+    const now = new Date();
+    return now.toLocaleString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
@@ -65,9 +66,8 @@ function getCurrentTimeFormat() {
 
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
-    // 현재 한국 시간 가져오기
     const now = new Date();
-    const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
@@ -83,8 +83,7 @@ function getNextCrawlTime() {
     
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     for (const hour of scheduledHours) {
-        // 현재 시간이 크롤링 예정 시간과 같거나 이전이면 해당 시간으로 설정
-        if (hour > currentHour || (hour === currentHour && currentMinute <= scheduledMinutes)) {
+        if (hour > currentHour || (hour === currentHour && currentMinute < scheduledMinutes)) {
             nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
             found = true;
             break;
@@ -102,7 +101,10 @@ function getNextCrawlTime() {
 
 // 모든 카테고리 크롤링 함수
 async function crawlAllCategories() {
-    console.log(`[${new Date().toLocaleString('ko-KR', {
+    const now = new Date();
+    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    
+    console.log(`[${kstNow.toLocaleString('ko-KR', {
         year: 'numeric',
         month: 'numeric',
         day: 'numeric',
@@ -113,10 +115,13 @@ async function crawlAllCategories() {
         timeZone: 'Asia/Seoul'
     })}] 3시간 정기 크롤링 시작`);
     
-    // 현재 시간 (크롤링 시간)
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const crawlTime = getCurrentTimeFormat();
+    const today = kstNow.toISOString().split('T')[0];
+    const crawlTime = kstNow.toLocaleString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Seoul'
+    });
     
     try {
         // 모든 카테고리에 대해 크롤링
@@ -218,7 +223,7 @@ async function crawlAllCategories() {
             return 0;
         });
         
-        productCache.timestamp = now;
+        productCache.timestamp = kstNow;
         console.log(`[${new Date().toLocaleString('ko-KR', {
             year: 'numeric',
             month: 'numeric',
@@ -856,14 +861,13 @@ app.get('/api/last-crawl-time', (req, res) => {
             });
         }
         
-        // 마지막 크롤링 시간을 한국 시간으로 변환
+        // 마지막 크롤링 시간을 한국 시간으로 표시
         const formattedTime = productCache.timestamp.toLocaleString('ko-KR', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit',
             hour12: false,
             timeZone: 'Asia/Seoul'
         });
@@ -876,7 +880,6 @@ app.get('/api/last-crawl-time', (req, res) => {
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit',
             hour12: false,
             timeZone: 'Asia/Seoul'
         });
