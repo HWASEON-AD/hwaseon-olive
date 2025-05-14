@@ -43,7 +43,7 @@ const puppeteerOptions = {
         '--window-size=1920x1080'
     ],
     headless: 'new',
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome'
 };
 
 // 다음 크롤링 시간 계산 함수
@@ -227,6 +227,12 @@ async function crawlAllCategories() {
 }
 
 async function findChrome() {
+    // Render 환경인 경우
+    if (process.env.RENDER) {
+        return '/usr/bin/google-chrome';
+    }
+
+    // 로컬 환경인 경우 여러 경로 시도
     const paths = [
         '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
         '/usr/bin/google-chrome',                                      // Linux
@@ -240,7 +246,9 @@ async function findChrome() {
             return path;
         }
     }
-    throw new Error('Chrome 브라우저를 찾을 수 없습니다.');
+    
+    // Chrome을 찾을 수 없는 경우 puppeteer-core의 기본 Chrome 사용
+    return process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome';
 }
 
 
