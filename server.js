@@ -281,7 +281,10 @@ async function captureOliveyoungMainRanking() {
                 .addArguments('--headless')
                 .addArguments('--no-sandbox')
                 .addArguments('--disable-dev-shm-usage')
-                .addArguments('--window-size=1920,1080');
+                .addArguments('--start-maximized')  // 브라우저 최대화
+                .addArguments('--window-size=1920,1080')  // 기본 창 크기 설정
+                .addArguments('--hide-scrollbars')  // 스크롤바 숨기기
+                .addArguments('--force-device-scale-factor=1');  // 화면 배율 1로 설정
             
             if (process.env.CHROME_BIN) {
                 options.setChromeBinaryPath(process.env.CHROME_BIN);
@@ -305,8 +308,37 @@ async function captureOliveyoungMainRanking() {
                     console.log(`${category} 랭킹 페이지로 이동...`);
                     
                     await driver.get(url);
+                    
+                    // 페이지 로딩 대기
                     await driver.wait(until.elementLocated(By.css('.TabsConts')), 30000);
-                    await driver.sleep(5000); // 페이지 로딩 대기
+                    
+                    // 추가 대기 시간으로 동적 콘텐츠 로딩 보장
+                    await driver.sleep(5000);
+                    
+                    // 전체 페이지 높이 구하기
+                    const pageHeight = await driver.executeScript('return Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);');
+                    
+                    // viewport 크기 설정
+                    await driver.manage().window().setRect({
+                        width: 1920,
+                        height: Math.max(1080, pageHeight)
+                    });
+                    
+                    // 페이지 맨 위로 스크롤
+                    await driver.executeScript('window.scrollTo(0, 0);');
+                    
+                    // 모든 이미지가 로드될 때까지 대기
+                    await driver.wait(async () => {
+                        return await driver.executeScript(`
+                            const images = document.getElementsByTagName('img');
+                            for (let img of images) {
+                                if (!img.complete) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        `);
+                    }, 10000, '이미지 로딩 시간 초과');
                     
                     const fileName = `ranking_${category}_${dateTimeStr}.png`;
                     const filePath = path.join(capturesDir, fileName);
