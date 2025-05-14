@@ -154,11 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 자정 업데이트 스케줄링 시작
     scheduleNextMidnightUpdate();
 
-    // API 기본 URL 설정
-    const BASE_URL = window.location.hostname === 'localhost' 
-        ? 'http://localhost:5001' 
-        : window.location.origin;
-
     // API 엔드포인트 함수들
     async function fetchLastCrawlTime() {
         try {
