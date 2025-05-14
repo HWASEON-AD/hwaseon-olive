@@ -55,19 +55,19 @@ const puppeteerOptions = {
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
 function getCurrentTimeFormat() {
-    const now = new Date();
-    // 한국 시간으로 변환
-    const kstTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    const hours = String(kstTime.getHours()).padStart(2, '0');
-    const minutes = String(kstTime.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
+    return new Date().toLocaleString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Seoul'
+    });
 }
 
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
+    // 현재 한국 시간 가져오기
     const now = new Date();
-    // 한국 시간으로 변환
-    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
@@ -490,13 +490,15 @@ function scheduleNextCrawl() {
         clearTimeout(scheduledCrawlTimer);
     }
     
-    // 다음 크롤링 시간 계산
-    const nextCrawlTime = getNextCrawlTime();
+    // 현재 시간과 다음 크롤링 시간 계산 (KST 기준)
     const now = new Date();
-    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    const timeUntilNextCrawl = Math.max(0, nextCrawlTime - kstNow);
+    const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const nextCrawlTime = getNextCrawlTime();
     
-    // 다음 크롤링 시간을 보다 명확하게 표시 - 24시간제로 변경
+    // 시간 차이 계산 (밀리초)
+    const timeUntilNextCrawl = nextCrawlTime.getTime() - kstNow.getTime();
+    
+    // 다음 크롤링 시간 포맷팅
     const nextTimeFormatted = nextCrawlTime.toLocaleString('ko-KR', {
         year: 'numeric',
         month: '2-digit',
@@ -843,7 +845,7 @@ app.get('/api/captures', (req, res) => {
     }
 });
 
-// 마지막 크롤링 시간 API 추가
+// 마지막 크롤링 시간 API
 app.get('/api/last-crawl-time', (req, res) => {
     try {
         if (!productCache.timestamp) {
@@ -854,9 +856,8 @@ app.get('/api/last-crawl-time', (req, res) => {
             });
         }
         
-        // 마지막 크롤링 시간을 한국 시간 형식으로 변환
-        const timestamp = new Date(productCache.timestamp.getTime() + (9 * 60 * 60 * 1000));
-        const formattedTime = timestamp.toLocaleString('ko-KR', {
+        // 마지막 크롤링 시간을 한국 시간으로 변환
+        const formattedTime = productCache.timestamp.toLocaleString('ko-KR', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
