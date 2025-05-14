@@ -64,31 +64,15 @@ function getCurrentTimeFormat() {
     });
 }
 
-function getCurrentKSTTime() {
-    return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-}
-
-// 한국 시간 관련 유틸리티 함수들
-function getKSTDate() {
+function getKSTTime() {
     const now = new Date();
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     return new Date(utc + (9 * 60 * 60 * 1000));
 }
 
-function formatKSTDate(date) {
-    return date.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
-}
-
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
-    const kstNow = getKSTDate();
+    const kstNow = getKSTTime();
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
@@ -122,11 +106,20 @@ function getNextCrawlTime() {
 
 // 모든 카테고리 크롤링 함수
 async function crawlAllCategories() {
-    const kstNow = getKSTDate();
-    console.log(`[${formatKSTDate(kstNow)}] 3시간 정기 크롤링 시작`);
+    const kstNow = getKSTTime();
     
-    const today = kstNow.toISOString().slice(0, 10);
-    const crawlTime = kstNow.toLocaleTimeString('ko-KR', {
+    console.log(`[${kstNow.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    })}] 3시간 정기 크롤링 시작`);
+    
+    const today = kstNow.toISOString().split('T')[0];
+    const crawlTime = kstNow.toLocaleString('ko-KR', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
@@ -233,8 +226,17 @@ async function crawlAllCategories() {
         });
         
         // 현재 KST 시간을 정확하게 저장
-        productCache.timestamp = getKSTDate();
-        console.log(`[${formatKSTDate(getKSTDate())}] 3시간 정기 크롤링 완료`);
+        productCache.timestamp = getKSTTime();
+        console.log(`[${new Date().toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Seoul'
+        })}] 3시간 정기 크롤링 완료`);
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
@@ -862,10 +864,24 @@ app.get('/api/last-crawl-time', (req, res) => {
             });
         }
         
-        // 마지막 크롤링 시간과 다음 크롤링 시간을 한국 시간으로 표시
-        const formattedTime = formatKSTDate(productCache.timestamp);
+        const formattedTime = productCache.timestamp.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        
         const nextCrawlTime = getNextCrawlTime();
-        const nextTime = formatKSTDate(nextCrawlTime);
+        const nextTime = nextCrawlTime.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
         
         return res.json({
             success: true,
