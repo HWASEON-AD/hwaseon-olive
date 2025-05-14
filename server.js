@@ -53,22 +53,34 @@ const puppeteerOptions = {
     timeout: 30000
 };
 
+// 현재 시간 포맷 함수 (24시간제 HH:MM)
+function getCurrentTimeFormat() {
+    const now = new Date();
+    // 한국 시간으로 변환
+    const kstTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const hours = String(kstTime.getHours()).padStart(2, '0');
+    const minutes = String(kstTime.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
     const now = new Date();
+    // 한국 시간으로 변환
+    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
     
     // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
     const scheduledMinutes = 30;
     
     // 현재 시간과 가장 가까운 다음 크롤링 시간 찾기
-    let nextCrawlTime = new Date(now);
+    let nextCrawlTime = new Date(kstNow);
     let found = false;
     
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     for (const hour of scheduledHours) {
         nextCrawlTime.setHours(hour, scheduledMinutes, 0, 0);
-        if (nextCrawlTime > now) {
+        if (nextCrawlTime > kstNow) {
             found = true;
             break;
         }
@@ -83,14 +95,6 @@ function getNextCrawlTime() {
     return nextCrawlTime;
 }
 
-// 현재 시간 포맷 함수 (24시간제 HH:MM)
-function getCurrentTimeFormat() {
-    const now = new Date();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-}
-
 // 모든 카테고리 크롤링 함수
 async function crawlAllCategories() {
     console.log(`[${new Date().toLocaleString('ko-KR', {
@@ -100,7 +104,8 @@ async function crawlAllCategories() {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false
+        hour12: false,
+        timeZone: 'Asia/Seoul'
     })}] 3시간 정기 크롤링 시작`);
     
     // 현재 시간 (크롤링 시간)
@@ -216,7 +221,8 @@ async function crawlAllCategories() {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false
+            hour12: false,
+            timeZone: 'Asia/Seoul'
         })}] 3시간 정기 크롤링 완료`);
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
@@ -275,7 +281,9 @@ async function captureOliveyoungMainRanking() {
     console.log('='.repeat(50));
     
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    // 한국 시간으로 변환
+    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const today = kstNow.toISOString().split('T')[0];
     const timeStr = getCurrentTimeFormat();
     const dateTimeStr = `${today}_${timeStr.replace(':', '-')}`;
     
@@ -839,12 +847,30 @@ app.get('/api/last-crawl-time', (req, res) => {
         }
         
         // 마지막 크롤링 시간을 한국 시간 형식으로 변환
-        const timestamp = productCache.timestamp;
-        const formattedTime = `${timestamp.getFullYear()}. ${String(timestamp.getMonth() + 1).padStart(2, '0')}. ${String(timestamp.getDate()).padStart(2, '0')}. ${String(timestamp.getHours()).padStart(2, '0')}:${String(timestamp.getMinutes()).padStart(2, '0')}:${String(timestamp.getSeconds()).padStart(2, '0')}`;
+        const timestamp = new Date(productCache.timestamp.getTime() + (9 * 60 * 60 * 1000));
+        const formattedTime = timestamp.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Seoul'
+        });
         
         // 다음 크롤링 예정 시간 계산
         const nextCrawlTime = getNextCrawlTime();
-        const nextTime = `${nextCrawlTime.getFullYear()}. ${String(nextCrawlTime.getMonth() + 1).padStart(2, '0')}. ${String(nextCrawlTime.getDate()).padStart(2, '0')}. ${String(nextCrawlTime.getHours()).padStart(2, '0')}:${String(nextCrawlTime.getMinutes()).padStart(2, '0')}:${String(nextCrawlTime.getSeconds()).padStart(2, '0')}`;
+        const nextTime = nextCrawlTime.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Seoul'
+        });
         
         return res.json({
             success: true,
