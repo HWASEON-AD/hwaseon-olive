@@ -711,11 +711,15 @@ app.get('/api/captures', (req, res) => {
                 date = match[2];
                 time = match[3].replace('-', ':');
             } else {
-                // 파일명에서 추출할 수 없는 경우 파일 생성 시간 사용
-                const fileDate = new Date(stats.mtime);
+                // 파일명에서 추출할 수 없는 경우 파일 생성 시간을 KST로 변환해서 사용
+                const fileDate = new Date(new Date(stats.mtime).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
                 extractedCategory = '전체';
                 date = fileDate.toISOString().split('T')[0];
-                time = fileDate.toTimeString().split(' ')[0].substr(0, 5);
+                
+                // 시간을 KST 형식으로 포맷팅
+                const hours = String(fileDate.getHours()).padStart(2, '0');
+                const minutes = String(fileDate.getMinutes()).padStart(2, '0');
+                time = `${hours}:${minutes}`;
             }
             
             return {
@@ -724,14 +728,14 @@ app.get('/api/captures', (req, res) => {
                 category: extractedCategory,
                 date,
                 time,
-                timestamp: stats.mtime,
+                timestamp: new Date(new Date(stats.mtime).toLocaleString('en-US', { timeZone: 'Asia/Seoul' })).getTime(),
                 imageUrl: `/captures/${fileName}`,
                 fileSize: stats.size
             };
         });
         
         // 카테고리 필터링 - 정확한 매칭
-        if (category) {
+        if (category && category !== '전체') {
             captures = captures.filter(capture => capture.category === category);
         }
         
