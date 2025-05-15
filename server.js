@@ -325,23 +325,33 @@ async function captureOliveyoungMainRanking() {
                     // 추가 대기 시간
                     await driver.sleep(2000);
                     
-                    // 카테고리 헤더 추가
+                    // 카테고리 헤더 추가 - 서버에서 KST 시간 직접 계산하여 주입
+                    const kstNow = getKSTTime();
+                    const kstTimeString = kstNow.toLocaleTimeString('ko-KR', { 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        hour12: false,
+                        timeZone: 'Asia/Seoul'
+                    });
+
                     await driver.executeScript(`
+                        // 서버에서 계산한 KST 시간 사용 (브라우저의 시간대 설정에 영향받지 않음)
+                        const timeStr = "${kstTimeString}"; 
+                        
+                        // 카테고리 헤더 생성 (고정 위치)
                         const categoryDiv = document.createElement('div');
                         categoryDiv.id = 'custom-category-header';
                         categoryDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background-color:#333;color:white;text-align:center;padding:10px 0;font-size:16px;font-weight:bold;z-index:9999;';
-                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
+                        
+                        // 카테고리 이름과 시간 표시
+                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'} - ' + timeStr;
+                        
                         document.body.insertBefore(categoryDiv, document.body.firstChild);
                         document.body.style.marginTop = '40px';
                     `);
                     
-                    
-                    
                     // 스크린샷 캡처
-                    const kstNow = getKSTTime();
-                    const dateStr = kstNow.toISOString().split('T')[0];
-                    const timeStr = kstNow.toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }).replace(/:/g, '-');
-                    const fileName = `ranking_${category}_${dateStr}_${timeStr}.jpeg`;
+                    const fileName = `ranking_${category}_${dateTimeStr}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
                     const screenshot = await driver.takeScreenshot();
                     await fs.promises.writeFile(filePath, screenshot, 'base64');
