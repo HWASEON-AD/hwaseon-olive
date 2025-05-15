@@ -325,25 +325,18 @@ async function captureOliveyoungMainRanking() {
                     // 추가 대기 시간
                     await driver.sleep(2000);
                     
-                    // 카테고리 헤더 추가 - 현재 KST 시간 정확히 표시
+                    
+                    // 카테고리 헤더 추가
                     await driver.executeScript(`
-                        // 현재 KST 시간을 JavaScript로 가져오기
-                        const now = new Date();
-                        const kstOptions = { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false };
-                        const timeStr = now.toLocaleTimeString('ko-KR', kstOptions);
-                        
-                        // 카테고리 헤더 생성 (고정 위치)
                         const categoryDiv = document.createElement('div');
                         categoryDiv.id = 'custom-category-header';
                         categoryDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background-color:#333;color:white;text-align:center;padding:10px 0;font-size:16px;font-weight:bold;z-index:9999;';
-                        
-                        // 카테고리 이름과 시간 표시
-                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'} - ' + timeStr;
-                        
+                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
                         document.body.insertBefore(categoryDiv, document.body.firstChild);
                         document.body.style.marginTop = '40px';
                     `);
                     
+
                     // 스크린샷 캡처
                     const fileName = `ranking_${category}_${dateTimeStr}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
