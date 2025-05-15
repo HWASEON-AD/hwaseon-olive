@@ -7,8 +7,6 @@ const path = require('path');
 const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
-const sharp = require('sharp');
-const puppeteer = require('puppeteer-core');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -37,19 +35,22 @@ let scheduledCrawlTimer;
 
 // Chrome 실행 경로 설정
 async function findChrome() {
-    const paths = [
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
-        '/usr/bin/google-chrome',                                      // Linux
-        '/usr/bin/chromium-browser',                                  // Linux
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',  // Windows
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
-    ];
-    for (const path of paths) {
-        if (fs.existsSync(path)) {
-            return path;
-        }
+    try {
+        // which 명령어로 Chrome 경로 찾기
+        const { execSync } = require('child_process');
+        const chromePath = execSync('which google-chrome-stable').toString().trim();
+        console.log('Chrome 경로 찾음:', chromePath);
+        
+        // Chrome 버전 확인
+        const version = execSync('google-chrome-stable --version').toString().trim();
+        console.log('Chrome 버전:', version);
+        
+        return chromePath;
+    } catch (error) {
+        console.error('Chrome 확인 중 오류:', error.message);
+        console.log('기본 Chrome 경로 사용');
+        return '/usr/bin/google-chrome-stable';
     }
-    throw new Error('Chrome 브라우저를 찾을 수 없습니다.');
 }
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)
@@ -250,122 +251,177 @@ async function crawlAllCategories() {
 }
 
 async function captureOliveyoungMainRanking() {
-    console.log('='.repeat(50));
-    console.log('올리브영 랭킹 페이지 캡처 시작...');
-    console.log('총 21개 카테고리 캡처 예정');
-    console.log('='.repeat(50));
+    let retryCount = 0;
+    const maxRetries = 3;
+    let driver = null;
     
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const timeStr = getCurrentTimeFormat();
-    const dateTimeStr = `${today}_${timeStr.replace(':', '-')}`;
-    let browser = null;
-    let capturedCount = 0;
-    const totalCategories = Object.keys(CATEGORY_CODES).length;
-    try {
-        const chromePath = await findChrome();
-        browser = await puppeteer.launch({
-            executablePath: chromePath,
-            headless: 'new',
-            pipe: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--window-size=1920,1080',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--disable-websockets',
-                '--no-zygote',
-            ],
-            ignoreHTTPSErrors: true,
-            timeout: 60000
-        });
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
-        await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 1 });
-        await page.setExtraHTTPHeaders({
-            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'sec-ch-ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"macOS"'
-        });
-        // 전체 랭킹 캡처
-        let retryCount = 0;
-        const maxRetries = 3;
-        while (retryCount < maxRetries) {
-            try {
-                const url = 'https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=24&selectType=N';
-                await page.goto(url, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
-                await page.waitForTimeout(6000);
-                await page.waitForFunction(() => {
-                    const element = document.querySelector('.TabsConts');
-                    return element && element.children.length > 0;
-                }, { timeout: 30000 });
-                const fileName = `ranking_전체_${dateTimeStr}.jpg`;
-                const filePath = path.join(capturesDir, fileName);
-                await page.screenshot({ path: filePath, type: 'jpeg', quality: 80, fullPage: true });
-                console.log(`전체 랭킹 페이지 캡처 완료: ${fileName}`);
-                break;
-            } catch (error) {
-                console.error(`전체 랭킹 캡처 시도 ${retryCount + 1}/${maxRetries} 실패:`, error);
-                retryCount++;
-                if (retryCount < maxRetries) {
-                    console.log(`${retryCount + 1}번째 재시도 준비 중... (5초 대기)`);
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                }
+    async function attemptCapture() {
+        console.log('='.repeat(50));
+        console.log('올리브영 랭킹 페이지 캡처 시작...');
+        console.log('총 21개 카테고리 캡처 예정');
+        console.log('='.repeat(50));
+        
+        const now = getKSTTime();
+        const dateFormatted = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        const timeFormatted = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+        // 파일명 포맷: ranking_카테고리_YYYY-MM-DD_HH-MM.jpeg
+        let capturedCount = 0;
+        const errors = [];
+        
+        try {
+            // Selenium 설정
+            const options = new chrome.Options()
+                .addArguments('--headless')
+                .addArguments('--no-sandbox')
+                .addArguments('--disable-dev-shm-usage')
+                .addArguments('--start-maximized')
+                .addArguments('--window-size=1920,1080')
+                .addArguments('--hide-scrollbars')
+                .addArguments('--force-device-scale-factor=1')
+                .addArguments('--screenshot-format=jpeg')
+                .addArguments('--screenshot-quality=80')
+                .addArguments('--disable-gpu')
+                .addArguments('--disable-extensions')
+                .addArguments('--disable-notifications');
+
+            if (process.env.CHROME_BIN) {
+                options.setChromeBinaryPath(process.env.CHROME_BIN);
             }
-        }
-        // 각 카테고리별 캡처
-        for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
-            if (category === '전체') continue;
-            retryCount = 0;
-            while (retryCount < maxRetries) {
+            
+            console.log('Chrome 옵션:', options);
+            console.log('브라우저 실행 시도...');
+            
+            driver = await new Builder()
+                .forBrowser('chrome')
+                .setChromeOptions(options)
+                .build();
+                
+            console.log('브라우저 실행 성공!');
+            
+            // 순차적으로 각 카테고리 처리
+            for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
                 try {
                     const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
-                    await page.goto(url, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
-                    await page.waitForTimeout(8000);
-                    await page.waitForFunction(() => {
-                        const element = document.querySelector('.TabsConts');
-                        return element && element.children.length > 0;
-                    }, { timeout: 30000 });
-                    const fileName = `ranking_${category}_${dateTimeStr}.jpg`;
+                    
+                    console.log(`${category} 랭킹 페이지로 이동...`);
+                    
+                    await driver.get(url);
+                    
+                    // 페이지 로딩 대기
+                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 20000);
+                    
+                    // 필수 요소 로딩 대기
+                    await driver.wait(async () => {
+                        const products = await driver.findElements(By.css('.TabsConts .prd_info'));
+                        return products.length > 0;
+                    }, 20000, '상품 목록 로딩 시간 초과');
+                    
+                    // 추가 대기 시간
+                    await driver.sleep(2000);
+                    
+                    
+                    // 카테고리 헤더 추가
+                    await driver.executeScript(`
+                        const categoryDiv = document.createElement('div');
+                        categoryDiv.id = 'custom-category-header';
+                        categoryDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background-color:#333;color:white;text-align:center;padding:10px 0;font-size:16px;font-weight:bold;z-index:9999;';
+                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
+                        document.body.insertBefore(categoryDiv, document.body.firstChild);
+                        document.body.style.marginTop = '40px';
+                    `);
+                    
+
+                    // 스크린샷 캡처
+                    const fileName = `ranking_${category}_${dateFormatted}_${timeFormatted}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
-                    await page.screenshot({ path: filePath, type: 'jpeg', quality: 80, fullPage: true });
+                    const screenshot = await driver.takeScreenshot();
+                    await fs.promises.writeFile(filePath, screenshot, 'base64');
+                    
                     capturedCount++;
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
-                    console.log(`진행률: ${capturedCount}/${totalCategories} (${Math.round(capturedCount/totalCategories*100)}%)`);
+                    console.log(`진행률: ${capturedCount}/${Object.keys(CATEGORY_CODES).length} (${Math.round(capturedCount/Object.keys(CATEGORY_CODES).length*100)}%)`);
                     console.log('-'.repeat(50));
-                    break;
+                    
+                    // 카테고리 간 대기 시간
+                    await driver.sleep(1000);
+                    
                 } catch (error) {
-                    console.error(`${category} 캡처 시도 ${retryCount + 1}/${maxRetries} 실패:`, error);
-                    retryCount++;
-                    if (retryCount < maxRetries) {
-                        console.log(`${retryCount + 1}번째 재시도 준비 중... (5초 대기)`);
-                        await new Promise(resolve => setTimeout(resolve, 5000));
+                    console.error(`${category} 캡처 중 오류:`, error.message);
+                    errors.push({
+                        category,
+                        error: error.message,
+                        timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+                    });
+                    
+                    // 오류 발생 시 브라우저 재시작
+                    try {
+                        await driver.quit();
+                    } catch (e) {
+                        console.error('브라우저 종료 중 오류:', e.message);
                     }
+                    
+                    // 새 브라우저 세션 시작
+                    driver = await new Builder()
+                        .forBrowser('chrome')
+                        .setChromeOptions(options)
+                        .build();
+                        
+                    // 오류 후 잠시 대기
+                    await driver.sleep(2000);
                 }
             }
-            if (retryCount >= maxRetries) {
-                console.error(`${category}: 최대 재시도 횟수(${maxRetries})를 초과했습니다.`);
+            
+            return {
+                success: capturedCount > 0,
+                capturedCount,
+                totalCategories: Object.keys(CATEGORY_CODES).length,
+                errors: errors.length > 0 ? errors : null
+            };
+            
+        } catch (error) {
+            console.error('캡처 프로세스 오류:', error.message);
+            return {
+                success: false,
+                error: error.message,
+                capturedCount,
+                totalCategories: Object.keys(CATEGORY_CODES).length,
+                errors
+            };
+            
+        } finally {
+            if (driver) {
+                try {
+                    await driver.quit();
+                    console.log('브라우저가 정상적으로 종료되었습니다.');
+                } catch (closeError) {
+                    console.error('브라우저 종료 중 오류:', closeError.message);
+                }
             }
-            await page.waitForTimeout(2000);
         }
-    } catch (error) {
-        console.error('캡처 프로세스 전체 오류:', error);
-    } finally {
-        if (browser) {
-            try {
-                await browser.close();
-            } catch (closeError) {
-                console.error('브라우저 종료 중 오류:', closeError);
+    }
+    
+    // 최대 3번까지 재시도
+    while (retryCount < maxRetries) {
+        console.log(`캡처 시도 ${retryCount + 1}/${maxRetries}`);
+        const result = await attemptCapture();
+        
+        if (result.success) {
+            console.log('캡처 작업 성공!');
+            console.log(`총 ${result.capturedCount}/${result.totalCategories} 카테고리 캡처 완료`);
+            if (result.errors) {
+                console.log('일부 카테고리 캡처 실패:', result.errors);
             }
+            break;
+        }
+        
+        retryCount++;
+        if (retryCount < maxRetries) {
+            console.log(`캡처 실패, ${retryCount + 1}번째 재시도 준비 중... (5초 대기)`);
+            console.log('실패 원인:', result.error);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        } else {
+            console.log('최대 재시도 횟수 초과, 캡처 작업을 중단합니다.');
+            console.log('최종 실패 원인:', result.error);
         }
     }
 }
