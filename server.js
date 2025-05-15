@@ -428,10 +428,12 @@ async function captureOliveyoungMainRanking() {
 
 // 전체 페이지 분할 캡처 후 이어붙이기 함수
 async function captureFullPageByStitching(driver, filePath) {
-    // 1. 전체 높이, 뷰포트 높이 구하기
+    // 창 크기 줄이기
+    const viewportWidth = 1280;
+    const viewportHeight = 600;
+    await driver.manage().window().setRect({ width: viewportWidth, height: viewportHeight });
+    // 전체 높이 구하기
     const totalHeight = await driver.executeScript('return document.body.scrollHeight');
-    const viewportHeight = await driver.executeScript('return window.innerHeight');
-    const width = await driver.executeScript('return window.innerWidth');
     let screenshots = [];
     let y = 0;
     while (y < totalHeight) {
@@ -441,7 +443,7 @@ async function captureFullPageByStitching(driver, filePath) {
         screenshots.push(Buffer.from(screenshot, 'base64'));
         y += viewportHeight;
     }
-    // 2. sharp로 이어붙이기
+    // sharp로 이어붙이기
     let compositeImages = [];
     let offsetY = 0;
     for (let i = 0; i < screenshots.length; i++) {
@@ -457,14 +459,14 @@ async function captureFullPageByStitching(driver, filePath) {
     const totalImageHeight = offsetY;
     await sharp({
         create: {
-            width: width,
+            width: viewportWidth,
             height: totalImageHeight,
             channels: 3,
             background: '#fff'
         }
     })
     .composite(compositeImages)
-    .jpeg({ quality: 80 })
+    .jpeg({ quality: 40 })
     .toFile(filePath);
 }
 
