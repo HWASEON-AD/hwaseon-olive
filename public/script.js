@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const today = `${year}-${month}-${day}`;
             
             // 2025-05-12 이전 날짜 선택 불가능하도록 설정 (홈페이지와 일치하게)
-            const minDate = "2025-05-12";
+            const minDate = "2025-05-15";
             
             // 날짜 필터
             const dateFilter = `

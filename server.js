@@ -436,7 +436,7 @@ async function captureFullPageWithSelenium(driver, filePath) {
     // 한 번에 전체 페이지 캡처
     const screenshot = await driver.takeScreenshot();
     const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
-        .resize({ width: 1200, height: 6000, fit: 'inside' }) // 가로 900, 세로 최대 6000
+        .resize({ width: 1280, height: 6000, fit: 'inside' }) // 가로 900, 세로 최대 6000
         .jpeg({ quality: 50 })
         .toBuffer();
     await fs.promises.writeFile(filePath, sharpBuffer);
