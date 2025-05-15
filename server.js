@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
+const sharp = require('sharp');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -316,40 +317,29 @@ async function captureOliveyoungMainRanking() {
                         return products.length > 0;
                     }, 20000, '상품 목록 로딩 시간 초과');
                     
-                    // 대기시간 단축
-                    await driver.sleep(500); // 기존 2000ms -> 500ms
+                    // 추가 대기 시간
+                    await driver.sleep(500);
                     
-                    // 전체 페이지 크기로 창 크기 조정 (fullPage 캡처 효과)
-                    const bodyHeight = await driver.executeScript('return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)');
-                    const bodyWidth = await driver.executeScript('return Math.max(document.body.scrollWidth, document.documentElement.scrollWidth)');
-                    await driver.manage().window().setRect({ width: bodyWidth, height: bodyHeight });
-                    await driver.sleep(200); // 창 크기 반영 대기
-                    
-                    // 카테고리 헤더 추가
-                    await driver.executeScript(`
-                        const categoryDiv = document.createElement('div');
-                        categoryDiv.id = 'custom-category-header';
-                        categoryDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background-color:#333;color:white;text-align:center;padding:10px 0;font-size:16px;font-weight:bold;z-index:9999;';
-                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
-                        document.body.insertBefore(categoryDiv, document.body.firstChild);
-                        document.body.style.marginTop = '40px';
-                    `);
-                    
+                    // 전체 페이지 크기로 창 조정
+                    const bodyHeight = await driver.executeScript('return document.body.scrollHeight');
+                    await driver.manage().window().setRect({ width: 1920, height: bodyHeight });
+                    await driver.sleep(200); // 창 조정 후 잠깐 대기
 
-                    // 스크린샷 캡처 (JPEG 품질 40)
+                    // 스크린샷(PNG base64)
+                    const screenshotBase64 = await driver.takeScreenshot();
+                    // JPEG로 변환(품질 35)
+                    const jpegBuffer = await sharp(Buffer.from(screenshotBase64, 'base64'))
+                        .jpeg({ quality: 35 })
+                        .toBuffer();
+                    // 저장
                     const fileName = `ranking_${category}_${dateFormatted}_${timeFormatted}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
-                    const screenshot = await driver.takeScreenshot();
-                    await fs.promises.writeFile(filePath, screenshot, 'base64');
-                    
+                    await fs.promises.writeFile(filePath, jpegBuffer);
                     capturedCount++;
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
                     console.log(`진행률: ${capturedCount}/${Object.keys(CATEGORY_CODES).length} (${Math.round(capturedCount/Object.keys(CATEGORY_CODES).length*100)}%)`);
                     console.log('-'.repeat(50));
-                    
-                    // 카테고리 간 대기 시간 단축
-                    await driver.sleep(300); // 기존 1000ms -> 300ms
-                    
+                    await driver.sleep(300); // 카테고리 간 대기시간 단축
                 } catch (error) {
                     console.error(`${category} 캡처 중 오류:`, error.message);
                     errors.push({
