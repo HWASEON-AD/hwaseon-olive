@@ -318,28 +318,37 @@ async function captureOliveyoungMainRanking() {
                     }, 20000, '상품 목록 로딩 시간 초과');
                     
                     // 추가 대기 시간
-                    await driver.sleep(500);
+                    await driver.sleep(2000);
                     
-                    // 전체 페이지 크기로 창 조정
-                    const bodyHeight = await driver.executeScript('return document.body.scrollHeight');
-                    await driver.manage().window().setRect({ width: 1920, height: bodyHeight });
-                    await driver.sleep(200); // 창 조정 후 잠깐 대기
+                    
+                    // 카테고리 헤더 추가
+                    await driver.executeScript(`
+                        const categoryDiv = document.createElement('div');
+                        categoryDiv.id = 'custom-category-header';
+                        categoryDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background-color:#333;color:white;text-align:center;padding:10px 0;font-size:16px;font-weight:bold;z-index:9999;';
+                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
+                        document.body.insertBefore(categoryDiv, document.body.firstChild);
+                        document.body.style.marginTop = '40px';
+                    `);
+                    
 
-                    // 스크린샷(PNG base64)
-                    const screenshotBase64 = await driver.takeScreenshot();
-                    // JPEG로 변환(품질 35)
-                    const jpegBuffer = await sharp(Buffer.from(screenshotBase64, 'base64'))
-                        .jpeg({ quality: 35 })
-                        .toBuffer();
-                    // 저장
+                    // 스크린샷 캡처
                     const fileName = `ranking_${category}_${dateFormatted}_${timeFormatted}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
+                    const screenshot = await driver.takeScreenshot();
+                    const jpegBuffer = await sharp(Buffer.from(screenshot, 'base64'))
+                        .jpeg({ quality: 10, progressive: true })
+                        .toBuffer();
                     await fs.promises.writeFile(filePath, jpegBuffer);
+                    
                     capturedCount++;
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
                     console.log(`진행률: ${capturedCount}/${Object.keys(CATEGORY_CODES).length} (${Math.round(capturedCount/Object.keys(CATEGORY_CODES).length*100)}%)`);
                     console.log('-'.repeat(50));
-                    await driver.sleep(300); // 카테고리 간 대기시간 단축
+                    
+                    // 카테고리 간 대기 시간
+                    await driver.sleep(1000);
+                    
                 } catch (error) {
                     console.error(`${category} 캡처 중 오류:`, error.message);
                     errors.push({
