@@ -335,11 +335,7 @@ async function captureOliveyoungMainRanking() {
                         document.body.style.marginTop = '40px';
                     `);
                     
-                    // 전체 페이지 크기로 창 크기 조정
-                    const bodyHeight = await driver.executeScript('return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)');
-                    const bodyWidth = await driver.executeScript('return Math.max(document.body.scrollWidth, document.documentElement.scrollWidth)');
-                    await driver.manage().window().setRect({ width: bodyWidth, height: bodyHeight });
-                    await driver.sleep(1000); // 창 크기 반영 대기
+                    
                     
                     // 스크린샷 캡처
                     const kstNow = getKSTTime();
