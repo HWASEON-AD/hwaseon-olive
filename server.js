@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
+const sharp = require('sharp');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -334,8 +335,7 @@ async function captureOliveyoungMainRanking() {
                     // 스크린샷 캡처
                     const fileName = `ranking_${category}_${dateFormatted}_${timeFormatted}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
-                    const screenshot = await driver.takeScreenshot();
-                    await fs.promises.writeFile(filePath, screenshot, 'base64');
+                    await captureFullPageByStitching(driver, filePath);
                     
                     capturedCount++;
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
@@ -424,6 +424,48 @@ async function captureOliveyoungMainRanking() {
             console.log('최종 실패 원인:', result.error);
         }
     }
+}
+
+// 전체 페이지 분할 캡처 후 이어붙이기 함수
+async function captureFullPageByStitching(driver, filePath) {
+    // 1. 전체 높이, 뷰포트 높이 구하기
+    const totalHeight = await driver.executeScript('return document.body.scrollHeight');
+    const viewportHeight = await driver.executeScript('return window.innerHeight');
+    const width = await driver.executeScript('return window.innerWidth');
+    let screenshots = [];
+    let y = 0;
+    while (y < totalHeight) {
+        await driver.executeScript(`window.scrollTo(0, ${y})`);
+        await driver.sleep(300); // 스크롤 후 렌더링 대기
+        const screenshot = await driver.takeScreenshot();
+        screenshots.push(Buffer.from(screenshot, 'base64'));
+        y += viewportHeight;
+    }
+    // 2. sharp로 이어붙이기
+    let compositeImages = [];
+    let offsetY = 0;
+    for (let i = 0; i < screenshots.length; i++) {
+        const img = sharp(screenshots[i]);
+        const metadata = await img.metadata();
+        compositeImages.push({
+            input: screenshots[i],
+            top: offsetY,
+            left: 0
+        });
+        offsetY += metadata.height;
+    }
+    const totalImageHeight = offsetY;
+    await sharp({
+        create: {
+            width: width,
+            height: totalImageHeight,
+            channels: 3,
+            background: '#fff'
+        }
+    })
+    .composite(compositeImages)
+    .jpeg({ quality: 80 })
+    .toFile(filePath);
 }
 
 // 다음 크롤링 스케줄링 함수
