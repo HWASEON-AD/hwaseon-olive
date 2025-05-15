@@ -37,7 +37,19 @@ let scheduledCrawlTimer;
 
 // Chrome 실행 경로 설정
 async function findChrome() {
-    return process.env.CHROME_BIN || '/usr/bin/chromium';
+    const paths = [
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
+        '/usr/bin/google-chrome',                                      // Linux
+        '/usr/bin/chromium-browser',                                  // Linux
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',  // Windows
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+    ];
+    for (const path of paths) {
+        if (fs.existsSync(path)) {
+            return path;
+        }
+    }
+    throw new Error('Chrome 브라우저를 찾을 수 없습니다.');
 }
 
 // 현재 시간 포맷 함수 (24시간제 HH:MM)

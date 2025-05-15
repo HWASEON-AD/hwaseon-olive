@@ -1,34 +1,38 @@
-FROM node:20-slim
+FROM node:20.12.2-slim
 
-# Install Chrome and ChromeDriver
-RUN apt-get update && apt-get install -y \
-    wget \
-    unzip \
+# Install Chromium and dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
-    chromium-driver \
-    && apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+    dumb-init \
+    fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libgdk-pixbuf2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set Chrome and ChromeDriver paths
 ENV CHROME_BIN=/usr/bin/chromium
-ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
-# Create app directory
 WORKDIR /usr/src/app
 
-# Install app dependencies
 COPY package*.json ./
 RUN npm install
 
-# Bundle app source
 COPY . .
 
-# Create captures directory
 RUN mkdir -p public/captures && chmod -R 777 public/captures
 
 EXPOSE 5001
 
-# Use dumb-init to handle signals properly
-RUN apt-get update && apt-get install -y dumb-init && rm -rf /var/lib/apt/lists/*
 ENTRYPOINT ["dumb-init", "--"]
-
 CMD [ "node", "server.js" ] 
