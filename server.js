@@ -262,15 +262,9 @@ async function captureOliveyoungMainRanking() {
         console.log('='.repeat(50));
         
         const now = getKSTTime();
-        const dateTimeStr = now.toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        }).replace(/[. :]/g, '-');
-        
+        const dateFormatted = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        const timeFormatted = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+        // 파일명 포맷: ranking_카테고리_YYYY-MM-DD_HH-MM.jpeg
         let capturedCount = 0;
         const errors = [];
         
@@ -338,7 +332,7 @@ async function captureOliveyoungMainRanking() {
                     
 
                     // 스크린샷 캡처
-                    const fileName = `ranking_${category}_${dateTimeStr}.jpeg`;
+                    const fileName = `ranking_${category}_${dateFormatted}_${timeFormatted}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
                     const screenshot = await driver.takeScreenshot();
                     await fs.promises.writeFile(filePath, screenshot, 'base64');
