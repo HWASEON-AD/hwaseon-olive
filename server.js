@@ -325,18 +325,12 @@ async function captureOliveyoungMainRanking() {
                     // 추가 대기 시간
                     await driver.sleep(2000);
                     
-                    // 카테고리 헤더 추가 - 서버에서 KST 시간 직접 계산하여 주입
-                    const kstNow = getKSTTime();
-                    const kstTimeString = kstNow.toLocaleTimeString('ko-KR', { 
-                        hour: '2-digit', 
-                        minute: '2-digit', 
-                        hour12: false,
-                        timeZone: 'Asia/Seoul'
-                    });
-
+                    // 카테고리 헤더 추가 - 현재 KST 시간 정확히 표시
                     await driver.executeScript(`
-                        // 서버에서 계산한 KST 시간 사용 (브라우저의 시간대 설정에 영향받지 않음)
-                        const timeStr = "${kstTimeString}"; 
+                        // 현재 KST 시간을 JavaScript로 가져오기
+                        const now = new Date();
+                        const kstOptions = { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false };
+                        const timeStr = now.toLocaleTimeString('ko-KR', kstOptions);
                         
                         // 카테고리 헤더 생성 (고정 위치)
                         const categoryDiv = document.createElement('div');
