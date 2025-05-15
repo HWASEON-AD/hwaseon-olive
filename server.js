@@ -335,7 +335,7 @@ async function captureOliveyoungMainRanking() {
                     // 스크린샷 캡처
                     const fileName = `ranking_${category}_${dateFormatted}_${timeFormatted}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
-                    await captureFullPageByStitching(driver, filePath);
+                    await captureFullPageWithSelenium(driver, filePath);
                     
                     capturedCount++;
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
@@ -427,47 +427,15 @@ async function captureOliveyoungMainRanking() {
 }
 
 // 전체 페이지 분할 캡처 후 이어붙이기 함수
-async function captureFullPageByStitching(driver, filePath) {
-    // 창 크기 줄이기
-    const viewportWidth = 1280;
-    const viewportHeight = 600;
-    await driver.manage().window().setRect({ width: viewportWidth, height: viewportHeight });
-    // 전체 높이 구하기
+async function captureFullPageWithSelenium(driver, filePath) {
+    // 전체 페이지 높이로 창 크기 조정
     const totalHeight = await driver.executeScript('return document.body.scrollHeight');
-    let screenshots = [];
-    let y = 0;
-    while (y < totalHeight) {
-        await driver.executeScript(`window.scrollTo(0, ${y})`);
-        await driver.sleep(300); // 스크롤 후 렌더링 대기
-        const screenshot = await driver.takeScreenshot();
-        screenshots.push(Buffer.from(screenshot, 'base64'));
-        y += viewportHeight;
-    }
-    // sharp로 이어붙이기
-    let compositeImages = [];
-    let offsetY = 0;
-    for (let i = 0; i < screenshots.length; i++) {
-        const img = sharp(screenshots[i]);
-        const metadata = await img.metadata();
-        compositeImages.push({
-            input: screenshots[i],
-            top: offsetY,
-            left: 0
-        });
-        offsetY += metadata.height;
-    }
-    const totalImageHeight = offsetY;
-    await sharp({
-        create: {
-            width: viewportWidth,
-            height: totalImageHeight,
-            channels: 3,
-            background: '#fff'
-        }
-    })
-    .composite(compositeImages)
-    .jpeg({ quality: 40 })
-    .toFile(filePath);
+    const viewportWidth = 1280;
+    await driver.manage().window().setRect({ width: viewportWidth, height: totalHeight });
+    await driver.sleep(1000); // 렌더링 대기
+    // 한 번에 전체 페이지 캡처
+    const screenshot = await driver.takeScreenshot();
+    await fs.promises.writeFile(filePath, screenshot, 'base64');
 }
 
 // 다음 크롤링 스케줄링 함수
