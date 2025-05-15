@@ -430,12 +430,16 @@ async function captureOliveyoungMainRanking() {
 async function captureFullPageWithSelenium(driver, filePath) {
     // 전체 페이지 높이로 창 크기 조정
     const totalHeight = await driver.executeScript('return document.body.scrollHeight');
-    const viewportWidth = 1280;
+    const viewportWidth = 900;
     await driver.manage().window().setRect({ width: viewportWidth, height: totalHeight });
     await driver.sleep(1000); // 렌더링 대기
     // 한 번에 전체 페이지 캡처
     const screenshot = await driver.takeScreenshot();
-    await fs.promises.writeFile(filePath, screenshot, 'base64');
+    const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
+        .resize({ width: 900, height: 6000, fit: 'inside' }) // 가로 900, 세로 최대 6000
+        .jpeg({ quality: 30 })
+        .toBuffer();
+    await fs.promises.writeFile(filePath, sharpBuffer);
 }
 
 // 다음 크롤링 스케줄링 함수
