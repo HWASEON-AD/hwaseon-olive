@@ -735,7 +735,7 @@ app.get('/api/captures', (req, res) => {
         });
         
         // 카테고리 필터링 - 정확한 매칭
-        if (category && category !== '전체') {
+        if (category) {
             captures = captures.filter(capture => capture.category === category);
         }
         
