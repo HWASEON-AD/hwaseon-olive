@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const FormData = require('form-data');
 
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5001'; // Render 환경이면 실제 도메인으로 변경
+
 // 1. 네이버웍스 OAuth2 토큰 발급
 async function getAccessToken() {
   const res = await axios.post('https://auth.worksmobile.com/oauth2/v2.0/token', null, {
@@ -53,39 +55,50 @@ async function uploadFile(token, folderId, filePath) {
   });
 }
 
-// 4. 날짜/카테고리별 폴더 구조 생성 및 파일 업로드
-async function backupFiles() { 
-  const token = await getAccessToken();
+// 4. 캡처 파일이 없으면 서버에서 다운로드해서 임시 저장 후 업로드
+async function downloadImageToTemp(imageUrl, tempPath) {
+  const res = await axios.get(imageUrl, { responseType: 'stream' });
+  const writer = fs.createWriteStream(tempPath);
+  await new Promise((resolve, reject) => {
+    res.data.pipe(writer);
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
 
-  // 1. hwaseon-olive 폴더 생성
+// 5. 날짜/카테고리별 폴더 구조 생성 및 파일 업로드
+async function backupFiles() {
+  const token = await getAccessToken();
   const rootFolderId = await createFolderIfNotExists(token, null, 'hwaseon-olive');
 
-  // 2. 캡처본 폴더에서 날짜/카테고리별로 파일 업로드
-  const baseDir = path.join(__dirname, 'public', 'captures');
-  if (!fs.existsSync(baseDir)) {
-    console.log('캡처본 폴더가 없습니다:', baseDir);
-    return;
-  }
-  const dates = fs.readdirSync(baseDir);
-  for (const date of dates) {
-    const datePath = path.join(baseDir, date);
-    if (!fs.statSync(datePath).isDirectory()) continue;
+  // 1. 서버에서 캡처 목록 받아오기
+  const capturesRes = await axios.get(`${BASE_URL}/api/captures`);
+  const captures = capturesRes.data.data;
+
+  for (const capture of captures) {
+    const { date, category, fileName, imageUrl } = capture;
+    const localDir = path.join(__dirname, 'public', 'captures', date, category);
+    const localPath = path.join(localDir, fileName);
+    let fileToUpload = localPath;
+    let isTemp = false;
+
+    // 파일이 없으면 서버에서 다운로드
+    if (!fs.existsSync(localPath)) {
+      fs.mkdirSync(localDir, { recursive: true });
+      const fullImageUrl = imageUrl.startsWith('http') ? imageUrl : `${BASE_URL}${imageUrl}`;
+      await downloadImageToTemp(fullImageUrl, localPath);
+      isTemp = true;
+    }
+
+    // 네이버웍스 드라이브 폴더 생성
     const dateFolderId = await createFolderIfNotExists(token, rootFolderId, date);
+    const categoryFolderId = await createFolderIfNotExists(token, dateFolderId, category);
+    await uploadFile(token, categoryFolderId, fileToUpload);
+    console.log(`업로드 완료: ${date}/${category}/${fileName}`);
 
-    const categories = fs.readdirSync(datePath);
-    for (const category of categories) {
-      const categoryPath = path.join(datePath, category);
-      if (!fs.statSync(categoryPath).isDirectory()) continue;
-      const categoryFolderId = await createFolderIfNotExists(token, dateFolderId, category);
-
-      const files = fs.readdirSync(categoryPath);
-      for (const file of files) {
-        const filePath = path.join(categoryPath, file);
-        if (fs.statSync(filePath).isFile()) {
-          await uploadFile(token, categoryFolderId, filePath);
-          console.log(`업로드 완료: ${date}/${category}/${file}`);
-        }
-      }
+    // 임시로 다운로드한 파일은 삭제
+    if (isTemp) {
+      fs.unlinkSync(localPath);
     }
   }
 }
