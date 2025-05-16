@@ -8,6 +8,7 @@ const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
 const sharp = require('sharp');
+const qs = require('querystring');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -922,3 +923,22 @@ app.listen(port, () => {
     // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
     crawlAllCategories();
 });
+
+async function getAccessToken() {
+  try {
+    const res = await axios.post(
+      'https://auth.worksmobile.com/oauth2/v2.0/token',
+      qs.stringify({
+        grant_type: 'client_credentials',
+        client_id: process.env.NAVERWORKS_CLIENT_ID,
+        client_secret: process.env.NAVERWORKS_CLIENT_SECRET,
+        scope: process.env.NAVERWORKS_DRIVE_SCOPE || 'drive'
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    return res.data.access_token;
+  } catch (err) {
+    console.error('토큰 발급 실패:', err.response?.data || err.message);
+    throw err;
+  }
+}
