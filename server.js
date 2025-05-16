@@ -19,7 +19,10 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
 
-
+// 네이버웍스 드라이브 자동 업로드 (서버 시작 시 1회 실행)
+if (process.env.ENABLE_NAVERWORKS_BACKUP === 'true') {
+  require('./naverworks-drive-backup');
+}
 
 // 캡처 저장 디렉토리 설정
 const capturesDir = path.join(__dirname, 'public', 'captures');
