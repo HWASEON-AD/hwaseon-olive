@@ -8,11 +8,10 @@ const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
 const sharp = require('sharp');
-const qs = require('querystring');
-const FormData = require('form-data');
 const app = express();
 const port = process.env.PORT || 5001;
 
+const RANKING_DATA_PATH = '/data/ranking.json';
 
 // CORS 미들웨어 설정
 app.use(cors());
@@ -22,11 +21,6 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
 
-
-// 네이버웍스 드라이브 자동 업로드 (서버 시작 시 1회 실행)
-if (process.env.ENABLE_NAVERWORKS_BACKUP === 'true') {
-    require('./naverworks-drive-backup');
-}
 
 // 캡처 저장 디렉토리 설정
 const capturesDir = path.join(__dirname, 'public', 'captures');
@@ -41,32 +35,18 @@ let productCache = {
 // 크롤링 스케줄링 관련 변수
 let scheduledCrawlTimer;
 
-// 네이버웍스 API 설정
-const NAVERWORKS_API_KEY = process.env.NAVERWORKS_CLIENT_ID;
-const NAVERWORKS_UPLOAD_URL = 'https://www.worksapis.com/v1.0/users/{gt.min@hwaseon.com}/drive/files';
-
-// 네이버웍스 드라이브에 파일 업로드하는 함수
-async function uploadToNaverworks(filePath, category, dateFormatted) {
+// 서버 시작 시 랭킹 데이터 복원
+if (fs.existsSync(RANKING_DATA_PATH)) {
     try {
-        const formData = new FormData();
-        formData.append('file', fs.createReadStream(filePath));
-        
-        // 네이버웍스 드라이브 경로 설정 (날짜/카테고리 구조)
-        const drivePath = `/올리브영_랭킹/${dateFormatted}/${category}`;
-        formData.append('path', drivePath);
-
-        const response = await axios.post(NAVERWORKS_UPLOAD_URL, formData, {
-            headers: {
-                'Authorization': `Bearer ${NAVERWORKS_API_KEY}`,
-                ...formData.getHeaders()
-            }
-        });
-
-        console.log(`네이버웍스 드라이브 업로드 성공: ${drivePath}`);
-        return response.data;
-    } catch (error) {
-        console.error('네이버웍스 드라이브 업로드 실패:', error.message);
-        throw error;
+        const raw = fs.readFileSync(RANKING_DATA_PATH, 'utf-8');
+        productCache = JSON.parse(raw);
+        // timestamp를 Date 객체로 복원
+        if (productCache.timestamp) {
+            productCache.timestamp = new Date(productCache.timestamp);
+        }
+        console.log('랭킹 데이터 복원 완료:', RANKING_DATA_PATH);
+    } catch (e) {
+        console.error('랭킹 데이터 복원 실패:', e);
     }
 }
 
@@ -280,6 +260,14 @@ async function crawlAllCategories() {
         // 다음 크롤링 스케줄링
         scheduleNextCrawl();
         
+        // 크롤링 완료 후 랭킹 데이터 저장
+        try {
+            fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(productCache, null, 2));
+            console.log('랭킹 데이터 저장 완료:', RANKING_DATA_PATH);
+        } catch (e) {
+            console.error('랭킹 데이터 저장 실패:', e);
+        }
+        
     } catch (error) {
         console.error(`크롤링 오류:`, error);
         // 오류가 발생해도 다음 크롤링은 스케줄링
@@ -480,13 +468,7 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     // 로컬에 저장
     await fs.promises.writeFile(filePath, sharpBuffer);
     
-    // 네이버웍스 드라이브에 업로드
-    try {
-        await uploadToNaverworks(filePath, category, dateFormatted);
-    } catch (error) {
-        console.error('네이버웍스 드라이브 업로드 실패:', error.message);
-        // 업로드 실패해도 로컬 저장은 유지
-    }
+    
 }
 
 // 다음 크롤링 스케줄링 함수
@@ -952,6 +934,18 @@ app.get('/health', async (req, res) => {
     }
 });
 
+// 서버 종료 시 랭킹 데이터 저장
+function saveRankingOnExit() {
+    try {
+        fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(productCache, null, 2));
+        console.log('서버 종료 - 랭킹 데이터 저장 완료:', RANKING_DATA_PATH);
+    } catch (e) {
+        console.error('서버 종료 - 랭킹 데이터 저장 실패:', e);
+    }
+}
+process.on('SIGINT', () => { saveRankingOnExit(); process.exit(); });
+process.on('SIGTERM', () => { saveRankingOnExit(); process.exit(); });
+
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
     
@@ -966,22 +960,3 @@ app.listen(port, () => {
     // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
     crawlAllCategories();
 });
-
-async function getAccessToken() {
-  try {
-    const res = await axios.post(
-      'https://auth.worksmobile.com/oauth2/v2.0/token',
-      qs.stringify({
-        grant_type: 'client_credentials',
-        client_id: process.env.NAVERWORKS_CLIENT_ID,
-        client_secret: process.env.NAVERWORKS_CLIENT_SECRET,
-        scope: process.env.NAVERWORKS_DRIVE_SCOPE || 'drive'
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
-    return res.data.access_token;
-  } catch (err) {
-    console.error('토큰 발급 실패:', err.response?.data || err.message);
-    throw err;
-  }
-}
