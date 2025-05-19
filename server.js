@@ -43,7 +43,7 @@ let scheduledCrawlTimer;
 
 // 네이버웍스 API 설정
 const NAVERWORKS_API_KEY = process.env.NAVERWORKS_CLIENT_ID;
-const NAVERWORKS_UPLOAD_URL = 'https://developers.worksmobile.com/kr/docs/drive-file-root-create#i-0';
+const NAVERWORKS_UPLOAD_URL = 'https://www.worksapis.com/v1.0/users/{gt.min@hwaseon.com}/drive/files';
 
 // 네이버웍스 드라이브에 파일 업로드하는 함수
 async function uploadToNaverworks(filePath, category, dateFormatted) {

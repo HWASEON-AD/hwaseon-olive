@@ -137,4 +137,35 @@ async function backupFiles() {
   }
 }
 
+function saveCrawledData(data) {
+  const persistentDiskPath = '/data/crawled-data';
+  if (!fs.existsSync(persistentDiskPath)) {
+    fs.mkdirSync(persistentDiskPath, { recursive: true });
+  }
+  const fileName = `crawled_${new Date().toISOString().slice(0, 10)}.json`;
+  const filePath = path.join(persistentDiskPath, fileName);
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  console.log(`크롤링 데이터 저장됨: ${filePath}`);
+}
+
+async function uploadToNaverWorksDrive(token, filePath) {
+  try {
+    const userId = 'gt.min@hwaseon.com';
+    const url = `https://www.worksapis.com/v1.0/users/${userId}/drive/files`;
+    const form = new FormData();
+    form.append('file', fs.createReadStream(filePath));
+
+    const response = await axios.post(url, form, {
+      headers: {
+        ...form.getHeaders(),
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    console.log('업로드 성공:', response.data);
+  } catch (err) {
+    console.error('업로드 실패:', err.response?.data || err.message);
+  }
+}
+
 backupFiles(); 

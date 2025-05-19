@@ -1,6 +1,0 @@
-module.exports = {
-    NAVERWORKS_CLIENT_ID: 'nzmtuF6hsJE03fLbiVvT',
-    NAVERWORKS_CLIENT_SECRET: 'nuh89psWyA',
-    NAVERWORKS_DRIVE_SCOPE: 'drive',
-    ENABLE_NAVERWORKS_BACKUP: true
-}; 
