@@ -15,13 +15,14 @@ async function getAccessToken() {
         grant_type: 'client_credentials',
         client_id: process.env.NAVERWORKS_CLIENT_ID,
         client_secret: process.env.NAVERWORKS_CLIENT_SECRET,
-        scope: process.env.NAVERWORKS_DRIVE_SCOPE || 'drive'
+        scope: 'drive.readwrite'
       }), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         }
       }
     );
+    console.log('토큰 발급 성공:', res.data);
     return res.data.access_token;
   } catch (err) {
     console.error('토큰 발급 실패:', err.response?.data || err.message);
