@@ -3,20 +3,25 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const FormData = require('form-data');
+const querystring = require('querystring');
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5001'; // Render 환경이면 실제 도메인으로 변경
 
 // 1. 네이버웍스 OAuth2 토큰 발급
 async function getAccessToken() {
   try {
-    const res = await axios.post('https://auth.worksmobile.com/oauth2/v2.0/token', null, {
-      params: {
+    const res = await axios.post('https://auth.worksmobile.com/oauth2/v2.0/token', 
+      querystring.stringify({
         grant_type: 'client_credentials',
         client_id: process.env.NAVERWORKS_CLIENT_ID,
         client_secret: process.env.NAVERWORKS_CLIENT_SECRET,
         scope: process.env.NAVERWORKS_DRIVE_SCOPE || 'drive'
+      }), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
       }
-    });
+    );
     return res.data.access_token;
   } catch (err) {
     console.error('토큰 발급 실패:', err.response?.data || err.message);
