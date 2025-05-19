@@ -15,10 +15,11 @@ async function getAccessToken() {
         grant_type: 'client_credentials',
         client_id: process.env.NAVERWORKS_CLIENT_ID,
         client_secret: process.env.NAVERWORKS_CLIENT_SECRET,
-        scope: 'drive.readwrite'
+        scope: 'file file.read'
       }), {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
         }
       }
     );
