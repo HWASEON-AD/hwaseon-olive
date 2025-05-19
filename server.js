@@ -9,20 +9,23 @@ const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
 const sharp = require('sharp');
 const qs = require('querystring');
-
+const FormData = require('form-data');
 const app = express();
 const port = process.env.PORT || 5001;
 
+
 // CORS 미들웨어 설정
 app.use(cors());
+
 
 // 정적 파일 서빙을 위한 미들웨어 설정
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
 
+
 // 네이버웍스 드라이브 자동 업로드 (서버 시작 시 1회 실행)
 if (process.env.ENABLE_NAVERWORKS_BACKUP === 'true') {
-  require('./naverworks-drive-backup');
+    require('./naverworks-drive-backup');
 }
 
 // 캡처 저장 디렉토리 설정
@@ -37,6 +40,35 @@ let productCache = {
 
 // 크롤링 스케줄링 관련 변수
 let scheduledCrawlTimer;
+
+// 네이버웍스 API 설정
+const NAVERWORKS_API_KEY = process.env.NAVERWORKS_CLIENT_ID;
+const NAVERWORKS_UPLOAD_URL = 'https://api.worksmobile.com/upload/v1/files';
+
+// 네이버웍스 드라이브에 파일 업로드하는 함수
+async function uploadToNaverworks(filePath, category, dateFormatted) {
+    try {
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(filePath));
+        
+        // 네이버웍스 드라이브 경로 설정 (날짜/카테고리 구조)
+        const drivePath = `/올리브영_랭킹/${dateFormatted}/${category}`;
+        formData.append('path', drivePath);
+
+        const response = await axios.post(NAVERWORKS_UPLOAD_URL, formData, {
+            headers: {
+                'Authorization': `Bearer ${NAVERWORKS_API_KEY}`,
+                ...formData.getHeaders()
+            }
+        });
+
+        console.log(`네이버웍스 드라이브 업로드 성공: ${drivePath}`);
+        return response.data;
+    } catch (error) {
+        console.error('네이버웍스 드라이브 업로드 실패:', error.message);
+        throw error;
+    }
+}
 
 // Chrome 실행 경로 설정
 async function findChrome() {
@@ -339,7 +371,7 @@ async function captureOliveyoungMainRanking() {
                     // 스크린샷 캡처
                     const fileName = `ranking_${category}_${dateFormatted}_${timeFormatted}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
-                    await captureFullPageWithSelenium(driver, filePath);
+                    await captureFullPageWithSelenium(driver, filePath, category, dateFormatted);
                     
                     capturedCount++;
                     console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
@@ -431,19 +463,30 @@ async function captureOliveyoungMainRanking() {
 }
 
 // 전체 페이지 분할 캡처 후 이어붙이기 함수
-async function captureFullPageWithSelenium(driver, filePath) {
+async function captureFullPageWithSelenium(driver, filePath, category, dateFormatted) {
     // 전체 페이지 높이로 창 크기 조정
     const totalHeight = await driver.executeScript('return document.body.scrollHeight');
     const viewportWidth = 900;
     await driver.manage().window().setRect({ width: viewportWidth, height: totalHeight });
     await driver.sleep(1000); // 렌더링 대기
+    
     // 한 번에 전체 페이지 캡처
     const screenshot = await driver.takeScreenshot();
     const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
-        .resize({ width: 1280, height: 6000, fit: 'inside' }) // 가로 900, 세로 최대 6000
+        .resize({ width: 1280, height: 6000, fit: 'inside' })
         .jpeg({ quality: 50 })
         .toBuffer();
+    
+    // 로컬에 저장
     await fs.promises.writeFile(filePath, sharpBuffer);
+    
+    // 네이버웍스 드라이브에 업로드
+    try {
+        await uploadToNaverworks(filePath, category, dateFormatted);
+    } catch (error) {
+        console.error('네이버웍스 드라이브 업로드 실패:', error.message);
+        // 업로드 실패해도 로컬 저장은 유지
+    }
 }
 
 // 다음 크롤링 스케줄링 함수
