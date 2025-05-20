@@ -289,11 +289,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadCapturesFromServer('전체', today, today);
             });
             
-            // 카테고리 선택 이벤트 제거
+            // 카테고리 선택 이벤트 리스너 추가
             const categorySelect = document.getElementById('captureCategory');
             if (categorySelect) {
-                const newSelect = categorySelect.cloneNode(true);
-                categorySelect.parentNode.replaceChild(newSelect, categorySelect);
+                categorySelect.addEventListener('change', function() {
+                    const category = this.value;
+                    loadCapturesFromServer(category, null, null);
+                });
             }
         }
     }
