@@ -8,10 +8,19 @@ const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
 const sharp = require('sharp');
+const cron = require('node-cron');
+const nodemailer = require('nodemailer');
+const FormData = require('form-data');
+const jwt = require('jsonwebtoken');
+const archiver = require('archiver');
+require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5001;
 
+
+
 const RANKING_DATA_PATH = '/data/ranking.json';
+const WORKS_USER_ID = process.env.WORKS_USER_ID; // 예: gt.min@hwaseon.com
 
 // CORS 미들웨어 설정
 app.use(cors());
@@ -118,6 +127,78 @@ function getNextCrawlTime() {
     }
     
     return nextCrawlTime;
+}
+
+// 이메일 전송 설정
+const transporter = nodemailer.createTransport({
+    host: 'smtp.worksmobile.com',
+    port: 465,
+    secure: true,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// 캡처본 정리 및 이메일 전송 함수 (zip 첨부)
+async function organizeAndSendCaptures() {
+    const today = new Date().toISOString().split('T')[0];
+    const tempDir = path.join(__dirname, 'temp_captures', today);
+    const zipPath = path.join(__dirname, `oliveyoung_captures_${today}.zip`);
+    try {
+        // 임시 디렉토리 생성
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+        // 카테고리별 폴더 생성
+        for (const category of Object.keys(CATEGORY_CODES)) {
+            const categoryDir = path.join(tempDir, category);
+            if (!fs.existsSync(categoryDir)) {
+                fs.mkdirSync(categoryDir);
+            }
+        }
+        // 캡처본 파일들을 카테고리별로 이동
+        const files = fs.readdirSync(capturesDir);
+        for (const file of files) {
+            const match = file.match(/ranking_(.+)_(\d{4}-\d{2}-\d{2})_/);
+            if (match && match[2] === today) {
+                const category = match[1];
+                const sourcePath = path.join(capturesDir, file);
+                const targetPath = path.join(tempDir, category, file);
+                fs.copyFileSync(sourcePath, targetPath);
+            }
+        }
+        // zip 파일로 압축
+        await new Promise((resolve, reject) => {
+            const output = fs.createWriteStream(zipPath);
+            const archive = archiver('zip', { zlib: { level: 9 } });
+            output.on('close', resolve);
+            archive.on('error', reject);
+            archive.pipe(output);
+            archive.directory(tempDir, false); // tempDir 내부 폴더 구조 유지
+            archive.finalize();
+        });
+        // 이메일 전송
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: 'gt.min@hwaseon.com',
+            subject: `올리브영 ${today} 랭킹 캡처본 (zip 첨부)`,
+            text: `${today} 올리브영 랭킹 캡처본이 zip 파일로 첨부되었습니다.`,
+            attachments: [
+                {
+                    filename: `oliveyoung_captures_${today}.zip`,
+                    path: zipPath
+                }
+            ]
+        };
+        await transporter.sendMail(mailOptions);
+        console.log(`${today} 캡처본 zip 이메일 전송 완료`);
+        // 임시 디렉토리 및 zip 파일 삭제
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        fs.unlinkSync(zipPath);
+    } catch (error) {
+        console.error('캡처본 정리 및 이메일 전송 중 오류:', error);
+    }
 }
 
 // 모든 카테고리 크롤링 함수
@@ -256,6 +337,10 @@ async function crawlAllCategories() {
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
         await captureOliveyoungMainRanking();
+        
+        // 캡처가 끝날 때마다 메일 전송
+        console.log('캡처 완료 - 캡처본 정리 및 이메일 전송 시작...');
+        await organizeAndSendCaptures();
         
         // 다음 크롤링 스케줄링
         scheduleNextCrawl();
@@ -467,8 +552,6 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     
     // 로컬에 저장
     await fs.promises.writeFile(filePath, sharpBuffer);
-    
-    
 }
 
 // 다음 크롤링 스케줄링 함수
@@ -728,23 +811,19 @@ app.get('/api/search', (req, res) => {
 // 캡처 목록 조회 API
 app.get('/api/captures', (req, res) => {
     try {
-        const { category, startDate, endDate } = req.query;
-        
+        const { category } = req.query;
+        const today = new Date().toISOString().split('T')[0];
         // captures 디렉토리의 파일 목록 읽기
         const files = fs.readdirSync(capturesDir);
-        
         // 이미지 파일만 필터링 (jpg, jpeg, png)
         const imageFiles = files.filter(file => /\.(jpg|jpeg|png)$/i.test(file));
-        
         // 파일 정보 생성
         let captures = imageFiles.map(fileName => {
             const filePath = path.join(capturesDir, fileName);
             const stats = fs.statSync(filePath);
-            
             // 파일명에서 카테고리, 날짜와 시간 추출 (ranking_카테고리_YYYY-MM-DD_HH-MM.jpg 형식)
             const match = fileName.match(/ranking_(.+)_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
             let extractedCategory, date, time;
-            
             if (match) {
                 extractedCategory = match[1];
                 date = match[2];
@@ -754,13 +833,11 @@ app.get('/api/captures', (req, res) => {
                 const fileDate = new Date(new Date(stats.mtime).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
                 extractedCategory = '전체';
                 date = fileDate.toISOString().split('T')[0];
-                
                 // 시간을 KST 형식으로 포맷팅
                 const hours = String(fileDate.getHours()).padStart(2, '0');
                 const minutes = String(fileDate.getMinutes()).padStart(2, '0');
                 time = `${hours}:${minutes}`;
             }
-            
             return {
                 id: path.parse(fileName).name,
                 fileName,
@@ -772,25 +849,12 @@ app.get('/api/captures', (req, res) => {
                 fileSize: stats.size
             };
         });
-        
+        // 오늘 날짜만 필터링
+        captures = captures.filter(capture => capture.date === today);
         // 카테고리 필터링 - 정확한 매칭
         if (category) {
             captures = captures.filter(capture => capture.category === category);
         }
-        
-        // 날짜 필터링
-        if (startDate || endDate) {
-            captures = captures.filter(capture => {
-                if (startDate && endDate) {
-                    return capture.date >= startDate && capture.date <= endDate;
-                } else if (startDate) {
-                    return capture.date >= startDate;
-                } else {
-                    return capture.date <= endDate;
-                }
-            });
-        }
-        
         // 날짜와 시간 기준으로 내림차순 정렬 (최신순)
         captures.sort((a, b) => {
             if (a.date !== b.date) {
@@ -798,22 +862,17 @@ app.get('/api/captures', (req, res) => {
             }
             return b.time.localeCompare(a.time);
         });
-        
         // 사용 가능한 카테고리 목록 생성
         const availableCategories = [...new Set(captures.map(capture => capture.category))].sort();
-        
         res.json({
             success: true,
             data: captures,
             total: captures.length,
             filters: {
-                category,
-                startDate,
-                endDate
+                category
             },
             availableCategories
         });
-        
     } catch (error) {
         console.error('캡처 목록 조회 중 오류:', error);
         res.status(500).json({
@@ -893,6 +952,16 @@ app.get('/api/download/:filename', (req, res) => {
     }
 });
 
+// 테스트 메일 전송 API
+app.post('/api/test-send-captures', async (req, res) => {
+    try {
+        await organizeAndSendCaptures();
+        res.json({ success: true, message: '테스트 메일 전송 완료' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Error:', err);
@@ -959,4 +1028,25 @@ app.listen(port, () => {
     
     // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
     crawlAllCategories();
+
+    // 매일 00:00에 당일 캡처본 삭제
+    cron.schedule('0 0 * * *', () => {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        fs.readdir(capturesDir, (err, files) => {
+            if (err) return console.error('캡처 디렉토리 읽기 오류:', err);
+            files.forEach(file => {
+                // 파일명에서 날짜 추출 (예: ranking_카테고리_YYYY-MM-DD_HH-MM.jpeg)
+                const match = file.match(/_(\d{4}-\d{2}-\d{2})_/);
+                if (match) {
+                    const filePath = path.join(capturesDir, file);
+                    fs.unlink(filePath, err => {
+                        if (err) console.error('캡처 파일 삭제 오류:', filePath, err);
+                        else console.log('캡처본 삭제:', filePath);
+                    });
+                }
+            });
+        });
+    }, {
+        timezone: 'Asia/Seoul'
+    });
 });

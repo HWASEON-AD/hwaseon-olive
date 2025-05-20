@@ -241,8 +241,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const day = String(now.getDate()).padStart(2, '0');
             const today = `${year}-${month}-${day}`;
             
-            // 2025-05-12 이전 날짜 선택 불가능하도록 설정 (홈페이지와 일치하게)
-            const minDate = "2025-05-15";
             
             // 날짜 필터
             const dateFilter = `
@@ -260,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const dateInfoText = `
                 <div style="width: 100%; display: flex; align-items: center; justify-content: center; margin-top: 10px;">
                     <span style="color: rgba(0, 0, 0, 0.6); font-size: 14px;">
-                    ※ 2025.05.12 부터 데이터 조회 가능
+                    ※ 2025.05.20 부터 데이터 조회 가능
                     </span>
                 </div>
             `;
