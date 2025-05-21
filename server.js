@@ -22,6 +22,7 @@ const port = process.env.PORT || 5001;
 const RANKING_DATA_PATH = '/data/ranking.json';
 const WORKS_USER_ID = process.env.WORKS_USER_ID; // 예: gt.min@hwaseon.com
 
+
 // CORS 미들웨어 설정
 app.use(cors());
 
@@ -141,60 +142,46 @@ const transporter = nodemailer.createTransport({
 });
 
 // 캡처본 정리 및 이메일 전송 함수 (zip 첨부)
-async function organizeAndSendCaptures() {
+async function organizeAndSendCaptures(timeStr) {
     const today = new Date().toISOString().split('T')[0];
-    const tempDir = path.join(__dirname, 'temp_captures', today);
-    const zipPath = path.join(__dirname, `oliveyoung_captures_${today}.zip`);
+    const zipPath = path.join(__dirname, `oliveyoung_captures_${today}_${timeStr}.zip`);
     try {
-        // 임시 디렉토리 생성
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-        // 카테고리별 폴더 생성
-        for (const category of Object.keys(CATEGORY_CODES)) {
-            const categoryDir = path.join(tempDir, category);
-            if (!fs.existsSync(categoryDir)) {
-                fs.mkdirSync(categoryDir);
-            }
-        }
-        // 캡처본 파일들을 카테고리별로 이동
+        // 오늘 날짜, 해당 타임스탬프의 캡처본만 zip에 추가
         const files = fs.readdirSync(capturesDir);
-        for (const file of files) {
-            const match = file.match(/ranking_(.+)_(\d{4}-\d{2}-\d{2})_/);
-            if (match && match[2] === today) {
-                const category = match[1];
-                const sourcePath = path.join(capturesDir, file);
-                const targetPath = path.join(tempDir, category, file);
-                fs.copyFileSync(sourcePath, targetPath);
-            }
+        const targetFiles = files.filter(file => {
+            const match = file.match(/ranking_.+_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
+            return match && match[1] === today && match[2] === timeStr;
+        });
+        if (targetFiles.length === 0) {
+            console.log(`[메일전송] ${today} ${timeStr} 캡처본 없음!`);
+            return;
         }
-        // zip 파일로 압축
         await new Promise((resolve, reject) => {
             const output = fs.createWriteStream(zipPath);
             const archive = archiver('zip', { zlib: { level: 9 } });
             output.on('close', resolve);
             archive.on('error', reject);
             archive.pipe(output);
-            archive.directory(tempDir, false); // tempDir 내부 폴더 구조 유지
+            for (const file of targetFiles) {
+                archive.file(path.join(capturesDir, file), { name: file });
+            }
             archive.finalize();
         });
         // 이메일 전송
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: 'gt.min@hwaseon.com',
-            subject: `올리브영 ${today} 랭킹 캡처본 (zip 첨부)`,
-            text: `${today} 올리브영 랭킹 캡처본이 zip 파일로 첨부되었습니다.`,
+            subject: `올리브영 ${today} ${timeStr} 캡처본 (zip 첨부)` ,
+            text: `${today} ${timeStr} 올리브영 랭킹 캡처본이 zip 파일로 첨부되었습니다.`,
             attachments: [
                 {
-                    filename: `oliveyoung_captures_${today}.zip`,
+                    filename: `oliveyoung_captures_${today}_${timeStr}.zip`,
                     path: zipPath
                 }
             ]
         };
         await transporter.sendMail(mailOptions);
-        console.log(`${today} 캡처본 zip 이메일 전송 완료`);
-        // 임시 디렉토리 및 zip 파일 삭제
-        fs.rmSync(tempDir, { recursive: true, force: true });
+        console.log(`${today} ${timeStr} 캡처본 zip 이메일 전송 완료`);
         fs.unlinkSync(zipPath);
     } catch (error) {
         console.error('캡처본 정리 및 이메일 전송 중 오류:', error);
@@ -338,9 +325,11 @@ async function crawlAllCategories() {
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
         await captureOliveyoungMainRanking();
         
-        // 캡처가 끝날 때마다 메일 전송
-        console.log('캡처 완료 - 캡처본 정리 및 이메일 전송 시작...');
-        await organizeAndSendCaptures();
+        // 캡처가 끝난 시각 구하기
+        const now = getKSTTime();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+        // 해당 타임스탬프 캡처본만 메일로 전송
+        await organizeAndSendCaptures(timeStr);
         
         // 다음 크롤링 스케줄링
         scheduleNextCrawl();
@@ -546,8 +535,8 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     // 한 번에 전체 페이지 캡처
     const screenshot = await driver.takeScreenshot();
     const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
-        .resize({ width: 1280, height: 6000, fit: 'inside' })
-        .jpeg({ quality: 50 })
+        .resize({ width: 1500, height: 6000, fit: 'inside' })
+        .jpeg({ quality: 70 })
         .toBuffer();
     
     // 로컬에 저장
