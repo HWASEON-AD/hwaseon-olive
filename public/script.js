@@ -272,13 +272,14 @@ document.addEventListener('DOMContentLoaded', () => {
             modalContent.insertBefore(filterContainer, modalBody);
             
             // 필터 적용 버튼 이벤트
-            document.getElementById('captureFilterBtn').addEventListener('click', function() {
-                const category = document.getElementById('captureCategory').value;
-                const startDate = document.getElementById('captureStartDate').value;
-                const endDate = document.getElementById('captureEndDate').value;
-                
-                loadCapturesFromServer(category, startDate, endDate);
-            });
+            const categoryApplyBtn = document.getElementById('captureFilterBtn');
+            const categorySelect = document.getElementById('captureCategory');
+            if (categoryApplyBtn && categorySelect) {
+                categoryApplyBtn.addEventListener('click', function() {
+                    const category = categorySelect.value;
+                    loadCapturesFromServer(category, null, null);
+                });
+            }
             
             // 필터 초기화 버튼 이벤트
             document.getElementById('captureFilterResetBtn').addEventListener('click', function() {
@@ -288,15 +289,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 loadCapturesFromServer('전체', today, today);
             });
-            
-            // 카테고리 선택 이벤트 리스너 추가
-            const categorySelect = document.getElementById('captureCategory');
-            if (categorySelect) {
-                categorySelect.addEventListener('change', function() {
-                    const category = this.value;
-                    loadCapturesFromServer(category, null, null);
-                });
-            }
         }
     }
 
@@ -399,6 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 시간 포맷
             const timeStr = capture.time || '';
+            const dateStr = capture.date || '';
             
             // 이미지 URL 로깅
             console.log('캡처 정보:', capture);
@@ -407,7 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
                     <div style="padding: 10px; background-color: #f8f9fa; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <span style="font-weight: bold; margin-right: 10px;">${timeStr}</span>
+                            <span style="font-weight: bold; margin-right: 10px; white-space: pre-line;">${dateStr}<br>${timeStr}</span>
                             <span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${categoryName}</span>
                         </div>
                         <div>
@@ -1036,14 +1029,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = rankingTable.insertRow();
             
             // 날짜와 시간을 한 줄로 표시
-            const dateTimeStr = product.time ? `${product.date} ${product.time}` : product.date;
+            const dateTimeStr = product.time ? `${product.date}<br>${product.time}` : product.date;
             
             // 제품명 길이 제한 제거 - 전체 표시
             const displayName = product.name || '';
             
             // 판매가 셀에 더 큰 글자 크기와 강조 적용
             row.innerHTML = `
-                <td style="width: 140px; text-align: center; font-weight: bold; color: #333;">${dateTimeStr}</td>
+                <td style="width: 140px; text-align: center; font-weight: bold; color: #333; white-space: pre-line;">${dateTimeStr}</td>
                 <td style="width: 120px; text-align: center;"><span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${product.category || '전체'}</span></td>
                 <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
                 <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
