@@ -202,11 +202,8 @@ async function crawlAllCategories() {
     })}] 3시간 정기 크롤링 시작`);
     
     const today = kstNow.toISOString().split('T')[0];
-    const crawlTime = kstNow.toLocaleString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
+    // 캡처 시작 타임스탬프 생성 (크롤링 시작 시점 기준)
+    const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
     
     try {
         // 모든 카테고리에 대해 크롤링
@@ -241,7 +238,7 @@ async function crawlAllCategories() {
                     salePrice,
                     promotion,
                     date: today,
-                    time: crawlTime, // 크롤링 시간 저장
+                    time: timeStr, // 크롤링 시간 저장
                     category
                 };
                 
@@ -251,7 +248,7 @@ async function crawlAllCategories() {
                 if (!productCache.allProducts.some(p => 
                     p.name === name && 
                     p.category === category && 
-                    p.time === crawlTime)) {
+                    p.time === timeStr)) {
                     productCache.allProducts.push(product);
                 }
             });
@@ -323,11 +320,8 @@ async function crawlAllCategories() {
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
-        await captureOliveyoungMainRanking();
+        await captureOliveyoungMainRanking(timeStr);
         
-        // 캡처가 끝난 시각 구하기
-        const now = getKSTTime();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
         // 해당 타임스탬프 캡처본만 메일로 전송
         await organizeAndSendCaptures(timeStr);
         
@@ -349,7 +343,7 @@ async function crawlAllCategories() {
     }
 }
 
-async function captureOliveyoungMainRanking() {
+async function captureOliveyoungMainRanking(timeStr) {
     let retryCount = 0;
     const maxRetries = 3;
     let driver = null;
@@ -362,7 +356,7 @@ async function captureOliveyoungMainRanking() {
         
         const now = getKSTTime();
         const dateFormatted = now.toISOString().split('T')[0]; // YYYY-MM-DD
-        const timeFormatted = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+        // const timeFormatted = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
         // 파일명 포맷: ranking_카테고리_YYYY-MM-DD_HH-MM.jpeg
         let capturedCount = 0;
         const errors = [];
@@ -431,7 +425,7 @@ async function captureOliveyoungMainRanking() {
                     
 
                     // 스크린샷 캡처
-                    const fileName = `ranking_${category}_${dateFormatted}_${timeFormatted}.jpeg`;
+                    const fileName = `ranking_${category}_${dateFormatted}_${timeStr}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
                     await captureFullPageWithSelenium(driver, filePath, category, dateFormatted);
                     
@@ -526,17 +520,17 @@ async function captureOliveyoungMainRanking() {
 
 // 전체 페이지 분할 캡처 후 이어붙이기 함수
 async function captureFullPageWithSelenium(driver, filePath, category, dateFormatted) {
-    // 전체 페이지 높이로 창 크기 조정
+    // 전체 페이지 높이와 가로폭으로 창 크기 조정
     const totalHeight = await driver.executeScript('return document.body.scrollHeight');
-    const viewportWidth = 900;
+    const viewportWidth = await driver.executeScript('return document.body.scrollWidth');
     await driver.manage().window().setRect({ width: viewportWidth, height: totalHeight });
     await driver.sleep(1000); // 렌더링 대기
     
     // 한 번에 전체 페이지 캡처
     const screenshot = await driver.takeScreenshot();
     const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
-        .resize({ width: 1500, height: 6000, fit: 'inside' })
-        .jpeg({ quality: 70 })
+        .resize({ width: 1280, height: 6000, fit: 'inside' })
+        .jpeg({ quality: 100 })
         .toBuffer();
     
     // 로컬에 저장
