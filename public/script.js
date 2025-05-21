@@ -338,7 +338,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 캡처 목록 표시 함수
     function showCaptureList(selectedCategory) {
         captureListContainer.innerHTML = '';
-        
         if (!capturesList || capturesList.length === 0) {
             const emptyMessage = document.createElement('div');
             emptyMessage.style.width = '100%';
@@ -351,8 +350,9 @@ document.addEventListener('DOMContentLoaded', () => {
             captureListContainer.appendChild(emptyMessage);
             return;
         }
-        
-        // 선택된 카테고리의 캡처만 필터링
+        // 날짜별로 그룹화
+        const capturesByDate = {};
+        // 카테고리 필터링
         let filteredCaptures;
         if (selectedCategory === '전체') {
             filteredCaptures = capturesList.filter(capture => capture.category === '전체');
@@ -361,7 +361,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             filteredCaptures = capturesList;
         }
-        
         if (filteredCaptures.length === 0) {
             const emptyMessage = document.createElement('div');
             emptyMessage.style.width = '100%';
@@ -370,50 +369,57 @@ document.addEventListener('DOMContentLoaded', () => {
             emptyMessage.style.fontSize = '18px';
             emptyMessage.style.color = '#666';
             emptyMessage.style.gridColumn = '1 / -1';
-            emptyMessage.innerHTML = selectedCategory ? 
-                `선택한 "${selectedCategory}" 카테고리의 캡처가 없습니다.` :
-                '저장된 캡처가 없습니다.';
+            emptyMessage.innerHTML = selectedCategory ? `선택한 "${selectedCategory}" 카테고리의 캡처가 없습니다.` : '저장된 캡처가 없습니다.';
             captureListContainer.appendChild(emptyMessage);
             return;
         }
-        
+        // 날짜별로 그룹화
         filteredCaptures.forEach(capture => {
-            const dateParts = capture.date.split('-');
-            const formattedDate = `${dateParts[0]}년 ${dateParts[1]}월 ${dateParts[2]}일`;
-            
-            const captureItem = document.createElement('div');
-            
-            // 카테고리 이름 포맷팅 (underbar를 공백으로 변경)
-            const categoryName = capture.category.replace('_', ' ');
-            
-            // 이미지 URL 생성 - 전체 URL 사용
-            const imageUrl = `${BASE_URL}${capture.imageUrl}`;
-            
-            // 시간 포맷
-            const timeStr = capture.time || '';
-            const dateStr = capture.date || '';
-            
-            // 이미지 URL 로깅
-            console.log('캡처 정보:', capture);
-            
-            captureItem.innerHTML = `
-                <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
-                    <div style="padding: 10px; background-color: #f8f9fa; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <span style="font-weight: bold; margin-right: 10px; white-space: pre-line;">${dateStr}<br>${timeStr}</span>
-                            <span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${categoryName}</span>
+            const date = capture.date;
+            if (!capturesByDate[date]) capturesByDate[date] = [];
+            capturesByDate[date].push(capture);
+        });
+        // 날짜별로 정렬 (최신 날짜 먼저)
+        const sortedDates = Object.keys(capturesByDate).sort((a, b) => b.localeCompare(a));
+        // 날짜별로 캡처 목록 표시
+        sortedDates.forEach(dateStr => {
+            // 날짜 헤더 추가 (상단에 한 번만)
+            const dateHeader = document.createElement('div');
+            dateHeader.className = 'capture-date-header';
+            dateHeader.style.gridColumn = '1 / -1';
+            dateHeader.style.borderBottom = '2px solid #007BFF';
+            dateHeader.style.padding = '10px 5px';
+            dateHeader.style.marginTop = '20px';
+            dateHeader.style.marginBottom = '15px';
+            dateHeader.style.fontSize = '18px';
+            dateHeader.style.fontWeight = 'bold';
+            dateHeader.style.color = '#007BFF';
+            dateHeader.innerHTML = dateStr;
+            captureListContainer.appendChild(dateHeader);
+            // 해당 날짜의 캡처들 표시
+            capturesByDate[dateStr].forEach(capture => {
+                const captureItem = document.createElement('div');
+                const categoryName = capture.category.replace('_', ' ');
+                const imageUrl = `${BASE_URL}${capture.imageUrl}`;
+                const timeStr = capture.time || '';
+                captureItem.innerHTML = `
+                    <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
+                        <div style="padding: 10px; background-color: #f8f9fa; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="font-weight: bold; margin-right: 10px; font-size: 16px;">${timeStr}</span>
+                                <span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${categoryName}</span>
+                            </div>
+                            <div>
+                                <button onclick="downloadImage('${capture.imageUrl}')" style="background: #4CAF50; color: white; border: none; border-radius: 3px; padding: 5px 10px; cursor: pointer; text-decoration: none; font-size: 12px;">다운로드</button>
+                            </div>
                         </div>
-                        <div>
-                            <button onclick="downloadImage('${capture.imageUrl}')" style="background: #4CAF50; color: white; border: none; border-radius: 3px; padding: 5px 10px; cursor: pointer; text-decoration: none; font-size: 12px;">다운로드</button>
+                        <div style="padding: 10px; text-align: center;">
+                            <img src="${imageUrl}" alt="캡처 이미지" style="max-width: 100%; cursor: pointer;" onclick="showFullImage('${imageUrl}')">
                         </div>
                     </div>
-                    <div style="padding: 10px; text-align: center;">
-                        <img src="${imageUrl}" alt="캡처 이미지" style="max-width: 100%; cursor: pointer;" onclick="showFullImage('${imageUrl}')">
-                    </div>
-                </div>
-            `;
-            
-            captureListContainer.appendChild(captureItem);
+                `;
+                captureListContainer.appendChild(captureItem);
+            });
         });
     }
 
