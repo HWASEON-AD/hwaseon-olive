@@ -709,28 +709,21 @@ app.get('/api/ranking', async (req, res) => {
 });
 
 
-
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, startDate, endDate } = req.query;
+        const { keyword, category, startDate, endDate } = req.query;
 
         if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
-                error: '검색어와 시작 날짜는 반드시 입력해주세요.'
+                error: '검색어, 시작 날짜는 필수입니다.'
             });
         }
 
-        // 한글만 남기는 정규 normalize
-        const normalize = str =>
-            String(str || '')
-                .normalize('NFKC')
-                .replace(/\s+/g, '')
-                .replace(/[^가-힣]/g, '');
+        // ✅ 키워드 전처리 (공백 제거만)
+        const cleanedKeyword = keyword.replace(/\s+/g, '');
 
-        const normalizedKeyword = normalize(keyword);
-
-        // 날짜 필터
+        // ✅ 날짜 필터
         const filterByDate = data => {
             return data.filter(item => {
                 if (!item.date) return false;
@@ -740,38 +733,30 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 정렬 기준
-        const sortByRankAndDate = data => {
-            return [...data].sort((a, b) => {
-                if (a.rank !== b.rank) return a.rank - b.rank;
-                if (a.date !== b.date) return b.date.localeCompare(a.date);
-                if (a.time && b.time) return b.time.localeCompare(a.time);
-                return 0;
-            });
-        };
-
-        // 검색 로직
+        // ✅ 단순 문자열 포함 여부로 검색 (소문자 비교, 띄어쓰기 제거)
         let results = productCache.allProducts.filter(product => {
-            const nameNorm = normalize(product.name);
-            const brandNorm = normalize(product.brand);
-            const nameRaw = String(product.name || '');
-            const brandRaw = String(product.brand || '');
-
-            return (
-                nameNorm.includes(normalizedKeyword) ||
-                brandNorm.includes(normalizedKeyword) ||
-                nameRaw.includes(keyword) ||
-                brandRaw.includes(keyword)
-            );
+            const productName = (product.name || '').replace(/\s+/g, '').toLowerCase();
+            const brandName = (product.brand || '').replace(/\s+/g, '').toLowerCase();
+            const keywordLower = cleanedKeyword.toLowerCase();
+            return productName.includes(keywordLower) || brandName.includes(keywordLower);
         });
 
-        // 날짜 필터 적용
+        // ✅ 날짜 필터
         results = filterByDate(results);
 
-        // 정렬 적용
-        results = sortByRankAndDate(results);
+        // ✅ 카테고리 조건은 '전체'일 때 무시
+        if (category && category !== '전체') {
+            results = results.filter(product => product.category === category);
+        }
 
-        return res.json({
+        // ✅ 최신순 정렬
+        results.sort((a, b) => {
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            if (a.time && b.time) return b.time.localeCompare(a.time);
+            return 0;
+        });
+
+        res.json({
             success: true,
             data: results,
             total: results.length,
@@ -787,9 +772,6 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
-
-
-
 
 
 
