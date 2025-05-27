@@ -539,7 +539,7 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     // 한 번에 전체 페이지 캡처
     const screenshot = await driver.takeScreenshot();
     const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
-        .resize({ width: 1920, height: 6000, fit: 'inside' }) // 해상도 증가
+        .resize({ width: 2500, height: 8000, fit: 'inside' }) // 해상도 증가
         .jpeg({ quality: 100 }) // 화질 증가
         .toBuffer();
     
@@ -830,10 +830,9 @@ app.get('/api/last-crawl-time', (req, res) => {
 // 캡처 목록 조회 API
 app.get('/api/captures', async (req, res) => {
     try {
-        const { category } = req.query;
         const today = new Date().toISOString().split('T')[0];
         
-        console.log('캡처 목록 요청:', { category, today });
+        console.log('캡처 목록 요청:', { today });
         console.log('캡처 디렉토리:', capturesDir);
         
         // 파일 시스템에서 캡처 정보 읽기
@@ -876,16 +875,7 @@ app.get('/api/captures', async (req, res) => {
             console.log('캡처 디렉토리가 존재하지 않음');
         }
 
-        // 오늘 날짜만 필터링
-        captures = captures.filter(capture => capture.date === today);
-        console.log('오늘 날짜 필터링 후:', captures.length);
-        
-        // 카테고리 필터링
-        if (category && category !== '전체') {
-            captures = captures.filter(capture => capture.category === category);
-            console.log('카테고리 필터링 후:', captures.length);
-        }
-        
+       
         // 날짜와 시간 기준으로 내림차순 정렬 (최신순)
         captures.sort((a, b) => {
             if (a.date !== b.date) {
@@ -894,22 +884,16 @@ app.get('/api/captures', async (req, res) => {
             return b.time.localeCompare(a.time);
         });
         
-        // 사용 가능한 카테고리 목록 생성
-        const availableCategories = [...new Set(captures.map(capture => capture.category))].sort();
+       
         
         const response = {
             success: true,
             data: captures,
-            total: captures.length,
-            filters: {
-                category
-            },
-            availableCategories
+            total: captures.length
         };
         
         console.log('응답 데이터:', {
             total: response.total,
-            categories: response.availableCategories
         });
         
         res.json(response);
