@@ -712,26 +712,44 @@ app.get('/api/ranking', async (req, res) => {
 
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword } = req.query;
+        const { keyword, startDate, endDate } = req.query;
 
-        if (!keyword) {
+        if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
-                error: '검색어는 반드시 입력해야 합니다.'
+                error: '검색어와 시작 날짜는 필수입니다.'
             });
         }
 
-        // 띄어쓰기 제거 + 소문자 변환
-        const cleanedKeyword = keyword.replace(/\s+/g, '').toLowerCase();
+        const keywordRaw = keyword.toLowerCase();
 
-        // 무조건 키워드 포함만 기준으로 필터링
-        const results = productCache.allProducts.filter(product => {
-            const name = (product.name || '').replace(/\s+/g, '').toLowerCase();
-            const brand = (product.brand || '').replace(/\s+/g, '').toLowerCase();
-            return name.includes(cleanedKeyword) || brand.includes(cleanedKeyword);
+        // 날짜 필터 함수
+        const filterByDate = data => {
+            return data.filter(item => {
+                if (!item.date) return false;
+                if (startDate && !endDate) return item.date === startDate;
+                if (!startDate && endDate) return item.date === endDate;
+                return item.date >= startDate && item.date <= endDate;
+            });
+        };
+
+        // 전체 제품 중에서 키워드 포함만 필터
+        let results = productCache.allProducts.filter(product => {
+            const name = String(product.name || '').toLowerCase();
+            const brand = String(product.brand || '').toLowerCase();
+            return name.includes(keywordRaw) || brand.includes(keywordRaw);
         });
 
-        // 날짜/시간/순위/카테고리 무시하고 그냥 반환
+        // 날짜만 필터링
+        results = filterByDate(results);
+
+        // 정렬: 최신 날짜/시간 우선 (순위 무시)
+        results.sort((a, b) => {
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            if (a.time && b.time) return b.time.localeCompare(a.time);
+            return 0;
+        });
+
         return res.json({
             success: true,
             data: results,
@@ -748,6 +766,7 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
 
 
 
