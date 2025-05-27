@@ -1000,13 +1000,8 @@ process.on('SIGTERM', () => { saveRankingOnExit(); process.exit(); });
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
-    
-    // 서버 시작 시 자동 크롤링 스케줄링 활성화
-    console.log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
-    
-    // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
-    scheduleNextCrawl();
-
+    // 서버 시작 시 즉시 크롤링 및 자동캡처 실행
+    crawlAllCategories();
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
