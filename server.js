@@ -719,17 +719,16 @@ app.get('/api/search', (req, res) => {
             });
         }
 
-        // 한글 포함 normalize 함수
+        // ✅ 한글 전용 normalize 함수
         const normalize = str =>
             String(str || '')
-                .toLowerCase()
                 .normalize('NFKC')
                 .replace(/\s+/g, '')
-                .replace(/[^a-z0-9가-힣]/g, '');
+                .replace(/[^가-힣]/g, '');
 
         const keywords = keyword.trim().split(/\s+/).map(normalize);
 
-        // 날짜 필터
+        // ✅ 날짜 필터
         const filterByDate = data => {
             if (!startDate && !endDate) return data;
             return data.filter(item => {
@@ -740,7 +739,7 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 정렬
+        // ✅ 정렬 함수
         const sortByRankAndDate = data => {
             return [...data].sort((a, b) => {
                 if (a.rank !== b.rank) return a.rank - b.rank;
@@ -750,7 +749,7 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 검색 필터
+        // ✅ 검색 필터: 브랜드 + 제품명에 모두 한글만 남기고 비교
         let results = productCache.allProducts.filter(product => {
             const name = normalize(product.name);
             const brand = normalize(product.brand);
@@ -760,20 +759,18 @@ app.get('/api/search', (req, res) => {
             );
         });
 
-        // 날짜 필터
+        // ✅ 날짜 필터 적용
         results = filterByDate(results);
 
-        // 카테고리 필터 (전체는 전체만)
-        if (category === '전체') {
-            results = results.filter(product => product.category === '전체');
-        } else {
+        // ✅ 카테고리 필터 적용
+        if (category !== '전체') {
             results = results.filter(product => product.category === category);
         }
 
-        // 정렬
+        // ✅ 정렬
         results = sortByRankAndDate(results);
 
-        // 결과 응답
+        // ✅ 응답
         res.json({
             success: true,
             data: results,
@@ -790,6 +787,7 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
 
 
 
