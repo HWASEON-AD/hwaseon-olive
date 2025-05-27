@@ -710,8 +710,6 @@ app.get('/api/ranking', async (req, res) => {
 
 
 
-
-
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, startDate, endDate } = req.query;
@@ -723,44 +721,57 @@ app.get('/api/search', (req, res) => {
             });
         }
 
-        const lowerKeyword = keyword.trim().toLowerCase();
+        const lowerKeyword = keyword.toLowerCase();
 
-        // 날짜 필터만 적용
-        const filteredByDate = productCache.allProducts.filter(item => {
-            if (!item.date) return false;
-            if (startDate && !endDate) return item.date === startDate;
-            if (!startDate && endDate) return item.date === endDate;
-            return item.date >= startDate && item.date <= endDate;
+        // 날짜 필터 + 검색 한번에 처리
+        const matchingResults = [];
+
+        // 모든 카테고리 순회
+        Object.values(productCache.data).forEach(categoryItems => {
+            categoryItems.forEach(item => {
+                if (!item.date) return;
+
+                // 날짜 필터
+                const inDateRange =
+                    (!startDate && !endDate) ||
+                    (startDate && !endDate && item.date === startDate) ||
+                    (!startDate && endDate && item.date === endDate) ||
+                    (startDate && endDate && item.date >= startDate && item.date <= endDate);
+
+                if (!inDateRange) return;
+
+                // 키워드 포함 여부 (brand + name 전부 검사)
+                const text = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
+                if (text.includes(lowerKeyword)) {
+                    matchingResults.push(item);
+                }
+            });
         });
 
-        // Ctrl+F 방식: name 또는 brand 에 키워드가 포함되어 있는지 여부만 판단
-        const results = filteredByDate.filter(product => {
-            const combinedText = `${product.name || ''} ${product.brand || ''}`.toLowerCase();
-            return combinedText.includes(lowerKeyword);
-        });
-
-        // 날짜 기준 최신순 정렬
-        results.sort((a, b) => {
+        // 정렬: 최신 날짜 > 최신 시간 > 낮은 순위
+        matchingResults.sort((a, b) => {
             if (a.date !== b.date) return b.date.localeCompare(a.date);
             if (a.time && b.time) return b.time.localeCompare(a.time);
             return a.rank - b.rank;
         });
 
-        res.json({
+        return res.json({
             success: true,
-            data: results,
-            total: results.length,
-            keyword
+            keyword,
+            total: matchingResults.length,
+            data: matchingResults
         });
+
     } catch (error) {
-        console.error('Search error:', error);
-        res.status(500).json({
+        console.error('검색 오류:', error);
+        return res.status(500).json({
             success: false,
             error: '검색 중 오류 발생',
             details: error.message
         });
     }
 });
+
 
 
 
@@ -816,21 +827,127 @@ app.get('/api/last-crawl-time', (req, res) => {
     }
 });
 
+// 캡처 목록 조회 API
+app.get('/api/captures', async (req, res) => {
+    try {
+        const { category } = req.query;
+        const today = new Date().toISOString().split('T')[0];
+        
+        console.log('캡처 목록 요청:', { category, today });
+        console.log('캡처 디렉토리:', capturesDir);
+        
+        // 파일 시스템에서 캡처 정보 읽기
+        let captures = [];
+        if (fs.existsSync(capturesDir)) {
+            const files = fs.readdirSync(capturesDir);
+            console.log('발견된 파일 수:', files.length);
+            
+            captures = files
+                .filter(file => file.endsWith('.jpeg'))
+                .map(fileName => {
+                    const match = fileName.match(/ranking_(.+)_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
+                    if (!match) {
+                        console.log('파일명 매치 실패:', fileName);
+                        return null;
+                    }
+                    
+                    const [, extractedCategory, date, time] = match;
+                    const filePath = path.join(capturesDir, fileName);
+                    
+                    try {
+                        const stats = fs.statSync(filePath);
+                        return {
+                            id: path.parse(fileName).name,
+                            fileName,
+                            category: extractedCategory,
+                            date,
+                            time: time.replace('-', ':'),
+                            timestamp: stats.mtime.getTime(),
+                            imageUrl: `/captures/${fileName}`,
+                            fileSize: stats.size
+                        };
+                    } catch (err) {
+                        console.error('파일 정보 읽기 실패:', fileName, err);
+                        return null;
+                    }
+                })
+                .filter(capture => capture !== null);
+        } else {
+            console.log('캡처 디렉토리가 존재하지 않음');
+        }
+
+        // 오늘 날짜만 필터링
+        captures = captures.filter(capture => capture.date === today);
+        console.log('오늘 날짜 필터링 후:', captures.length);
+        
+        // 카테고리 필터링
+        if (category) {
+            captures = captures.filter(capture => capture.category === category);
+            console.log('카테고리 필터링 후:', captures.length);
+        }
+        
+        // 날짜와 시간 기준으로 내림차순 정렬 (최신순)
+        captures.sort((a, b) => {
+            if (a.date !== b.date) {
+                return b.date.localeCompare(a.date);
+            }
+            return b.time.localeCompare(a.time);
+        });
+        
+        // 사용 가능한 카테고리 목록 생성
+        const availableCategories = [...new Set(captures.map(capture => capture.category))].sort();
+        
+        const response = {
+            success: true,
+            data: captures,
+            total: captures.length,
+            filters: {
+                category
+            },
+            availableCategories
+        };
+        
+        console.log('응답 데이터:', {
+            total: response.total,
+            categories: response.availableCategories
+        });
+        
+        res.json(response);
+    } catch (error) {
+        console.error('캡처 목록 조회 중 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: '캡처 목록 조회 중 오류가 발생했습니다.',
+            details: error.message
+        });
+    }
+});
+
 // 이미지 다운로드 API
 app.get('/api/download/:filename', (req, res) => {
     try {
         const filename = req.params.filename;
-        const imageBuffer = captureCache.get(filename);
+        const filePath = path.join(capturesDir, filename);
         
-        if (!imageBuffer) {
-            return res.status(404).json({ error: '파일을 찾을 수 없습니다.' });
+        console.log('이미지 다운로드 요청:', filename);
+        console.log('파일 경로:', filePath);
+        
+        if (!fs.existsSync(filePath)) {
+            console.log('파일을 찾을 수 없음:', filePath);
+            return res.status(404).json({ 
+                success: false,
+                error: '파일을 찾을 수 없습니다.' 
+            });
         }
 
         res.set('Content-Type', 'image/jpeg');
-        res.send(imageBuffer);
+        res.sendFile(filePath);
     } catch (error) {
         console.error('파일 다운로드 중 오류:', error);
-        res.status(500).json({ error: '파일 다운로드 중 오류가 발생했습니다.' });
+        res.status(500).json({ 
+            success: false,
+            error: '파일 다운로드 중 오류가 발생했습니다.' 
+        });
     }
 });
 
