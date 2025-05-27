@@ -11,16 +11,12 @@ const sharp = require('sharp');
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 const FormData = require('form-data');
-const jwt = require('jsonwebtoken');
 const archiver = require('archiver');
 require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5001;
 
-
-
 const RANKING_DATA_PATH = '/data/ranking.json';
-const WORKS_USER_ID = process.env.WORKS_USER_ID; // 예: gt.min@hwaseon.com
 
 
 // CORS 미들웨어 설정
@@ -34,6 +30,9 @@ app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')))
 
 // 캡처 저장 디렉토리 설정
 const capturesDir = path.join(__dirname, 'public', 'captures');
+
+// 캡처 저장을 위한 메모리 캐시
+const captureCache = new Map();
 
 // 메모리 캐시 - 크롤링 결과 저장
 let productCache = {
@@ -100,14 +99,13 @@ function getNextCrawlTime() {
     // 현재 KST 시간 가져오기
     const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     
-    // 지정된 크롤링 시간 배열 (24시간 형식)
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
     const scheduledMinutes = 30;
     
     // 현재 시간
     const currentHour = kstNow.getHours();
     const currentMinute = kstNow.getMinutes();
-        
+
     // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     let nextCrawlTime = new Date(kstNow);
     let found = false;
@@ -206,6 +204,20 @@ async function crawlAllCategories() {
     const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
     
     try {
+        // 이전 시간대의 캡처본 삭제
+        for (const [fileName] of captureCache) {
+            const match = fileName.match(/ranking_.+_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
+            if (match) {
+                const fileDate = match[1];
+                const fileTime = match[2];
+                // 당일 데이터이고 현재 시간보다 이전인 경우 삭제
+                if (fileDate === today && fileTime !== timeStr) {
+                    captureCache.delete(fileName);
+                    console.log('이전 캡처본 삭제:', fileName);
+                }
+            }
+        }
+
         // 모든 카테고리에 대해 크롤링
         for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
             console.log(`카테고리 '${category}' 크롤링 중...`);
@@ -529,12 +541,13 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     // 한 번에 전체 페이지 캡처
     const screenshot = await driver.takeScreenshot();
     const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
-        .resize({ width: 1280, height: 6000, fit: 'inside' })
-        .jpeg({ quality: 100 })
+        .resize({ width: 1920, height: 6000, fit: 'inside' }) // 해상도 증가
+        .jpeg({ quality: 100 }) // 화질 증가
         .toBuffer();
     
-    // 로컬에 저장
-    await fs.promises.writeFile(filePath, sharpBuffer);
+    // 메모리에 저장
+    const fileName = path.basename(filePath);
+    captureCache.set(fileName, sharpBuffer);
 }
 
 // 다음 크롤링 스케줄링 함수
@@ -796,30 +809,15 @@ app.get('/api/captures', (req, res) => {
     try {
         const { category } = req.query;
         const today = new Date().toISOString().split('T')[0];
-        // captures 디렉토리의 파일 목록 읽기
-        const files = fs.readdirSync(capturesDir);
-        // 이미지 파일만 필터링 (jpg, jpeg, png)
-        const imageFiles = files.filter(file => /\.(jpg|jpeg|png)$/i.test(file));
-        // 파일 정보 생성
-        let captures = imageFiles.map(fileName => {
-            const filePath = path.join(capturesDir, fileName);
-            const stats = fs.statSync(filePath);
-            // 파일명에서 카테고리, 날짜와 시간 추출 (ranking_카테고리_YYYY-MM-DD_HH-MM.jpg 형식)
+        
+        // 메모리에서 캡처 정보 생성
+        let captures = Array.from(captureCache.keys()).map(fileName => {
             const match = fileName.match(/ranking_(.+)_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
             let extractedCategory, date, time;
             if (match) {
                 extractedCategory = match[1];
                 date = match[2];
                 time = match[3].replace('-', ':');
-            } else {
-                // 파일명에서 추출할 수 없는 경우 파일 생성 시간을 KST로 변환해서 사용
-                const fileDate = new Date(new Date(stats.mtime).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-                extractedCategory = '전체';
-                date = fileDate.toISOString().split('T')[0];
-                // 시간을 KST 형식으로 포맷팅
-                const hours = String(fileDate.getHours()).padStart(2, '0');
-                const minutes = String(fileDate.getMinutes()).padStart(2, '0');
-                time = `${hours}:${minutes}`;
             }
             return {
                 id: path.parse(fileName).name,
@@ -827,17 +825,20 @@ app.get('/api/captures', (req, res) => {
                 category: extractedCategory,
                 date,
                 time,
-                timestamp: new Date(new Date(stats.mtime).toLocaleString('en-US', { timeZone: 'Asia/Seoul' })).getTime(),
+                timestamp: new Date().getTime(),
                 imageUrl: `/captures/${fileName}`,
-                fileSize: stats.size
+                fileSize: captureCache.get(fileName).length
             };
         });
+
         // 오늘 날짜만 필터링
         captures = captures.filter(capture => capture.date === today);
-        // 카테고리 필터링 - 정확한 매칭
+        
+        // 카테고리 필터링
         if (category) {
             captures = captures.filter(capture => capture.category === category);
         }
+        
         // 날짜와 시간 기준으로 내림차순 정렬 (최신순)
         captures.sort((a, b) => {
             if (a.date !== b.date) {
@@ -845,8 +846,10 @@ app.get('/api/captures', (req, res) => {
             }
             return b.time.localeCompare(a.time);
         });
+        
         // 사용 가능한 카테고리 목록 생성
         const availableCategories = [...new Set(captures.map(capture => capture.category))].sort();
+        
         res.json({
             success: true,
             data: captures,
@@ -922,13 +925,14 @@ app.get('/api/last-crawl-time', (req, res) => {
 app.get('/api/download/:filename', (req, res) => {
     try {
         const filename = req.params.filename;
-        const filePath = path.join(capturesDir, filename);
+        const imageBuffer = captureCache.get(filename);
         
-        if (!fs.existsSync(filePath)) {
+        if (!imageBuffer) {
             return res.status(404).json({ error: '파일을 찾을 수 없습니다.' });
         }
 
-        res.download(filePath);
+        res.set('Content-Type', 'image/jpeg');
+        res.send(imageBuffer);
     } catch (error) {
         console.error('파일 다운로드 중 오류:', error);
         res.status(500).json({ error: '파일 다운로드 중 오류가 발생했습니다.' });
@@ -1001,16 +1005,11 @@ process.on('SIGTERM', () => { saveRankingOnExit(); process.exit(); });
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
     
-    // 캡처 디렉토리 확인 및 생성
-    if (!fs.existsSync(capturesDir)) {
-        fs.mkdirSync(capturesDir, { recursive: true });
-    }
-    
     // 서버 시작 시 자동 크롤링 스케줄링 활성화
     console.log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
     
     // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
-    crawlAllCategories();
+    scheduleNextCrawl();
 
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {

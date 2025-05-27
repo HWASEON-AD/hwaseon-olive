@@ -191,105 +191,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function showCaptureFilterUI() {
         captureListModal.style.display = 'block';
         
-        // 필터 UI가 없으면 생성
-        if (!document.getElementById('captureFilterContainer')) {
-            const filterContainer = document.createElement('div');
-            filterContainer.id = 'captureFilterContainer';
-            filterContainer.style.padding = '10px';
-            filterContainer.style.backgroundColor = '#f8f9fa';
-            filterContainer.style.borderBottom = '1px solid #ddd';
-            filterContainer.style.marginBottom = '20px';
-            filterContainer.style.display = 'flex';
-            filterContainer.style.flexWrap = 'wrap';
-            filterContainer.style.gap = '10px';
-            filterContainer.style.alignItems = 'center';
-            
-            // 카테고리 선택 드롭다운
-            let categoryFilter = `
-                <div style="margin-right: 20px;">
-                    <label for="captureCategory" style="font-weight: bold; margin-right: 8px;">카테고리:</label>
-                    <select id="captureCategory" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
-                        <option value="전체">전체</option>
-                        <option value="스킨케어">스킨케어</option>
-                        <option value="마스크팩">마스크팩</option>
-                        <option value="클렌징">클렌징</option>
-                        <option value="선케어">선케어</option>
-                        <option value="메이크업">메이크업</option>
-                        <option value="네일">네일</option>
-                        <option value="뷰티소품">뷰티소품</option>
-                        <option value="더모_코스메틱">더모 코스메틱</option>
-                        <option value="맨즈케어">맨즈케어</option>
-                        <option value="향수_디퓨저">향수/디퓨저</option>
-                        <option value="헤어케어">헤어케어</option>
-                        <option value="바디케어">바디케어</option>
-                        <option value="건강식품">건강식품</option>
-                        <option value="푸드">푸드</option>
-                        <option value="구강용품">구강용품</option>
-                        <option value="헬스_건강용품">헬스/건강용품</option>
-                        <option value="여성_위생용품">여성/위생용품</option>
-                        <option value="패션">패션</option>
-                        <option value="리빙_가전">리빙/가전</option>
-                        <option value="취미_팬시">취미/팬시</option>
-                    </select>
-                </div>
-            `;
-            
-            // 현재 날짜 가져오기 - 시작 날짜의 min 속성을 위해
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const today = `${year}-${month}-${day}`;
-            
-            
-            // 날짜 필터
-            const dateFilter = `
-                <div>
-                    <label for="captureStartDate" style="font-weight: bold; margin-right: 8px;">날짜:</label>
-                    <input type="date" id="captureStartDate" min="${minDate}" value="${today}" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
-                    <span style="margin: 0 5px;">~</span>
-                    <input type="date" id="captureEndDate" min="${minDate}" value="${today}" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
-                    <button id="captureFilterBtn" style="margin-left: 10px; padding: 5px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">적용</button>
-                    <button id="captureFilterResetBtn" style="margin-left: 5px; padding: 5px 15px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">초기화</button>
-                </div>
-            `;
-            
-            // 안내 메시지 추가
-            const dateInfoText = `
-                <div style="width: 100%; display: flex; align-items: center; justify-content: center; margin-top: 10px;">
-                    <span style="color: rgba(0, 0, 0, 0.6); font-size: 14px;">
-                    ※ 2025.05.20 부터 데이터 조회 가능
-                    </span>
-                </div>
-            `;
-            
-            // 필터 UI 완성
-            filterContainer.innerHTML = categoryFilter + dateFilter + dateInfoText;
-            
-            // 모달 헤더와 바디 사이에 필터 컨테이너 삽입
-            const modalContent = document.querySelector('.modal-content');
-            const modalBody = document.querySelector('.modal-body');
-            modalContent.insertBefore(filterContainer, modalBody);
-            
-            // 필터 적용 버튼 이벤트
-            const categoryApplyBtn = document.getElementById('captureFilterBtn');
-            const categorySelect = document.getElementById('captureCategory');
-            if (categoryApplyBtn && categorySelect) {
-                categoryApplyBtn.addEventListener('click', function() {
-                    const category = categorySelect.value;
-                    loadCapturesFromServer(category, null, null);
-                });
-            }
-            
-            // 필터 초기화 버튼 이벤트
-            document.getElementById('captureFilterResetBtn').addEventListener('click', function() {
-                document.getElementById('captureCategory').value = '전체';
-                document.getElementById('captureStartDate').value = today;
-                document.getElementById('captureEndDate').value = today;
-                
-                loadCapturesFromServer('전체', today, today);
-            });
-        }
+        // 날짜 입력 필드 생성
+        const dateFilterDiv = document.createElement('div');
+        dateFilterDiv.style.marginBottom = '10px';
+        dateFilterDiv.innerHTML = `
+            <input type="date" id="startDate" style="margin-right: 10px;">
+            <input type="date" id="endDate" style="margin-right: 10px;">
+            <button onclick="applyDateFilter()" style="padding: 5px 10px;">적용</button>
+        `;
+        
+        // 필터 UI 컨테이너에 추가
+        const filterContainer = document.getElementById('filterContainer');
+        filterContainer.innerHTML = ''; // 기존 필터 초기화
+        filterContainer.appendChild(dateFilterDiv);
     }
 
     // 서버에서 캡처 목록 불러오기
