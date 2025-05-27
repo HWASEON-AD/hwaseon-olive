@@ -709,58 +709,6 @@ app.get('/api/ranking', async (req, res) => {
 });
 
 
-app.get('/api/search', (req, res) => {
-    try {
-        const { keyword, startDate, endDate } = req.query;
-
-        if (!keyword || !startDate) {
-            return res.status(400).json({
-                success: false,
-                error: '검색어와 시작 날짜를 입력해주세요.'
-            });
-        }
-
-        const lowerKeyword = keyword.toLowerCase();
-
-        // 날짜 필터만 적용
-        const filteredByDate = productCache.allProducts.filter(item => {
-            if (!item.date) return false;
-            if (startDate && !endDate) return item.date === startDate;
-            if (!startDate && endDate) return item.date === endDate;
-            return item.date >= startDate && item.date <= endDate;
-        });
-
-        // 진짜 Ctrl+F 방식: 소문자로 변환한 키워드가 name/brand 텍스트 전체에 포함되면 OK
-        const results = filteredByDate.filter(product => {
-            const text = `${product.name || ''} ${product.brand || ''}`.toLowerCase();
-            return text.includes(lowerKeyword);
-        });
-
-        // 정렬: 최신 날짜 > 최신 시간 > 낮은 순위
-        results.sort((a, b) => {
-            if (a.date !== b.date) return b.date.localeCompare(a.date);
-            if (a.time && b.time) return b.time.localeCompare(a.time);
-            return a.rank - b.rank;
-        });
-
-        res.json({
-            success: true,
-            data: results,
-            total: results.length,
-            keyword
-        });
-
-    } catch (error) {
-        console.error('Search error:', error);
-        res.status(500).json({
-            success: false,
-            error: '검색 중 오류 발생',
-            details: error.message
-        });
-    }
-});
-
-
 
 
 
