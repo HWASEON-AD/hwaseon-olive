@@ -711,7 +711,7 @@ app.get('/api/ranking', async (req, res) => {
     }
 });
 
-// 제품명 검색 API
+
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, category, startDate, endDate } = req.query;
@@ -723,6 +723,7 @@ app.get('/api/search', (req, res) => {
             });
         }
 
+        // 문자열 정규화
         const normalize = str =>
             String(str || '')
                 .toLowerCase()
@@ -732,34 +733,42 @@ app.get('/api/search', (req, res) => {
         const keywords = keyword.trim().split(/\s+/).map(normalize);
 
         let results = productCache.allProducts.filter(product => {
-            // 날짜 필터: 범위 조건으로 변경
+            const productDate = product.date;
+
+            // 날짜 필터링 (startDate ~ endDate 범위)
             if (startDate && endDate) {
-                if (product.date < startDate || product.date > endDate) return false;
+                if (productDate < startDate || productDate > endDate) return false;
             } else if (startDate) {
-                if (product.date !== startDate) return false;
+                if (productDate !== startDate) return false;
             }
 
-            // 카테고리 필터
+            // 카테고리 필터링
             if (category && category !== '전체' && product.category !== category) {
                 return false;
             }
 
-            // 키워드 검색
-            const fields = [product.name, product.brand, product.promotion].map(normalize);
-            return keywords.every(kw => fields.some(field => field.includes(kw)));
+            // 키워드 필터링
+            const fields = [
+                product.name || '',
+                product.brand || '',
+                product.promotion || ''
+            ].map(normalize);
+
+            // 모든 키워드가 하나 이상의 필드에 포함되는지 확인
+            const isMatch = keywords.every(kw =>
+                fields.some(field => field.includes(kw))
+            );
+
+            return isMatch;
         });
 
-        // 정렬: rank 오름차순 → date 내림차순 → time 내림차순
-        const sortByRankAndDate = (data) => {
-            return [...data].sort((a, b) => {
-                if (a.rank !== b.rank) return a.rank - b.rank;
-                if (a.date !== b.date) return b.date.localeCompare(a.date);
-                if (a.time && b.time) return b.time.localeCompare(a.time);
-                return 0;
-            });
-        };
-
-        results = sortByRankAndDate(results);
+        // 정렬: rank 오름차순 > date 내림차순 > time 내림차순
+        results.sort((a, b) => {
+            if (a.rank !== b.rank) return a.rank - b.rank;
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            if (a.time && b.time) return b.time.localeCompare(a.time);
+            return 0;
+        });
 
         res.json({
             success: true,
@@ -777,6 +786,8 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
+
 
 
 
