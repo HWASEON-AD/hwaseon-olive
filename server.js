@@ -711,89 +711,76 @@ app.get('/api/ranking', async (req, res) => {
     }
 });
 
-// 제품명 검색 API
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, category, startDate, endDate } = req.query;
-        
-        if (!keyword) {
+
+        if (!keyword || !category || !startDate) {
             return res.status(400).json({
                 success: false,
-                error: '검색어를 입력해주세요.'
+                error: '검색어, 카테고리, 날짜를 모두 입력해주세요.'
             });
         }
-        
-        // 날짜 필터링 함수
+
+        const normalize = str =>
+            String(str || '')
+                .toLowerCase()
+                .normalize('NFKC')
+                .replace(/[^a-z0-9가-힣]+/g, '');
+
+        const keywords = keyword.trim().split(/\s+/).map(normalize);
+
         const filterByDate = (data) => {
-            // 날짜 선택이 없으면 모든 데이터 반환
-            if (!startDate && !endDate) {
-                return data;
-            }
-            
-            // 날짜 필터링 적용
+            if (!startDate && !endDate) return data;
             return data.filter(item => {
-                // 날짜가 없는 항목은 제외
                 if (!item.date) return false;
-                
-                // 시작일만 선택된 경우
-                if (startDate && !endDate) {
-                    return item.date === startDate;
-                }
-                
-                // 종료일만 선택된 경우
-                if (!startDate && endDate) {
-                    return item.date === endDate;
-                }
-                
-                // 날짜 범위가 선택된 경우
+                if (startDate && !endDate) return item.date === startDate;
+                if (!startDate && endDate) return item.date === endDate;
                 return item.date >= startDate && item.date <= endDate;
             });
         };
-        
-        // 데이터 정렬 함수 - 순위 기준 오름차순, 같은 순위는 최신 날짜/시간 우선
+
         const sortByRankAndDate = (data) => {
             return [...data].sort((a, b) => {
-                // 우선 순위로 정렬 (오름차순)
-                if (a.rank !== b.rank) {
-                    return a.rank - b.rank;
-                }
-                
-                // 날짜로 정렬 (내림차순 - 최신 날짜 우선)
-                if (a.date !== b.date) {
-                    return b.date.localeCompare(a.date);
-                }
-                
-                // 시간으로 정렬 (내림차순 - 최신 시간 우선)
-                if (a.time && b.time) {
-                    return b.time.localeCompare(a.time);
-                }
-                
+                if (a.rank !== b.rank) return a.rank - b.rank;
+                if (a.date !== b.date) return b.date.localeCompare(a.date);
+                if (a.time && b.time) return b.time.localeCompare(a.time);
                 return 0;
             });
         };
-        
-        // 검색 결과 필터링
-        let results = productCache.allProducts.filter(product => 
-            product.name.toLowerCase().includes(keyword.toLowerCase())
-        );
-        
-        // 카테고리 필터링
-        if (category && category !== '전체') {
+
+        // 1. 키워드 필터
+        let results = productCache.allProducts.filter(product => {
+            const fields = [
+                product.name || '',
+                product.brand || ''
+            ].map(normalize);
+            return keywords.every(kw =>
+                fields.some(field => field.includes(kw))
+            );
+        });
+
+        // 2. 날짜 필터
+        results = filterByDate(results);
+
+        // 3. 카테고리 필터 (★ 전체 → 전체인 것만 포함)
+        if (category === '전체') {
+            results = results.filter(product => product.category === '전체');
+        } else {
             results = results.filter(product => product.category === category);
         }
-        
-        // 날짜 필터링
-        results = filterByDate(results);
-        
-        // 결과를 순위와 날짜/시간 기준으로 정렬
+
+        // 4. 정렬
         results = sortByRankAndDate(results);
-        
+
+        // 5. 응답
         res.json({
             success: true,
             data: results,
             total: results.length,
             keyword
         });
+
     } catch (error) {
         console.error('Search error:', error);
         res.status(500).json({
@@ -803,6 +790,8 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
+
 
 // 캡처 목록 조회 API
 app.get('/api/captures', (req, res) => {

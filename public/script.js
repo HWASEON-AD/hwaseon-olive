@@ -189,6 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 캡처 필터 UI 표시 함수
     function showCaptureFilterUI() {
+        const captureListModal = document.getElementById('captureListModal');
+        if (captureListModal) captureListModal.style.display = 'block';
         const filterEl = document.getElementById('captureFilterContainer');
         if (!filterEl) return;
         filterEl.style.display = 'block';
