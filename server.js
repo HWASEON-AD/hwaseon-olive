@@ -204,16 +204,13 @@ async function crawlAllCategories() {
     const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
     
     try {
-        // 이전 시간대의 캡처본 삭제
-        for (const [fileName] of captureCache) {
-            const match = fileName.match(/ranking_.+_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
-            if (match) {
-                const fileDate = match[1];
-                const fileTime = match[2];
-                // 당일 데이터이고 현재 시간보다 이전인 경우 삭제
-                if (fileDate === today && fileTime !== timeStr) {
-                    captureCache.delete(fileName);
-                    console.log('이전 캡처본 삭제:', fileName);
+        // 이전 캡처 파일 모두 삭제
+        if (fs.existsSync(capturesDir)) {
+            const files = fs.readdirSync(capturesDir);
+            for (const file of files) {
+                if (/^ranking_.*\.jpeg$/.test(file)) {
+                    fs.unlinkSync(path.join(capturesDir, file));
+                    console.log('이전 캡처 파일 삭제:', file);
                 }
             }
         }
@@ -545,9 +542,8 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
         .jpeg({ quality: 100 }) // 화질 증가
         .toBuffer();
     
-    // 메모리에 저장
-    const fileName = path.basename(filePath);
-    captureCache.set(fileName, sharpBuffer);
+    // 파일 시스템에 저장
+    await fs.promises.writeFile(filePath, sharpBuffer);
 }
 
 // 다음 크롤링 스케줄링 함수
@@ -711,6 +707,7 @@ app.get('/api/ranking', async (req, res) => {
     }
 });
 
+
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, category, startDate, endDate } = req.query;
@@ -722,15 +719,18 @@ app.get('/api/search', (req, res) => {
             });
         }
 
+        // 한글 포함 normalize 함수
         const normalize = str =>
             String(str || '')
                 .toLowerCase()
                 .normalize('NFKC')
-                .replace(/[^a-z0-9가-힣]+/g, '');
+                .replace(/\s+/g, '')
+                .replace(/[^a-z0-9가-힣]/g, '');
 
         const keywords = keyword.trim().split(/\s+/).map(normalize);
 
-        const filterByDate = (data) => {
+        // 날짜 필터
+        const filterByDate = data => {
             if (!startDate && !endDate) return data;
             return data.filter(item => {
                 if (!item.date) return false;
@@ -740,7 +740,8 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        const sortByRankAndDate = (data) => {
+        // 정렬
+        const sortByRankAndDate = data => {
             return [...data].sort((a, b) => {
                 if (a.rank !== b.rank) return a.rank - b.rank;
                 if (a.date !== b.date) return b.date.localeCompare(a.date);
@@ -749,31 +750,30 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 1. 키워드 필터
+        // 검색 필터
         let results = productCache.allProducts.filter(product => {
-            const fields = [
-                product.name || '',
-                product.brand || ''
-            ].map(normalize);
+            const name = normalize(product.name);
+            const brand = normalize(product.brand);
+
             return keywords.every(kw =>
-                fields.some(field => field.includes(kw))
+                name.includes(kw) || brand.includes(kw)
             );
         });
 
-        // 2. 날짜 필터
+        // 날짜 필터
         results = filterByDate(results);
 
-        // 3. 카테고리 필터 (★ 전체 → 전체인 것만 포함)
+        // 카테고리 필터 (전체는 전체만)
         if (category === '전체') {
             results = results.filter(product => product.category === '전체');
         } else {
             results = results.filter(product => product.category === category);
         }
 
-        // 4. 정렬
+        // 정렬
         results = sortByRankAndDate(results);
 
-        // 5. 응답
+        // 결과 응답
         res.json({
             success: true,
             data: results,
@@ -790,6 +790,7 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
 
 
 
