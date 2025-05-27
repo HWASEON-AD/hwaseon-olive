@@ -721,8 +721,8 @@ app.get('/api/search', (req, res) => {
                 error: '검색어를 입력해주세요.'
             });
         }
-        // 완전한 정규화 함수: NFKC, 공백/특수문자/대소문자 무시
-        const normalize = str => (str || '').toLowerCase().normalize('NFKC').replace(/[\s\[\]\(\)\{\}\-_,.·~!@#$%^&*+=:;"'`<>?/|\\]/g, '');
+        // 강화된 정규화 함수: 한글, 영문, 숫자만 남김
+        const normalize = str => (str || '').toLowerCase().normalize('NFKC').replace(/[^a-z0-9가-힣]+/g, '');
         const keywords = keyword.trim().split(/\s+/).map(normalize);
         const filterByDate = (data) => {
             if (!startDate && !endDate) return data;
@@ -742,8 +742,15 @@ app.get('/api/search', (req, res) => {
             });
         };
         let results = productCache.allProducts.filter(product => {
-            const fields = [product.name, product.brand, product.promotion].map(normalize).join(' ');
-            return keywords.every(kw => fields.includes(kw));
+            const nameNorm = normalize(product.name);
+            const brandNorm = normalize(product.brand);
+            const promoNorm = normalize(product.promotion);
+            // 모든 키워드가 세 필드 중 하나에라도 포함되어 있으면 true
+            return keywords.every(kw =>
+                nameNorm.includes(kw) ||
+                brandNorm.includes(kw) ||
+                promoNorm.includes(kw)
+            );
         });
         if (category && category !== '전체') {
             results = results.filter(product => product.category === category);
