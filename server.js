@@ -788,6 +788,69 @@ app.get('/api/search', (req, res) => {
 });
 
 
+app.get('/api/search', (req, res) => {
+    try {
+        const { keyword, category, startDate } = req.query;
+
+        if (!keyword || !startDate || !category) {
+            return res.status(400).json({
+                success: false,
+                error: '검색어, 카테고리, 날짜를 모두 입력해주세요.'
+            });
+        }
+
+        const normalize = str =>
+            String(str || '')
+                .toLowerCase()
+                .normalize('NFKC')
+                .replace(/[^a-z0-9가-힣]+/g, '');
+
+        const keywords = keyword.trim().split(/\s+/).map(normalize);
+        const normalizedCategory = normalize(category);
+        const normalizedStartDate = startDate;
+
+        let results = productCache.allProducts.filter(product => {
+            // 날짜
+            if (product.date !== normalizedStartDate) return false;
+
+            // 카테고리
+            if (category !== '전체' && product.category !== category) return false;
+
+            // 키워드 포함 (name / brand / promotion 중 하나라도 포함되면 통과)
+            const fields = [
+                product.name || '',
+                product.brand || '',
+                product.promotion || ''
+            ].map(normalize);
+
+            return keywords.every(kw =>
+                fields.some(field => field.includes(kw))
+            );
+        });
+
+        // 정렬: rank 오름차순 → time 내림차순
+        results.sort((a, b) => {
+            if (a.rank !== b.rank) return a.rank - b.rank;
+            if (a.time && b.time) return b.time.localeCompare(a.time);
+            return 0;
+        });
+
+        res.json({
+            success: true,
+            data: results,
+            total: results.length,
+            keyword
+        });
+
+    } catch (error) {
+        console.error('Search error:', error);
+        res.status(500).json({
+            success: false,
+            error: '검색 중 오류가 발생했습니다.',
+            details: error.message
+        });
+    }
+});
 
 
 
