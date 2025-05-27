@@ -724,12 +724,11 @@ app.get('/api/search', (req, res) => {
         const normalize = str => (str || '').toLowerCase().normalize('NFKC').replace(/[^a-z0-9가-힣]+/g, '');
         const keywords = keyword.trim().split(/\s+/).map(normalize);
         let results = productCache.allProducts.filter(product => {
-            // 날짜, 카테고리 일치
             if (startDate && product.date !== startDate) return false;
             if (category && category !== '전체' && product.category !== category) return false;
-            // 키워드 완전 일치
             const fields = [product.name, product.brand, product.promotion].map(normalize);
-            return keywords.every(kw => fields.includes(kw));
+            // 하나라도 포함되면 true
+            return keywords.every(kw => fields.some(field => field.includes(kw)));
         });
         // 정렬
         const sortByRankAndDate = (data) => {
