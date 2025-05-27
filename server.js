@@ -714,19 +714,14 @@ app.get('/api/search', (req, res) => {
     try {
         const { keyword, startDate, endDate } = req.query;
 
-        if (!keyword || !startDate) {
-            return res.status(400).json({
-                success: false,
-                error: '검색어와 시작 날짜를 모두 입력해주세요.'
-            });
-        }
-
         // 한글 전용 normalize 함수
         const normalize = str =>
             String(str || '')
                 .normalize('NFKC')
-                .replace(/\s+/g, '')
-                .replace(/[^가-힣]/g, '');
+                .replace(/\s+/g, '')             // 모든 공백 제거
+                .replace(/[^\w가-힣]/g, '')      // 영문, 숫자, 한글만 살림
+                .toLowerCase();                 // 대소문자 무시 (영문일 때)
+
 
         const normalizedKeyword = normalize(keyword);
 
