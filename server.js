@@ -1022,3 +1022,18 @@ app.listen(port, () => {
         timezone: 'Asia/Seoul'
     });
 });
+
+
+// 일단 서버 시작할 때 아래 코드 임시로 추가해봐
+console.log('총 제품 수:', productCache.allProducts.length);
+
+// 예: 트리헛 들어간 것들만 확인
+const filtered = productCache.allProducts.filter(p =>
+  (p.name && p.name.includes('트리헛')) ||
+  (p.brand && p.brand.includes('트리헛'))
+);
+
+console.log('트리헛 포함된 제품 수:', filtered.length);
+filtered.forEach(p => {
+  console.log(`[${p.date} ${p.time}] ${p.rank}위 ${p.brand} - ${p.name}`);
+});
