@@ -712,15 +712,15 @@ app.get('/api/ranking', async (req, res) => {
 
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, category, startDate, endDate } = req.query;
+        const { keyword, startDate, endDate } = req.query;
         if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
                 error: '검색어와 시작 날짜를 입력해주세요.'
             });
         }
-        // 한글만 남기고 공백/제로폭공백 제거, 소문자 변환
-        const normalize = str => (str || '').normalize('NFKC').replace(/\s+/g, '').replace(/\u200b/g, '').toLowerCase();
+        // 한글, 영문, 숫자 모두 남기고 공백/제로폭공백만 제거
+        const normalize = str => (str || '').normalize('NFKC').replace(/\s+/g, '').replace(/\u200b/g, '').toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
         const keywords = keyword.trim().split(/\s+/).map(normalize);
         // 날짜 필터
         const filterByDate = data => {
@@ -731,7 +731,7 @@ app.get('/api/search', (req, res) => {
                 return true;
             });
         };
-        // 키워드 포함된 제품 필터 (제품명 또는 브랜드에 하나라도 포함)
+        // 키워드 포함된 모든 제품 (중복 허용)
         let results = productCache.allProducts.filter(product => {
             const name = normalize(product.name);
             const brand = normalize(product.brand);
