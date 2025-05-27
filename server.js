@@ -717,14 +717,22 @@ app.get('/api/search', (req, res) => {
         if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
-                error: '검색어와 시작 날짜는 필수입니다.'
+                error: '검색어와 시작 날짜를 모두 입력해주세요.'
             });
         }
 
-        const keywordRaw = keyword.toLowerCase();
+        // 한글 전용 normalize 함수
+        const normalize = str =>
+            String(str || '')
+                .normalize('NFKC')
+                .replace(/\s+/g, '')
+                .replace(/[^가-힣]/g, '');
 
-        // 날짜 필터 함수
+        const normalizedKeyword = normalize(keyword);
+
+        // 날짜 필터
         const filterByDate = data => {
+            if (!startDate && !endDate) return data;
             return data.filter(item => {
                 if (!item.date) return false;
                 if (startDate && !endDate) return item.date === startDate;
@@ -733,33 +741,33 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 전체 제품 중에서 키워드 포함만 필터
+        // 정렬 함수 (날짜 > 시간 > 순위)
+        const sortByRankAndDate = data => {
+            return [...data].sort((a, b) => {
+                if (a.date !== b.date) return b.date.localeCompare(a.date);
+                if (a.time && b.time) return b.time.localeCompare(a.time);
+                return a.rank - b.rank;
+            });
+        };
+
+        // 필터링: 제품명 or 브랜드명에 키워드 포함
         let results = productCache.allProducts.filter(product => {
-            const name = (product.name || '').toLowerCase();
-            const brand = (product.brand || '').toLowerCase();
-            const keywordRaw = keyword.trim().toLowerCase();
-            
-            // 디버그: 매칭된 항목 로그 출력
-            if ((name.includes(keywordRaw) || brand.includes(keywordRaw)) &&
-                product.date === startDate) {
-                console.log(`[MATCH] ${product.date} ${product.time} ${product.rank}위 ${brand} - ${name}`);
-            }
-        
-            return (name.includes(keywordRaw) || brand.includes(keywordRaw)) &&
-                   product.date === startDate;
+            const name = normalize(product.name);
+            const brand = normalize(product.brand);
+            return (
+                name.includes(normalizedKeyword) ||
+                brand.includes(normalizedKeyword)
+            );
         });
 
-        // 날짜만 필터링
+        // 날짜 필터
         results = filterByDate(results);
 
-        // 정렬: 최신 날짜/시간 우선 (순위 무시)
-        results.sort((a, b) => {
-            if (a.date !== b.date) return b.date.localeCompare(a.date);
-            if (a.time && b.time) return b.time.localeCompare(a.time);
-            return 0;
-        });
+        // 정렬
+        results = sortByRankAndDate(results);
 
-        return res.json({
+        // 응답
+        res.json({
             success: true,
             data: results,
             total: results.length,
@@ -775,7 +783,6 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
-
 
 
 
