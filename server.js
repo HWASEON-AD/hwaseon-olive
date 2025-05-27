@@ -711,137 +711,41 @@ app.get('/api/ranking', async (req, res) => {
     }
 });
 
-
+// 제품명 검색 API
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, category, startDate, endDate } = req.query;
-
         if (!keyword) {
             return res.status(400).json({
                 success: false,
                 error: '검색어를 입력해주세요.'
             });
         }
-
-        // 문자열 정규화
-        const normalize = str =>
-            String(str || '')
-                .toLowerCase()
-                .normalize('NFKC')
-                .replace(/[^a-z0-9가-힣]+/g, '');
-
+        const normalize = str => (str || '').toLowerCase().normalize('NFKC').replace(/[^a-z0-9가-힣]+/g, '');
         const keywords = keyword.trim().split(/\s+/).map(normalize);
-
         let results = productCache.allProducts.filter(product => {
-            const productDate = product.date;
-
-            // 날짜 필터링 (startDate ~ endDate 범위)
-            if (startDate && endDate) {
-                if (productDate < startDate || productDate > endDate) return false;
-            } else if (startDate) {
-                if (productDate !== startDate) return false;
-            }
-
-            // 카테고리 필터링
-            if (category && category !== '전체' && product.category !== category) {
-                return false;
-            }
-
-            // 키워드 필터링
-            const fields = [
-                product.name || '',
-                product.brand || '',
-                product.promotion || ''
-            ].map(normalize);
-
-            // 모든 키워드가 하나 이상의 필드에 포함되는지 확인
-            const isMatch = keywords.every(kw =>
-                fields.some(field => field.includes(kw))
-            );
-
-            return isMatch;
+            if (startDate && product.date !== startDate) return false;
+            if (category && category !== '전체' && product.category !== category) return false;
+            const fields = [product.name, product.brand, product.promotion].map(normalize);
+            // 하나라도 포함되면 true
+            return keywords.every(kw => fields.some(field => field.includes(kw)));
         });
-
-        // 정렬: rank 오름차순 > date 내림차순 > time 내림차순
-        results.sort((a, b) => {
-            if (a.rank !== b.rank) return a.rank - b.rank;
-            if (a.date !== b.date) return b.date.localeCompare(a.date);
-            if (a.time && b.time) return b.time.localeCompare(a.time);
-            return 0;
-        });
-
-        res.json({
-            success: true,
-            data: results,
-            total: results.length,
-            keyword
-        });
-
-    } catch (error) {
-        console.error('Search error:', error);
-        res.status(500).json({
-            success: false,
-            error: '검색 중 오류가 발생했습니다.',
-            details: error.message
-        });
-    }
-});
-
-
-app.get('/api/search', (req, res) => {
-    try {
-        const { keyword, category, startDate } = req.query;
-
-        if (!keyword || !startDate || !category) {
-            return res.status(400).json({
-                success: false,
-                error: '검색어, 카테고리, 날짜를 모두 입력해주세요.'
+        // 정렬
+        const sortByRankAndDate = (data) => {
+            return [...data].sort((a, b) => {
+                if (a.rank !== b.rank) return a.rank - b.rank;
+                if (a.date !== b.date) return b.date.localeCompare(a.date);
+                if (a.time && b.time) return b.time.localeCompare(a.time);
+                return 0;
             });
-        }
-
-        const normalize = str =>
-            String(str || '')
-                .toLowerCase()
-                .normalize('NFKC')
-                .replace(/[^a-z0-9가-힣]+/g, '');
-
-        const keywords = keyword.trim().split(/\s+/).map(normalize);
-        const normalizedCategory = normalize(category);
-        const normalizedStartDate = startDate;
-
-        let results = productCache.allProducts.filter(product => {
-            // 날짜
-            if (product.date !== normalizedStartDate) return false;
-
-            // 카테고리
-            if (category !== '전체' && product.category !== category) return false;
-
-            // 키워드 포함 (name / brand / promotion 중 하나라도 포함되면 통과)
-            const fields = [
-                product.name || '',
-                product.brand || '',
-                product.promotion || ''
-            ].map(normalize);
-
-            return keywords.every(kw =>
-                fields.some(field => field.includes(kw))
-            );
-        });
-
-        // 정렬: rank 오름차순 → time 내림차순
-        results.sort((a, b) => {
-            if (a.rank !== b.rank) return a.rank - b.rank;
-            if (a.time && b.time) return b.time.localeCompare(a.time);
-            return 0;
-        });
-
+        };
+        results = sortByRankAndDate(results);
         res.json({
             success: true,
             data: results,
             total: results.length,
             keyword
         });
-
     } catch (error) {
         console.error('Search error:', error);
         res.status(500).json({
@@ -851,8 +755,6 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
-
-
 
 // 캡처 목록 조회 API
 app.get('/api/captures', (req, res) => {
