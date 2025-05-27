@@ -709,54 +709,30 @@ app.get('/api/ranking', async (req, res) => {
 });
 
 
+
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, category, startDate, endDate } = req.query;
+        const { keyword } = req.query;
 
-        if (!keyword || !startDate) {
+        if (!keyword) {
             return res.status(400).json({
                 success: false,
-                error: '검색어, 시작 날짜는 필수입니다.'
+                error: '검색어는 반드시 입력해야 합니다.'
             });
         }
 
-        // ✅ 키워드 전처리 (공백 제거만)
-        const cleanedKeyword = keyword.replace(/\s+/g, '');
+        // 띄어쓰기 제거 + 소문자 변환
+        const cleanedKeyword = keyword.replace(/\s+/g, '').toLowerCase();
 
-        // ✅ 날짜 필터
-        const filterByDate = data => {
-            return data.filter(item => {
-                if (!item.date) return false;
-                if (startDate && !endDate) return item.date === startDate;
-                if (!startDate && endDate) return item.date === endDate;
-                return item.date >= startDate && item.date <= endDate;
-            });
-        };
-
-        // ✅ 단순 문자열 포함 여부로 검색 (소문자 비교, 띄어쓰기 제거)
-        let results = productCache.allProducts.filter(product => {
-            const productName = (product.name || '').replace(/\s+/g, '').toLowerCase();
-            const brandName = (product.brand || '').replace(/\s+/g, '').toLowerCase();
-            const keywordLower = cleanedKeyword.toLowerCase();
-            return productName.includes(keywordLower) || brandName.includes(keywordLower);
+        // 무조건 키워드 포함만 기준으로 필터링
+        const results = productCache.allProducts.filter(product => {
+            const name = (product.name || '').replace(/\s+/g, '').toLowerCase();
+            const brand = (product.brand || '').replace(/\s+/g, '').toLowerCase();
+            return name.includes(cleanedKeyword) || brand.includes(cleanedKeyword);
         });
 
-        // ✅ 날짜 필터
-        results = filterByDate(results);
-
-        // ✅ 카테고리 조건은 '전체'일 때 무시
-        if (category && category !== '전체') {
-            results = results.filter(product => product.category === category);
-        }
-
-        // ✅ 최신순 정렬
-        results.sort((a, b) => {
-            if (a.date !== b.date) return b.date.localeCompare(a.date);
-            if (a.time && b.time) return b.time.localeCompare(a.time);
-            return 0;
-        });
-
-        res.json({
+        // 날짜/시간/순위/카테고리 무시하고 그냥 반환
+        return res.json({
             success: true,
             data: results,
             total: results.length,
@@ -772,6 +748,7 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
 
 
 
