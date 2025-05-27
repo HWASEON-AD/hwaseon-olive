@@ -714,20 +714,25 @@ app.get('/api/search', (req, res) => {
     try {
         const { keyword, startDate, endDate } = req.query;
 
-        // 한글 전용 normalize 함수
+        if (!keyword || !startDate) {
+            return res.status(400).json({
+                success: false,
+                error: '검색어와 시작 날짜를 입력해주세요.'
+            });
+        }
+
+        // ✅ normalize 함수: 한글만 남기고 공백/제로폭공백 제거
         const normalize = str =>
-            String(str || '')
+            (str || '')
                 .normalize('NFKC')
-                .replace(/\s+/g, '')             // 모든 공백 제거
-                .replace(/[^\w가-힣]/g, '')      // 영문, 숫자, 한글만 살림
-                .toLowerCase();                 // 대소문자 무시 (영문일 때)
+                .replace(/\s+/g, '')
+                .replace(/\u200b/g, '')
+                .toLowerCase();
 
+        const keywords = keyword.trim().split(/\s+/).map(normalize);
 
-        const normalizedKeyword = normalize(keyword);
-
-        // 날짜 필터
+        // ✅ 날짜 필터 (startDate ~ endDate 또는 단일 startDate)
         const filterByDate = data => {
-            if (!startDate && !endDate) return data;
             return data.filter(item => {
                 if (!item.date) return false;
                 if (startDate && !endDate) return item.date === startDate;
@@ -736,7 +741,7 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 정렬 함수 (날짜 > 시간 > 순위)
+        // ✅ 정렬: 최신 날짜 + 최신 시간순 → 낮은 순위 우선
         const sortByRankAndDate = data => {
             return [...data].sort((a, b) => {
                 if (a.date !== b.date) return b.date.localeCompare(a.date);
@@ -745,35 +750,35 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 필터링: 제품명 or 브랜드명에 키워드 포함
+        // ✅ 키워드 포함된 제품 필터
         let results = productCache.allProducts.filter(product => {
             const name = normalize(product.name);
             const brand = normalize(product.brand);
-            return (
-                name.includes(normalizedKeyword) ||
-                brand.includes(normalizedKeyword)
+
+            return keywords.every(kw =>
+                name.includes(kw) || brand.includes(kw)
             );
         });
 
-        // 날짜 필터
+        // ✅ 날짜 기준 필터
         results = filterByDate(results);
 
-        // 정렬
+        // ✅ 정렬
         results = sortByRankAndDate(results);
 
-        // 응답
-        res.json({
+        // ✅ 결과 반환
+        return res.json({
             success: true,
             data: results,
             total: results.length,
-            keyword
+            keyword,
         });
 
     } catch (error) {
         console.error('Search error:', error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            error: '검색 중 오류가 발생했습니다.',
+            error: '검색 중 오류 발생',
             details: error.message
         });
     }
