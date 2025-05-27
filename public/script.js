@@ -189,7 +189,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 캡처 필터 UI 표시 함수
     function showCaptureFilterUI() {
-        captureListModal.style.display = 'block';
+        const filterEl = document.getElementById('captureFilterContainer');
+        if (!filterEl) return;
+        filterEl.style.display = 'block';
         
         // 날짜 입력 필드 생성
         const dateFilterDiv = document.createElement('div');

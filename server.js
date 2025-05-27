@@ -721,18 +721,17 @@ app.get('/api/search', (req, res) => {
                 error: '검색어를 입력해주세요.'
             });
         }
-        // 강화된 정규화 함수: 한글, 영문, 숫자만 남김
         const normalize = str => (str || '').toLowerCase().normalize('NFKC').replace(/[^a-z0-9가-힣]+/g, '');
         const keywords = keyword.trim().split(/\s+/).map(normalize);
-        const filterByDate = (data) => {
-            if (!startDate && !endDate) return data;
-            return data.filter(item => {
-                if (!item.date) return false;
-                if (startDate && !endDate) return item.date === startDate;
-                if (!startDate && endDate) return item.date === endDate;
-                return item.date >= startDate && item.date <= endDate;
-            });
-        };
+        let results = productCache.allProducts.filter(product => {
+            // 날짜, 카테고리 일치
+            if (startDate && product.date !== startDate) return false;
+            if (category && category !== '전체' && product.category !== category) return false;
+            // 키워드 완전 일치
+            const fields = [product.name, product.brand, product.promotion].map(normalize);
+            return keywords.every(kw => fields.includes(kw));
+        });
+        // 정렬
         const sortByRankAndDate = (data) => {
             return [...data].sort((a, b) => {
                 if (a.rank !== b.rank) return a.rank - b.rank;
@@ -741,21 +740,6 @@ app.get('/api/search', (req, res) => {
                 return 0;
             });
         };
-        let results = productCache.allProducts.filter(product => {
-            const nameNorm = normalize(product.name);
-            const brandNorm = normalize(product.brand);
-            const promoNorm = normalize(product.promotion);
-            // 모든 키워드가 세 필드 중 하나에라도 포함되어 있으면 true
-            return keywords.every(kw =>
-                nameNorm.includes(kw) ||
-                brandNorm.includes(kw) ||
-                promoNorm.includes(kw)
-            );
-        });
-        if (category && category !== '전체') {
-            results = results.filter(product => product.category === category);
-        }
-        results = filterByDate(results);
         results = sortByRankAndDate(results);
         res.json({
             success: true,
