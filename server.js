@@ -881,7 +881,7 @@ app.get('/api/captures', async (req, res) => {
         console.log('오늘 날짜 필터링 후:', captures.length);
         
         // 카테고리 필터링
-        if (category) {
+        if (category && category !== '전체') {
             captures = captures.filter(capture => capture.category === category);
             console.log('카테고리 필터링 후:', captures.length);
         }
