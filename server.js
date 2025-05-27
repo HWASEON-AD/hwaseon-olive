@@ -715,22 +715,41 @@ app.get('/api/ranking', async (req, res) => {
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, category, startDate, endDate } = req.query;
+
         if (!keyword) {
             return res.status(400).json({
                 success: false,
                 error: '검색어를 입력해주세요.'
             });
         }
-        const normalize = str => (str || '').toLowerCase().normalize('NFKC').replace(/[^a-z0-9가-힣]+/g, '');
+
+        const normalize = str =>
+            String(str || '')
+                .toLowerCase()
+                .normalize('NFKC')
+                .replace(/[^a-z0-9가-힣]+/g, '');
+
         const keywords = keyword.trim().split(/\s+/).map(normalize);
+
         let results = productCache.allProducts.filter(product => {
-            if (startDate && product.date !== startDate) return false;
-            if (category && category !== '전체' && product.category !== category) return false;
+            // 날짜 필터: 범위 조건으로 변경
+            if (startDate && endDate) {
+                if (product.date < startDate || product.date > endDate) return false;
+            } else if (startDate) {
+                if (product.date !== startDate) return false;
+            }
+
+            // 카테고리 필터
+            if (category && category !== '전체' && product.category !== category) {
+                return false;
+            }
+
+            // 키워드 검색
             const fields = [product.name, product.brand, product.promotion].map(normalize);
-            // 하나라도 포함되면 true
             return keywords.every(kw => fields.some(field => field.includes(kw)));
         });
-        // 정렬
+
+        // 정렬: rank 오름차순 → date 내림차순 → time 내림차순
         const sortByRankAndDate = (data) => {
             return [...data].sort((a, b) => {
                 if (a.rank !== b.rank) return a.rank - b.rank;
@@ -739,13 +758,16 @@ app.get('/api/search', (req, res) => {
                 return 0;
             });
         };
+
         results = sortByRankAndDate(results);
+
         res.json({
             success: true,
             data: results,
             total: results.length,
             keyword
         });
+
     } catch (error) {
         console.error('Search error:', error);
         res.status(500).json({
@@ -755,6 +777,8 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
+
 
 // 캡처 목록 조회 API
 app.get('/api/captures', (req, res) => {
