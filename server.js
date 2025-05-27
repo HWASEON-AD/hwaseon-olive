@@ -255,19 +255,12 @@ async function crawlAllCategories() {
                 products.push(product);
                 
                 // 전체 제품 목록에도 추가 (검색용)
-                for (const category in productCache.data) {
-                    for (const product of productCache.data[category]) {
-                      if (!productCache.allProducts.some(p =>
-                          p.name === product.name &&
-                          p.brand === product.brand &&
-                          p.category === product.category &&
-                          p.date === product.date &&
-                          p.time === product.time &&
-                          p.rank === product.rank)) {
-                        productCache.allProducts.push(product);
-                      }
-                    }
-                  }
+                if (!productCache.allProducts.some(p => 
+                    p.name === name && 
+                    p.category === category && 
+                    p.time === timeStr)) {
+                    productCache.allProducts.push(product);
+                }
             });
 
             // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
@@ -715,9 +708,6 @@ app.get('/api/ranking', async (req, res) => {
     }
 });
 
-
-
-
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, startDate, endDate } = req.query;
@@ -729,46 +719,37 @@ app.get('/api/search', (req, res) => {
             });
         }
 
-        const lowerKeyword = keyword.toLowerCase();
+        const keywordLower = keyword.toLowerCase().trim();
 
-        // 날짜 필터만 적용
-        const filteredByDate = productCache.allProducts.filter(item => {
-            if (!item.date) return false;
-            if (startDate && !endDate) return item.date === startDate;
-            if (!startDate && endDate) return item.date === endDate;
-            return item.date >= startDate && item.date <= endDate;
+        const matched = productCache.allProducts.filter(product => {
+            if (!product.name && !product.brand) return false;
+            if (product.date !== startDate) return false;
+
+            const fullText = `${product.name} ${product.brand}`.toLowerCase();
+            return fullText.includes(keywordLower);
         });
 
-        // 진짜 Ctrl+F 방식: 소문자로 변환한 키워드가 name/brand 텍스트 전체에 포함되면 OK
-        const results = filteredByDate.filter(product => {
-            const text = `${product.name || ''} ${product.brand || ''}`.toLowerCase();
-            return text.includes(lowerKeyword);
-        });
-
-        // 정렬: 최신 날짜 > 최신 시간 > 낮은 순위
-        results.sort((a, b) => {
-            if (a.date !== b.date) return b.date.localeCompare(a.date);
+        matched.sort((a, b) => {
+            if (a.rank !== b.rank) return a.rank - b.rank;
             if (a.time && b.time) return b.time.localeCompare(a.time);
-            return a.rank - b.rank;
+            return 0;
         });
 
         res.json({
             success: true,
-            data: results,
-            total: results.length,
+            data: matched,
+            total: matched.length,
             keyword
         });
-
-    } catch (error) {
-        console.error('Search error:', error);
+    } catch (err) {
+        console.error('Search error:', err);
         res.status(500).json({
             success: false,
-            error: '검색 중 오류 발생',
-            details: error.message
+            error: '검색 중 오류',
+            details: err.message
         });
     }
 });
-
 
 
 // 캡처 목록 조회 API
