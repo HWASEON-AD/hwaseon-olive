@@ -713,33 +713,27 @@ app.get('/api/ranking', async (req, res) => {
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, startDate, endDate } = req.query;
+
         if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
                 error: '검색어와 시작 날짜를 입력해주세요.'
             });
         }
-        // 한글, 영문, 숫자 모두 남기고 공백/제로폭공백만 제거
-        const normalize = str => (str || '').normalize('NFKC').replace(/\s+/g, '').replace(/\u200b/g, '').toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
-        const keywords = keyword.trim().split(/\s+/).map(normalize);
+
+        const lowerKeyword = keyword.toLowerCase();
+
         // 날짜 필터
         const filterByDate = data => {
             return data.filter(item => {
                 if (!item.date) return false;
-                if (startDate && endDate) return item.date >= startDate && item.date <= endDate;
-                if (startDate) return item.date === startDate;
-                return true;
+                if (startDate && !endDate) return item.date === startDate;
+                if (!startDate && endDate) return item.date === endDate;
+                return item.date >= startDate && item.date <= endDate;
             });
         };
-        // 키워드 포함된 모든 제품 (중복 허용)
-        let results = productCache.allProducts.filter(product => {
-            const name = normalize(product.name);
-            const brand = normalize(product.brand);
-            return keywords.some(kw => name.includes(kw) || brand.includes(kw));
-        });
-        // 날짜 필터 적용
-        results = filterByDate(results);
-        // 정렬: 최신 날짜+시간순, 낮은 순위 우선
+
+        // 정렬: 최신 날짜 → 최신 시간 → 낮은 순위
         const sortByRankAndDate = data => {
             return [...data].sort((a, b) => {
                 if (a.date !== b.date) return b.date.localeCompare(a.date);
@@ -747,16 +741,26 @@ app.get('/api/search', (req, res) => {
                 return a.rank - b.rank;
             });
         };
+
+        // Ctrl+F처럼 포함 여부만 체크
+        let results = productCache.allProducts.filter(product => {
+            const combined = `${product.name || ''} ${product.brand || ''}`.toLowerCase();
+            return combined.includes(lowerKeyword);
+        });
+
+        results = filterByDate(results);
         results = sortByRankAndDate(results);
-        return res.json({
+
+        res.json({
             success: true,
             data: results,
             total: results.length,
-            keyword,
+            keyword
         });
+
     } catch (error) {
         console.error('Search error:', error);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             error: '검색 중 오류 발생',
             details: error.message
