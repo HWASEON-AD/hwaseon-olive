@@ -735,9 +735,18 @@ app.get('/api/search', (req, res) => {
 
         // 전체 제품 중에서 키워드 포함만 필터
         let results = productCache.allProducts.filter(product => {
-            const name = String(product.name || '').toLowerCase();
-            const brand = String(product.brand || '').toLowerCase();
-            return name.includes(keywordRaw) || brand.includes(keywordRaw);
+            const name = (product.name || '').toLowerCase();
+            const brand = (product.brand || '').toLowerCase();
+            const keywordRaw = keyword.trim().toLowerCase();
+            
+            // 디버그: 매칭된 항목 로그 출력
+            if ((name.includes(keywordRaw) || brand.includes(keywordRaw)) &&
+                product.date === startDate) {
+                console.log(`[MATCH] ${product.date} ${product.time} ${product.rank}위 ${brand} - ${name}`);
+            }
+        
+            return (name.includes(keywordRaw) || brand.includes(keywordRaw)) &&
+                   product.date === startDate;
         });
 
         // 날짜만 필터링
