@@ -18,6 +18,10 @@ const port = process.env.PORT || 5001;
 
 const RANKING_DATA_PATH = '/data/ranking.json';
 
+const capturesDir = path.join(__dirname, 'public', 'captures');
+if (!fs.existsSync(capturesDir)) {
+  fs.mkdirSync(capturesDir, { recursive: true });
+}
 
 // CORS 미들웨어 설정
 app.use(cors());
@@ -27,9 +31,6 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
 
-
-// 캡처 저장 디렉토리 설정
-const capturesDir = path.join(__dirname, 'public', 'captures');
 
 // 캡처 저장을 위한 메모리 캐시
 const captureCache = new Map();
@@ -708,30 +709,29 @@ app.get('/api/ranking', async (req, res) => {
 });
 
 
+
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, category, startDate, endDate } = req.query;
+        const { keyword, startDate, endDate } = req.query;
 
-        if (!keyword || !category || !startDate) {
+        if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
-                error: '검색어, 카테고리, 날짜를 모두 입력해주세요.'
+                error: '검색어와 시작 날짜는 반드시 입력해주세요.'
             });
         }
 
-        // normalize 함수 (한글, 영문 포함)
+        // 한글만 남기는 정규 normalize
         const normalize = str =>
             String(str || '')
-                .toLowerCase()
                 .normalize('NFKC')
                 .replace(/\s+/g, '')
-                .replace(/[^a-z0-9가-힣]/g, '');
+                .replace(/[^가-힣]/g, '');
 
-        const searchKeyword = normalize(keyword);
+        const normalizedKeyword = normalize(keyword);
 
         // 날짜 필터
         const filterByDate = data => {
-            if (!startDate && !endDate) return data;
             return data.filter(item => {
                 if (!item.date) return false;
                 if (startDate && !endDate) return item.date === startDate;
@@ -740,7 +740,7 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 정렬
+        // 정렬 기준
         const sortByRankAndDate = data => {
             return [...data].sort((a, b) => {
                 if (a.rank !== b.rank) return a.rank - b.rank;
@@ -750,27 +750,28 @@ app.get('/api/search', (req, res) => {
             });
         };
 
-        // 필터링
+        // 검색 로직
         let results = productCache.allProducts.filter(product => {
-            const name = normalize(product.name);
-            const brand = normalize(product.brand);
+            const nameNorm = normalize(product.name);
+            const brandNorm = normalize(product.brand);
+            const nameRaw = String(product.name || '');
+            const brandRaw = String(product.brand || '');
 
-            return name.includes(searchKeyword) || brand.includes(searchKeyword);
+            return (
+                nameNorm.includes(normalizedKeyword) ||
+                brandNorm.includes(normalizedKeyword) ||
+                nameRaw.includes(keyword) ||
+                brandRaw.includes(keyword)
+            );
         });
 
-        // 날짜 필터
+        // 날짜 필터 적용
         results = filterByDate(results);
 
-        // 카테고리 필터
-        if (category !== '전체') {
-            results = results.filter(product => product.category === category);
-        }
-
-        // 정렬
+        // 정렬 적용
         results = sortByRankAndDate(results);
 
-        // 결과 응답
-        res.json({
+        return res.json({
             success: true,
             data: results,
             total: results.length,
@@ -786,6 +787,8 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
+
 
 
 
