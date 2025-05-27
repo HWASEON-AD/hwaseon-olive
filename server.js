@@ -708,114 +708,54 @@ app.get('/api/ranking', async (req, res) => {
     }
 });
 
+
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, startDate, endDate } = req.query;
+        const { keyword, startDate } = req.query;
 
         if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
-                error: '검색어와 시작 날짜를 입력해주세요.'
+                error: '검색어와 날짜를 입력해주세요.'
             });
         }
 
-        const keywordLower = keyword.toLowerCase().trim();
+        const kw = keyword.toLowerCase().trim();
 
-        const matched = productCache.allProducts.filter(product => {
-            if (!product.name && !product.brand) return false;
-            if (product.date !== startDate) return false;
+        const results = productCache.allProducts.filter(p => {
+            if (!p.name && !p.brand) return false;
+            if (p.date !== startDate) return false;
 
-            const fullText = `${product.name} ${product.brand}`.toLowerCase();
-            return fullText.includes(keywordLower);
+            const combined = `${p.name} ${p.brand}`.toLowerCase();
+            return combined.includes(kw);
         });
 
-        matched.sort((a, b) => {
-            if (a.rank !== b.rank) return a.rank - b.rank;
-            if (a.time && b.time) return b.time.localeCompare(a.time);
-            return 0;
+        results.sort((a, b) => {
+            if (a.time && b.time && a.time !== b.time) {
+                return b.time.localeCompare(a.time); // 최신 시간 우선
+            }
+            return a.rank - b.rank;
         });
 
         res.json({
             success: true,
-            data: matched,
-            total: matched.length,
-            keyword
+            data: results,
+            total: results.length
         });
-    } catch (err) {
-        console.error('Search error:', err);
+
+    } catch (e) {
+        console.error('Search error:', e);
         res.status(500).json({
             success: false,
-            error: '검색 중 오류',
-            details: err.message
+            error: '검색 중 오류 발생',
+            details: e.message
         });
     }
 });
 
 
-// 캡처 목록 조회 API
-app.get('/api/captures', (req, res) => {
-    try {
-        const { category } = req.query;
-        const today = new Date().toISOString().split('T')[0];
-        
-        // 메모리에서 캡처 정보 생성
-        let captures = Array.from(captureCache.keys()).map(fileName => {
-            const match = fileName.match(/ranking_(.+)_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
-            let extractedCategory, date, time;
-            if (match) {
-                extractedCategory = match[1];
-                date = match[2];
-                time = match[3].replace('-', ':');
-            }
-            return {
-                id: path.parse(fileName).name,
-                fileName,
-                category: extractedCategory,
-                date,
-                time,
-                timestamp: new Date().getTime(),
-                imageUrl: `/captures/${fileName}`,
-                fileSize: captureCache.get(fileName).length
-            };
-        });
 
-        // 오늘 날짜만 필터링
-        captures = captures.filter(capture => capture.date === today);
-        
-        // 카테고리 필터링
-        if (category) {
-            captures = captures.filter(capture => capture.category === category);
-        }
-        
-        // 날짜와 시간 기준으로 내림차순 정렬 (최신순)
-        captures.sort((a, b) => {
-            if (a.date !== b.date) {
-                return b.date.localeCompare(a.date);
-            }
-            return b.time.localeCompare(a.time);
-        });
-        
-        // 사용 가능한 카테고리 목록 생성
-        const availableCategories = [...new Set(captures.map(capture => capture.category))].sort();
-        
-        res.json({
-            success: true,
-            data: captures,
-            total: captures.length,
-            filters: {
-                category
-            },
-            availableCategories
-        });
-    } catch (error) {
-        console.error('캡처 목록 조회 중 오류:', error);
-        res.status(500).json({
-            success: false,
-            error: '캡처 목록 조회 중 오류가 발생했습니다.',
-            details: error.message
-        });
-    }
-});
+
 
 // 마지막 크롤링 시간 API
 app.get('/api/last-crawl-time', (req, res) => {
