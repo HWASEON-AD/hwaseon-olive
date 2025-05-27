@@ -712,36 +712,34 @@ app.get('/api/ranking', async (req, res) => {
 
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, startDate, endDate } = req.query;
-
+        const { keyword, category, startDate, endDate } = req.query;
         if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
                 error: '검색어와 시작 날짜를 입력해주세요.'
             });
         }
-
-        // ✅ normalize 함수: 한글만 남기고 공백/제로폭공백 제거
-        const normalize = str =>
-            (str || '')
-                .normalize('NFKC')
-                .replace(/\s+/g, '')
-                .replace(/\u200b/g, '')
-                .toLowerCase();
-
+        // 한글만 남기고 공백/제로폭공백 제거, 소문자 변환
+        const normalize = str => (str || '').normalize('NFKC').replace(/\s+/g, '').replace(/\u200b/g, '').toLowerCase();
         const keywords = keyword.trim().split(/\s+/).map(normalize);
-
-        // ✅ 날짜 필터 (startDate ~ endDate 또는 단일 startDate)
+        // 날짜 필터
         const filterByDate = data => {
             return data.filter(item => {
                 if (!item.date) return false;
-                if (startDate && !endDate) return item.date === startDate;
-                if (!startDate && endDate) return item.date === endDate;
-                return item.date >= startDate && item.date <= endDate;
+                if (startDate && endDate) return item.date >= startDate && item.date <= endDate;
+                if (startDate) return item.date === startDate;
+                return true;
             });
         };
-
-        // ✅ 정렬: 최신 날짜 + 최신 시간순 → 낮은 순위 우선
+        // 키워드 포함된 제품 필터 (제품명 또는 브랜드에 하나라도 포함)
+        let results = productCache.allProducts.filter(product => {
+            const name = normalize(product.name);
+            const brand = normalize(product.brand);
+            return keywords.some(kw => name.includes(kw) || brand.includes(kw));
+        });
+        // 날짜 필터 적용
+        results = filterByDate(results);
+        // 정렬: 최신 날짜+시간순, 낮은 순위 우선
         const sortByRankAndDate = data => {
             return [...data].sort((a, b) => {
                 if (a.date !== b.date) return b.date.localeCompare(a.date);
@@ -749,31 +747,13 @@ app.get('/api/search', (req, res) => {
                 return a.rank - b.rank;
             });
         };
-
-        // ✅ 키워드 포함된 제품 필터
-        let results = productCache.allProducts.filter(product => {
-            const name = normalize(product.name);
-            const brand = normalize(product.brand);
-
-            return keywords.every(kw =>
-                name.includes(kw) || brand.includes(kw)
-            );
-        });
-
-        // ✅ 날짜 기준 필터
-        results = filterByDate(results);
-
-        // ✅ 정렬
         results = sortByRankAndDate(results);
-
-        // ✅ 결과 반환
         return res.json({
             success: true,
             data: results,
             total: results.length,
             keyword,
         });
-
     } catch (error) {
         console.error('Search error:', error);
         return res.status(500).json({
