@@ -255,15 +255,19 @@ async function crawlAllCategories() {
                 products.push(product);
                 
                 // 전체 제품 목록에도 추가 (검색용)
-                if (!productCache.allProducts.some(p =>
-                    p.name === name &&
-                    p.brand === brand &&
-                    p.category === category &&
-                    p.date === today &&
-                    p.time === timeStr &&
-                    p.rank === rank)) {
-                productCache.allProducts.push(product);
-                }
+                for (const category in productCache.data) {
+                    for (const product of productCache.data[category]) {
+                      if (!productCache.allProducts.some(p =>
+                          p.name === product.name &&
+                          p.brand === product.brand &&
+                          p.category === product.category &&
+                          p.date === product.date &&
+                          p.time === product.time &&
+                          p.rank === product.rank)) {
+                        productCache.allProducts.push(product);
+                      }
+                    }
+                  }
             });
 
             // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
