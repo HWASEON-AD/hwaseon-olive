@@ -709,7 +709,6 @@ app.get('/api/ranking', async (req, res) => {
 });
 
 
-
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, startDate, endDate } = req.query;
@@ -723,33 +722,26 @@ app.get('/api/search', (req, res) => {
 
         const lowerKeyword = keyword.toLowerCase();
 
-        // 날짜 필터
-        const filterByDate = data => {
-            return data.filter(item => {
-                if (!item.date) return false;
-                if (startDate && !endDate) return item.date === startDate;
-                if (!startDate && endDate) return item.date === endDate;
-                return item.date >= startDate && item.date <= endDate;
-            });
-        };
-
-        // 정렬: 최신 날짜 → 최신 시간 → 낮은 순위
-        const sortByRankAndDate = data => {
-            return [...data].sort((a, b) => {
-                if (a.date !== b.date) return b.date.localeCompare(a.date);
-                if (a.time && b.time) return b.time.localeCompare(a.time);
-                return a.rank - b.rank;
-            });
-        };
-
-        // Ctrl+F처럼 포함 여부만 체크
-        let results = productCache.allProducts.filter(product => {
-            const combined = `${product.name || ''} ${product.brand || ''}`.toLowerCase();
-            return combined.includes(lowerKeyword);
+        // 날짜 필터만 적용
+        const filteredByDate = productCache.allProducts.filter(item => {
+            if (!item.date) return false;
+            if (startDate && !endDate) return item.date === startDate;
+            if (!startDate && endDate) return item.date === endDate;
+            return item.date >= startDate && item.date <= endDate;
         });
 
-        results = filterByDate(results);
-        results = sortByRankAndDate(results);
+        // 진짜 Ctrl+F 방식: 소문자로 변환한 키워드가 name/brand 텍스트 전체에 포함되면 OK
+        const results = filteredByDate.filter(product => {
+            const text = `${product.name || ''} ${product.brand || ''}`.toLowerCase();
+            return text.includes(lowerKeyword);
+        });
+
+        // 정렬: 최신 날짜 > 최신 시간 > 낮은 순위
+        results.sort((a, b) => {
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            if (a.time && b.time) return b.time.localeCompare(a.time);
+            return a.rank - b.rank;
+        });
 
         res.json({
             success: true,
@@ -767,6 +759,7 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
+
 
 
 
