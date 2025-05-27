@@ -709,51 +709,58 @@ app.get('/api/ranking', async (req, res) => {
 });
 
 
+
+
+
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, startDate } = req.query;
+        const { keyword, startDate, endDate } = req.query;
 
         if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
-                error: '검색어와 날짜를 입력해주세요.'
+                error: '검색어와 시작 날짜를 입력해주세요.'
             });
         }
 
-        const kw = keyword.toLowerCase().trim();
+        const lowerKeyword = keyword.trim().toLowerCase();
 
-        const results = productCache.allProducts.filter(p => {
-            if (!p.name && !p.brand) return false;
-            if (p.date !== startDate) return false;
-
-            const combined = `${p.name} ${p.brand}`.toLowerCase();
-            return combined.includes(kw);
+        // 날짜 필터만 적용
+        const filteredByDate = productCache.allProducts.filter(item => {
+            if (!item.date) return false;
+            if (startDate && !endDate) return item.date === startDate;
+            if (!startDate && endDate) return item.date === endDate;
+            return item.date >= startDate && item.date <= endDate;
         });
 
+        // Ctrl+F 방식: name 또는 brand 에 키워드가 포함되어 있는지 여부만 판단
+        const results = filteredByDate.filter(product => {
+            const combinedText = `${product.name || ''} ${product.brand || ''}`.toLowerCase();
+            return combinedText.includes(lowerKeyword);
+        });
+
+        // 날짜 기준 최신순 정렬
         results.sort((a, b) => {
-            if (a.time && b.time && a.time !== b.time) {
-                return b.time.localeCompare(a.time); // 최신 시간 우선
-            }
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            if (a.time && b.time) return b.time.localeCompare(a.time);
             return a.rank - b.rank;
         });
 
         res.json({
             success: true,
             data: results,
-            total: results.length
+            total: results.length,
+            keyword
         });
-
-    } catch (e) {
-        console.error('Search error:', e);
+    } catch (error) {
+        console.error('Search error:', error);
         res.status(500).json({
             success: false,
             error: '검색 중 오류 발생',
-            details: e.message
+            details: error.message
         });
     }
 });
-
-
 
 
 
