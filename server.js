@@ -9,20 +9,17 @@ const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
 const sharp = require('sharp');
 const nodemailer = require('nodemailer');
-const FormData = require('form-data');
 const archiver = require('archiver');
 require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5001;
 
 const RANKING_DATA_PATH = '/data/ranking.json';
-
 const capturesDir = path.join(__dirname, 'public', 'captures');
+
 if (!fs.existsSync(capturesDir)) {
-  fs.mkdirSync(capturesDir, { recursive: true });
+    fs.mkdirSync(capturesDir, { recursive: true });
 }
-
-
 
 // CORS 미들웨어 설정
 app.use(cors());
@@ -39,7 +36,6 @@ app.use('/captures', express.static(path.join(__dirname, 'public', 'captures'), 
     lastModified: true
 }));
 
-
 // 메모리 캐시 - 크롤링 결과 저장
 let productCache = {
     timestamp: new Date(),
@@ -55,7 +51,6 @@ if (fs.existsSync(RANKING_DATA_PATH)) {
     try {
         const raw = fs.readFileSync(RANKING_DATA_PATH, 'utf-8');
         productCache = JSON.parse(raw);
-        // timestamp를 Date 객체로 복원
         if (productCache.timestamp) {
             productCache.timestamp = new Date(productCache.timestamp);
         }
@@ -65,36 +60,7 @@ if (fs.existsSync(RANKING_DATA_PATH)) {
     }
 }
 
-// Chrome 실행 경로 설정
-async function findChrome() {
-    try {
-        // which 명령어로 Chrome 경로 찾기
-        const { execSync } = require('child_process');
-        const chromePath = execSync('which google-chrome-stable').toString().trim();
-        console.log('Chrome 경로 찾음:', chromePath);
-        
-        // Chrome 버전 확인
-        const version = execSync('google-chrome-stable --version').toString().trim();
-        console.log('Chrome 버전:', version);
-        
-        return chromePath;
-    } catch (error) {
-        console.error('Chrome 확인 중 오류:', error.message);
-        console.log('기본 Chrome 경로 사용');
-        return '/usr/bin/google-chrome-stable';
-    }
-}
 
-// 현재 시간 포맷 함수 (24시간제 HH:MM)
-function getCurrentTimeFormat() {
-    const now = new Date();
-    return now.toLocaleString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Seoul'
-    });
-}
 
 function getKSTTime() {
     return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
@@ -102,17 +68,13 @@ function getKSTTime() {
 
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
-    // 현재 KST 시간 가져오기
     const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    
     const scheduledHours = [1, 4, 7, 10, 13, 16, 19, 22];
     const scheduledMinutes = 30;
     
-    // 현재 시간
     const currentHour = kstNow.getHours();
     const currentMinute = kstNow.getMinutes();
 
-    // 오늘 남은 시간 중 가장 가까운 크롤링 시간 찾기
     let nextCrawlTime = new Date(kstNow);
     let found = false;
     
@@ -124,7 +86,6 @@ function getNextCrawlTime() {
         }
     }
     
-    // 오늘 남은 크롤링 시간이 없으면 내일 첫 크롤링 시간으로 설정
     if (!found) {
         nextCrawlTime.setDate(nextCrawlTime.getDate() + 1);
         nextCrawlTime.setHours(scheduledHours[0], scheduledMinutes, 0, 0);
@@ -145,21 +106,22 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// 캡처본 정리 및 이메일 전송 함수 (zip 첨부)
+// 캡처본 정리 및 이메일 전송 함수
 async function organizeAndSendCaptures(timeStr) {
     const today = new Date().toISOString().split('T')[0];
     const zipPath = path.join(__dirname, `oliveyoung_captures_${today}_${timeStr}.zip`);
     try {
-        // 오늘 날짜, 해당 타임스탬프의 캡처본만 zip에 추가
         const files = fs.readdirSync(capturesDir);
         const targetFiles = files.filter(file => {
             const match = file.match(/ranking_.+_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
             return match && match[1] === today && match[2] === timeStr;
         });
+        
         if (targetFiles.length === 0) {
             console.log(`[메일전송] ${today} ${timeStr} 캡처본 없음!`);
             return;
         }
+        
         await new Promise((resolve, reject) => {
             const output = fs.createWriteStream(zipPath);
             const archive = archiver('zip', { zlib: { level: 9 } });
@@ -171,11 +133,11 @@ async function organizeAndSendCaptures(timeStr) {
             }
             archive.finalize();
         });
-        // 이메일 전송
+        
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: 'gt.min@hwaseon.com',
-            subject: `올리브영 ${today} ${timeStr} 캡처본 (zip 첨부)` ,
+            subject: `올리브영 ${today} ${timeStr} 캡처본 (zip 첨부)`,
             text: `${today} ${timeStr} 올리브영 랭킹 캡처본이 zip 파일로 첨부되었습니다.`,
             attachments: [
                 {
@@ -184,6 +146,7 @@ async function organizeAndSendCaptures(timeStr) {
                 }
             ]
         };
+        
         await transporter.sendMail(mailOptions);
         console.log(`${today} ${timeStr} 캡처본 zip 이메일 전송 완료`);
         fs.unlinkSync(zipPath);
@@ -194,7 +157,6 @@ async function organizeAndSendCaptures(timeStr) {
 
 // 로그 출력 제어 함수
 function log(message, type = 'info') {
-    // 필수 로그만 출력
     const essentialLogs = [
         '크롤링 시작',
         '크롤링 완료',
@@ -205,13 +167,11 @@ function log(message, type = 'info') {
         '서버 종료'
     ];
 
-    // 오류 로그는 항상 출력
     if (type === 'error') {
         console.error(`[${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}] ${message}`);
         return;
     }
 
-    // 필수 로그만 출력
     if (essentialLogs.some(log => message.includes(log))) {
         console.log(`[${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}] ${message}`);
     }
@@ -219,7 +179,6 @@ function log(message, type = 'info') {
 
 // API 요청 로깅 미들웨어
 app.use((req, res, next) => {
-    // 헬스체크와 정적 파일 요청은 로깅하지 않음
     if (req.path === '/health' || 
         req.path.startsWith('/static/') || 
         req.path.endsWith('.png') || 
@@ -230,7 +189,9 @@ app.use((req, res, next) => {
     next();
 });
 
-
+// Express 설정
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // 모든 카테고리 크롤링 함수
 async function crawlAllCategories() {
@@ -282,11 +243,8 @@ async function crawlAllCategories() {
                 ];
                 const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
 
-                // 랜덤 대기 시간 (3-5초)
-                await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
-
-                // 랜덤 IP 생성
-                const randomIP = Array(4).fill(0).map(() => Math.floor(Math.random() * 256)).join('.');
+                // 랜덤 대기 시간 (1-3초)
+                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
 
                 const response = await axios.get(url, {
                     params,
@@ -305,11 +263,8 @@ async function crawlAllCategories() {
                         'Sec-Fetch-Site': 'same-origin',
                         'Sec-Fetch-User': '?1',
                         'Upgrade-Insecure-Requests': '1',
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
-                        'X-Forwarded-For': randomIP,
-                        'X-Real-IP': randomIP,
-                        'Cookie': `JSESSIONID=${Math.random().toString(36).substring(7)}; _ga=GA1.1.${Math.random().toString(36).substring(7)}; _ga_${Math.random().toString(36).substring(7)}=GS1.1.${Date.now()}.1.1.${Date.now()}.0.0.0`
+                        'Cache-Control': 'max-age=0',
+                        'Cookie': 'JSESSIONID=' + Math.random().toString(36).substring(7)
                     },
                     timeout: 30000, // 30초 타임아웃
                     maxRedirects: 5,
@@ -324,9 +279,6 @@ async function crawlAllCategories() {
 
                 // 응답 상태 코드 확인
                 if (response.status === 403) {
-                    // 403 오류 발생 시 더 긴 대기 시간 후 재시도
-                    console.log('접근이 거부되었습니다. 30초 후 재시도합니다...');
-                    await new Promise(resolve => setTimeout(resolve, 30000));
                     throw new Error('접근이 거부되었습니다. 잠시 후 다시 시도해주세요.');
                 }
 
@@ -455,8 +407,6 @@ async function crawlAllCategories() {
         scheduleNextCrawl();
     }
 }
-
-
 
 async function captureOliveyoungMainRanking(timeStr) {
     let retryCount = 0;
@@ -642,7 +592,6 @@ async function captureOliveyoungMainRanking(timeStr) {
     }
 }
 
-
 async function captureFullPageWithSelenium(driver, filePath) {
     // 전체 페이지 높이와 가로폭으로 창 크기 조정
     const totalHeight = await driver.executeScript('return document.body.scrollHeight');
@@ -660,8 +609,6 @@ async function captureFullPageWithSelenium(driver, filePath) {
     // 파일 시스템에 저장
     await fs.promises.writeFile(filePath, sharpBuffer);
 }
-
-
 
 // 다음 크롤링 스케줄링 함수
 function scheduleNextCrawl() {
@@ -719,15 +666,9 @@ const CATEGORY_CODES = {
     '취미_팬시': {fltDispCatNo: '10000030006' }
 };
 
-// Express 설정
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
-
 
 // 랭킹 데이터 가져오기
 app.get('/api/ranking', async (req, res) => {
@@ -892,7 +833,6 @@ app.get('/api/search', (req, res) => {
 
 
 
-
 // 마지막 크롤링 시간 API
 app.get('/api/last-crawl-time', (req, res) => {
     try {
@@ -944,6 +884,8 @@ app.get('/api/last-crawl-time', (req, res) => {
         });
     }
 });
+
+
 
 // 캡처 목록 조회 API
 app.get('/api/captures', async (req, res) => {
@@ -1023,36 +965,6 @@ app.get('/api/captures', async (req, res) => {
 
 
 
-// 이미지 다운로드 API
-app.get('/api/download/:filename', (req, res) => {
-    try {
-        const filename = req.params.filename;
-        const filePath = path.join(capturesDir, filename);
-        
-        console.log('이미지 다운로드 요청:', filename);
-        console.log('파일 경로:', filePath);
-        
-        if (!fs.existsSync(filePath)) {
-            console.log('파일을 찾을 수 없음:', filePath);
-            return res.status(404).json({ 
-                success: false,
-                error: '파일을 찾을 수 없습니다.' 
-            });
-        }
-
-        res.set('Content-Type', 'image/jpeg');
-        res.sendFile(filePath);
-    } catch (error) {
-        console.error('파일 다운로드 중 오류:', error);
-        res.status(500).json({ 
-            success: false,
-            error: '파일 다운로드 중 오류가 발생했습니다.' 
-        });
-    }
-});
-
-
-
 // 에러 처리 미들웨어
 app.use((err, req, res, next) => {
     console.error('Error:', err);
@@ -1063,6 +975,7 @@ app.use((err, req, res, next) => {
         domain: 'hwaseon-olive.com'
     });
 });
+
 
 // 서버 종료 시 랭킹 데이터 저장
 function saveRankingOnExit() {
@@ -1075,7 +988,6 @@ function saveRankingOnExit() {
 }
 process.on('SIGINT', () => { saveRankingOnExit(); process.exit(); });
 process.on('SIGTERM', () => { saveRankingOnExit(); process.exit(); });
-
 
 app.listen(port, () => {
     log('서버 시작');
