@@ -282,8 +282,11 @@ async function crawlAllCategories() {
                 ];
                 const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
 
-                // 랜덤 대기 시간 (1-3초)
-                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+                // 랜덤 대기 시간 (3-5초)
+                await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
+
+                // 랜덤 IP 생성
+                const randomIP = Array(4).fill(0).map(() => Math.floor(Math.random() * 256)).join('.');
 
                 const response = await axios.get(url, {
                     params,
@@ -302,8 +305,11 @@ async function crawlAllCategories() {
                         'Sec-Fetch-Site': 'same-origin',
                         'Sec-Fetch-User': '?1',
                         'Upgrade-Insecure-Requests': '1',
-                        'Cache-Control': 'max-age=0',
-                        'Cookie': 'JSESSIONID=' + Math.random().toString(36).substring(7)
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache',
+                        'X-Forwarded-For': randomIP,
+                        'X-Real-IP': randomIP,
+                        'Cookie': `JSESSIONID=${Math.random().toString(36).substring(7)}; _ga=GA1.1.${Math.random().toString(36).substring(7)}; _ga_${Math.random().toString(36).substring(7)}=GS1.1.${Date.now()}.1.1.${Date.now()}.0.0.0`
                     },
                     timeout: 30000, // 30초 타임아웃
                     maxRedirects: 5,
@@ -318,6 +324,9 @@ async function crawlAllCategories() {
 
                 // 응답 상태 코드 확인
                 if (response.status === 403) {
+                    // 403 오류 발생 시 더 긴 대기 시간 후 재시도
+                    console.log('접근이 거부되었습니다. 30초 후 재시도합니다...');
+                    await new Promise(resolve => setTimeout(resolve, 30000));
                     throw new Error('접근이 거부되었습니다. 잠시 후 다시 시도해주세요.');
                 }
 
