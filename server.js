@@ -79,6 +79,7 @@ app.use((req, res, next) => {
 });
 
 
+
 // 메모리 캐시 - 크롤링 결과 저장
 let productCache = {
     timestamp: new Date(),
@@ -302,11 +303,14 @@ async function crawlAllCategories() {
             // 크롤링 로직
             const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
             
-            const response = await axios.get(url, {
+            const response = await axios.post(url, data, {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                  'Referer': 'https://www.oliveyoung.co.kr/',
+                  'Content-Type': 'application/json',
                 }
-            });
+              });
+              
 
             const $ = cheerio.load(response.data);
             const products = [];
