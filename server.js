@@ -281,32 +281,29 @@ async function crawlAllCategories() {
     const kstNow = getKSTTime();
     log(`크롤링 시작: ${kstNow.toLocaleString('ko-KR')}`);
     
-    const today = kstNow.toISOString().split('T')[0];
-    // 캡처 시작 타임스탬프 생성 (크롤링 시작 시점 기준)
-    const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
-    
     try {
         // 크롤링 시작 전 메모리 정리
         if (global.gc) {
             global.gc();
         }
 
+        const today = kstNow.toISOString().split('T')[0];
+        const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
+        
         // 이전 캡처 파일 모두 삭제
         if (fs.existsSync(capturesDir)) {
             const files = fs.readdirSync(capturesDir);
             for (const file of files) {
                 if (/^ranking_.*\.jpeg$/.test(file)) {
                     fs.unlinkSync(path.join(capturesDir, file));
-                    console.log('이전 캡처 파일 삭제:', file);
                 }
             }
         }
 
         // 모든 카테고리에 대해 크롤링
         for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
-            console.log(`카테고리 '${category}' 크롤링 중...`);
+            log(`카테고리 '${category}' 크롤링 중...`);
             
-            // 크롤링 로직
             const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
             
             const response = await axios.get(url, {
@@ -406,32 +403,17 @@ async function crawlAllCategories() {
         log('크롤링 완료');
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
-        console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
+        log('캡처 시작');
         await captureOliveyoungMainRanking(timeStr);
         
         // 해당 타임스탬프 캡처본만 메일로 전송
+        log('이메일 전송 시작');
         await organizeAndSendCaptures(timeStr);
-        
-        // 다음 크롤링 스케줄링
-        scheduleNextCrawl();
-        
-        // 크롤링 완료 후 랭킹 데이터 저장
-        try {
-            fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(productCache, null, 2));
-            console.log('랭킹 데이터 저장 완료:', RANKING_DATA_PATH);
-        } catch (e) {
-            console.error('랭킹 데이터 저장 실패:', e);
-        }
-        
-        // 크롤링 완료 후 메모리 정리
-        if (global.gc) {
-            global.gc();
-        }
+        log('이메일 전송 완료');
         
     } catch (error) {
         log(`크롤링 오류: ${error.message}`, 'error');
-        // 오류가 발생해도 다음 크롤링은 스케줄링
-        scheduleNextCrawl();
+        throw error; // 상위에서 처리하도록 에러 전파
     }
 }
 
@@ -1071,17 +1053,21 @@ function saveRankingOnExit() {
 process.on('SIGINT', () => { saveRankingOnExit(); process.exit(); });
 process.on('SIGTERM', () => { saveRankingOnExit(); process.exit(); });
 
-app.listen(port, () => {
+app.listen(port, async () => {
     log('서버 시작');
     console.log(`Server running at http://localhost:${port}`);
     
-    // 서버 시작 시 바로 크롤링 실행
-    log('서버 시작 - 초기 크롤링 실행');
-    crawlAllCategories().catch(error => {
+    try {
+        // 서버 시작 시 바로 크롤링 실행
+        log('서버 시작 - 초기 크롤링 실행');
+        await crawlAllCategories();
+        
+        // 3시간 단위 자동 크롤링 스케줄링
+        log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
+        scheduleNextCrawl();
+    } catch (error) {
         log(`초기 크롤링 실패: ${error.message}`, 'error');
-    });
-
-    // 3시간 단위 자동 크롤링 스케줄링
-    log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
-    scheduleNextCrawl();
+        // 실패해도 다음 크롤링은 스케줄링
+        scheduleNextCrawl();
+    }
 });
