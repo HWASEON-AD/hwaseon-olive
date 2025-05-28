@@ -32,9 +32,39 @@ app.use((req, res, next) => {
     next();
 });
 
+// Render.com 헬스체크 요청 처리를 가장 먼저 설정
+app.get('/health', (req, res) => {
+    // Render.com의 헬스체크 요청에 대해 즉시 응답
+    res.set('Content-Type', 'text/plain');
+    res.set('Cache-Control', 'no-cache');
+    res.status(200).send('OK');
+});
+
+// 도메인 리다이렉트 설정
+app.use((req, res, next) => {
+    // Render.com의 헬스체크 요청은 리다이렉트하지 않음
+    if (req.path === '/health' && req.headers['user-agent']?.includes('Go-http-client')) {
+        return next();
+    }
+    
+    const host = req.hostname;
+    
+    // Render.com 도메인으로 접근 시 메인 도메인으로 리다이렉트
+    if (host.includes('onrender.com')) {
+        return res.redirect(301, `https://hwaseon-olive.com${req.url}`);
+    }
+    
+    // www 서브도메인으로 접근 시 메인 도메인으로 리다이렉트
+    if (host.startsWith('www.')) {
+        return res.redirect(301, `https://hwaseon-olive.com${req.url}`);
+    }
+    
+    next();
+});
+
 // CORS 설정 업데이트
 app.use(cors({
-    origin: ['https://hwaseon-olive.com', 'http://hwaseon-olive.com', 'https://hwaseon-olive.onrender.com'],
+    origin: ['https://hwaseon-olive.com', 'http://hwaseon-olive.com'],
     methods: ['GET', 'POST'],
     credentials: true,
     maxAge: 86400 // 24시간
@@ -42,6 +72,11 @@ app.use(cors({
 
 // 보안 헤더 설정
 app.use((req, res, next) => {
+    // 헬스체크 요청은 보안 헤더 설정 제외
+    if (req.path === '/health') {
+        return next();
+    }
+    
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
@@ -63,22 +98,6 @@ app.use('/captures', express.static(path.join(__dirname, 'public', 'captures'), 
     etag: true,
     lastModified: true
 }));
-
-// 도메인 리다이렉트 설정
-// Render 헬스체크와 비정상 요청 예외처리 포함 도메인 리디렉션
-app.use((req, res, next) => {
-    const isRenderBot = req.headers['user-agent']?.includes('Go-http-client');
-    const isHealthCheck = req.path === '/health';
-    const isProductionDomain = ['hwaseon-olive.com', 'www.hwaseon-olive.com'].includes(req.hostname);
-
-    if (!isRenderBot && !isHealthCheck && !isProductionDomain) {
-        return res.redirect(301, `https://hwaseon-olive.com${req.url}`);
-    }
-
-    next();
-});
-
-
 
 // 메모리 캐시 - 크롤링 결과 저장
 let productCache = {
@@ -303,7 +322,13 @@ async function crawlAllCategories() {
             // 크롤링 로직
             const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
             
-            const response = await axios.post(url, data, {
+            const response = await axios.post(url, {
+                dispCatNo: '900000100100001',
+                fltDispCatNo: categoryInfo.fltDispCatNo,
+                pageIdx: 1,
+                rowsPerPage: 24,
+                selectType: 'N'
+            }, {
                 headers: {
                   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
                   'Referer': 'https://www.oliveyoung.co.kr/',
@@ -1027,11 +1052,6 @@ app.post('/api/test-send-captures', async (req, res) => {
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
-});
-
-// Render.com 헬스체크 요청 처리
-app.get('/health', (req, res) => {
-    res.status(200).send('OK');
 });
 
 // 404 처리
