@@ -1,6 +1,5 @@
 // ✅ server.js (axios + cheerio 기반 빠른 크롤링)
 const express = require('express');
-const axios = require('axios');
 const cheerio = require('cheerio');
 const cors = require('cors');
 const path = require('path');
@@ -199,8 +198,9 @@ async function crawlAllCategories() {
     log(`크롤링 시작: ${kstNow.toLocaleString('ko-KR')}`);
     
     const today = kstNow.toISOString().split('T')[0];
-    // 캡처 시작 타임스탬프 생성 (크롤링 시작 시점 기준)
     const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
+    
+    let driver = null;
     
     try {
         // 크롤링 시작 전 메모리 정리
@@ -219,93 +219,55 @@ async function crawlAllCategories() {
             }
         }
 
+        // Selenium 설정
+        const options = new chrome.Options()
+            .addArguments('--headless')
+            .addArguments('--no-sandbox')
+            .addArguments('--disable-dev-shm-usage')
+            .addArguments('--disable-gpu')
+            .addArguments('--window-size=1920,1080')
+            .addArguments('--disable-blink-features=AutomationControlled')
+            .addArguments('--disable-extensions')
+            .addArguments('--disable-notifications')
+            .addArguments('--disable-popup-blocking')
+            .addArguments('--disable-infobars')
+            .addArguments('--disable-web-security')
+            .addArguments('--disable-features=IsolateOrigins,site-per-process')
+            .addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        driver = await new Builder()
+            .forBrowser('chrome')
+            .setChromeOptions(options)
+            .build();
+
         // 모든 카테고리에 대해 크롤링
         for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
             console.log(`카테고리 '${category}' 크롤링 중...`);
             
-            // 크롤링 로직
-            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do`;
-            const params = {
-                dispCatNo: '900000100100001',
-                fltDispCatNo: categoryInfo.fltDispCatNo,
-                pageIdx: 1,
-                rowsPerPage: 24,
-                selectType: 'N'
-            };
-            
             try {
-                // 랜덤 User-Agent 생성
-                const userAgents = [
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0'
-                ];
-                const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-
-                // 랜덤 대기 시간 (5-10초)
-                await new Promise(resolve => setTimeout(resolve, 5000 + Math.random() * 5000));
-
-                // 랜덤 IP 생성
-                const randomIP = Array(4).fill(0).map(() => Math.floor(Math.random() * 256)).join('.');
-
-                // 쿠키 생성
-                const sessionId = Math.random().toString(36).substring(7);
-                const gaId = Math.random().toString(36).substring(7);
-                const timestamp = Date.now();
-                const cookies = [
-                    `JSESSIONID=${sessionId}`,
-                    `_ga=GA1.1.${gaId}`,
-                    `_ga_${gaId}=GS1.1.${timestamp}.1.1.${timestamp}.0.0.0`,
-                    `_gcl_au=1.1.${Math.random().toString(36).substring(7)}`,
-                    `_fbp=fb.1.${timestamp}.${Math.random().toString(36).substring(7)}`
-                ].join('; ');
-
-                const response = await axios.get(url, {
-                    params,
-                    headers: {
-                        'User-Agent': randomUserAgent,
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'Connection': 'keep-alive',
-                        'Referer': 'https://www.oliveyoung.co.kr/',
-                        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                        'Sec-Ch-Ua-Mobile': '?0',
-                        'Sec-Ch-Ua-Platform': '"Windows"',
-                        'Sec-Fetch-Dest': 'document',
-                        'Sec-Fetch-Mode': 'navigate',
-                        'Sec-Fetch-Site': 'same-origin',
-                        'Sec-Fetch-User': '?1',
-                        'Upgrade-Insecure-Requests': '1',
-                        'Cache-Control': 'max-age=0',
-                        'Cookie': cookies,
-                        'X-Forwarded-For': randomIP,
-                        'X-Real-IP': randomIP,
-                        'DNT': '1',
-                        'Pragma': 'no-cache'
-                    },
-                    timeout: 30000,
-                    maxRedirects: 5,
-                    validateStatus: function (status) {
-                        return status >= 200 && status < 500;
-                    }
-                });
-
-                if (!response.data) {
-                    throw new Error('응답 데이터가 없습니다.');
-                }
-
-                // 응답 상태 코드 확인
-                if (response.status === 403) {
-                    console.log('접근이 거부되었습니다. 30초 후 재시도합니다...');
-                    await new Promise(resolve => setTimeout(resolve, 30000));
-                    throw new Error('접근이 거부되었습니다. 잠시 후 다시 시도해주세요.');
-                }
-
-                const $ = cheerio.load(response.data);
+                const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
+                
+                // 페이지 로드
+                await driver.get(url);
+                
+                // 랜덤 대기 시간 (3-5초)
+                await driver.sleep(3000 + Math.random() * 2000);
+                
+                // 페이지 로딩 대기
+                await driver.wait(until.elementLocated(By.css('.TabsConts')), 30000);
+                
+                // 상품 목록 로딩 대기
+                await driver.wait(async () => {
+                    const products = await driver.findElements(By.css('.TabsConts .prd_info'));
+                    return products.length > 0;
+                }, 30000, '상품 목록 로딩 시간 초과');
+                
+                // 추가 대기 시간
+                await driver.sleep(2000);
+                
+                // 페이지 소스 가져오기
+                const pageSource = await driver.getPageSource();
+                const $ = cheerio.load(pageSource);
                 const products = [];
 
                 $('.TabsConts .prd_info').each((index, element) => {
@@ -342,60 +304,41 @@ async function crawlAllCategories() {
 
                 console.log(`${category} 크롤링 완료: ${products.length}개 상품`);
                 
-                // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
+                // 캐시 업데이트
                 if (!productCache.data) productCache.data = {};
-                
-                // 기존 데이터와 새 데이터 병합
                 const mergedData = [...products, ...(productCache.data[category] || [])];
                 
-                // 병합된 데이터를 순위, 날짜, 시간 순으로 정렬
                 productCache.data[category] = mergedData.sort((a, b) => {
-                    // 순위 기준으로 오름차순 정렬
-                    if (a.rank !== b.rank) {
-                        return a.rank - b.rank;
-                    }
-                    
-                    // 같은 순위라면 날짜 기준으로 내림차순 정렬 (최신 날짜 우선)
-                    if (a.date !== b.date) {
-                        return b.date.localeCompare(a.date);
-                    }
-                    
-                    // 날짜까지 같다면 시간으로 내림차순 정렬 (최신 시간 우선)
-                    if (a.time && b.time) {
-                        return b.time.localeCompare(a.time);
-                    }
-                    
+                    if (a.rank !== b.rank) return a.rank - b.rank;
+                    if (a.date !== b.date) return b.date.localeCompare(a.date);
+                    if (a.time && b.time) return b.time.localeCompare(a.time);
                     return 0;
                 });
+
+                // 카테고리 간 대기 시간
+                await driver.sleep(2000 + Math.random() * 3000);
+
             } catch (error) {
                 console.error(`${category} 크롤링 중 오류:`, error.message);
+                // 오류 발생 시 브라우저 재시작
+                if (driver) {
+                    try {
+                        await driver.quit();
+                    } catch (e) {
+                        console.error('브라우저 종료 오류:', e.message);
+                    }
+                }
+                
+                // 새 브라우저 세션 시작
+                driver = await new Builder()
+                    .forBrowser('chrome')
+                    .setChromeOptions(options)
+                    .build();
+                    
+                // 오류 후 잠시 대기
+                await driver.sleep(5000);
             }
         }
-        
-        // 전체 목록도 정렬
-        productCache.allProducts.sort((a, b) => {
-            // 카테고리 기준으로 정렬
-            if (a.category !== b.category) {
-                return a.category.localeCompare(b.category);
-            }
-            
-            // 순위 기준으로 정렬
-            if (a.rank !== b.rank) {
-                return a.rank - b.rank;
-            }
-            
-            // 날짜 기준으로 정렬 (최신 우선)
-            if (a.date !== b.date) {
-                return b.date.localeCompare(a.date);
-            }
-            
-            // 시간 기준으로 정렬 (최신 우선)
-            if (a.time && b.time) {
-                return b.time.localeCompare(a.time);
-            }
-            
-            return 0;
-        });
         
         // 현재 KST 시간을 정확하게 저장
         productCache.timestamp = getKSTTime();
@@ -419,15 +362,18 @@ async function crawlAllCategories() {
             console.error('랭킹 데이터 저장 실패:', e);
         }
         
-        // 크롤링 완료 후 메모리 정리
-        if (global.gc) {
-            global.gc();
-        }
-        
     } catch (error) {
         log(`크롤링 오류: ${error.message}`, 'error');
-        // 오류가 발생해도 다음 크롤링은 스케줄링
         scheduleNextCrawl();
+    } finally {
+        if (driver) {
+            try {
+                await driver.quit();
+                console.log('브라우저가 정상적으로 종료되었습니다.');
+            } catch (closeError) {
+                console.error('브라우저 종료 중 오류:', closeError.message);
+            }
+        }
     }
 }
 
