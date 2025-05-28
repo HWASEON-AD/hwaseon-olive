@@ -25,10 +25,10 @@ if (!fs.existsSync(capturesDir)) {
 
 // 서버 타임아웃 설정
 app.use((req, res, next) => {
-    // 요청 타임아웃 설정 (5분)
-    req.setTimeout(300000);
-    // 응답 타임아웃 설정 (5분)
-    res.setTimeout(300000);
+    // 요청 타임아웃 설정 (10분)
+    req.setTimeout(600000);
+    // 응답 타임아웃 설정 (10분)
+    res.setTimeout(600000);
     next();
 });
 
@@ -72,8 +72,8 @@ app.use((req, res, next) => {
     next();
 });
 
-// 캡처 저장을 위한 메모리 캐시
-const captureCache = new Map();
+
+
 
 // 메모리 캐시 - 크롤링 결과 저장
 let productCache = {
@@ -265,6 +265,11 @@ async function crawlAllCategories() {
     const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
     
     try {
+        // 크롤링 시작 전 메모리 정리
+        if (global.gc) {
+            global.gc();
+        }
+
         // 이전 캡처 파일 모두 삭제
         if (fs.existsSync(capturesDir)) {
             const files = fs.readdirSync(capturesDir);
@@ -397,6 +402,11 @@ async function crawlAllCategories() {
             console.error('랭킹 데이터 저장 실패:', e);
         }
         
+        // 크롤링 완료 후 메모리 정리
+        if (global.gc) {
+            global.gc();
+        }
+        
     } catch (error) {
         log(`크롤링 오류: ${error.message}`, 'error');
         // 오류가 발생해도 다음 크롤링은 스케줄링
@@ -425,20 +435,25 @@ async function captureOliveyoungMainRanking(timeStr) {
         const errors = [];
         
         try {
-            // Selenium 설정
+            // Selenium 설정 최적화
             const options = new chrome.Options()
                 .addArguments('--headless')
                 .addArguments('--no-sandbox')
                 .addArguments('--disable-dev-shm-usage')
-                .addArguments('--start-maximized')
+                .addArguments('--disable-gpu')
+                .addArguments('--disable-extensions')
+                .addArguments('--disable-notifications')
                 .addArguments('--window-size=1920,1080')
                 .addArguments('--hide-scrollbars')
                 .addArguments('--force-device-scale-factor=1')
                 .addArguments('--screenshot-format=jpeg')
                 .addArguments('--screenshot-quality=80')
-                .addArguments('--disable-gpu')
-                .addArguments('--disable-extensions')
-                .addArguments('--disable-notifications');
+                .addArguments('--disable-software-rasterizer')
+                .addArguments('--disable-dev-shm-usage')
+                .addArguments('--disable-setuid-sandbox')
+                .addArguments('--single-process')
+                .addArguments('--no-zygote')
+                .addArguments('--disable-features=VizDisplayCompositor');
 
             if (process.env.CHROME_BIN) {
                 options.setChromeBinaryPath(process.env.CHROME_BIN);
@@ -463,14 +478,14 @@ async function captureOliveyoungMainRanking(timeStr) {
                     
                     await driver.get(url);
                     
-                    // 페이지 로딩 대기
-                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 20000);
+                    // 페이지 로딩 타임아웃 설정
+                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 30000);
                     
-                    // 필수 요소 로딩 대기
+                    // 상품 목록 로딩 타임아웃 설정
                     await driver.wait(async () => {
                         const products = await driver.findElements(By.css('.TabsConts .prd_info'));
                         return products.length > 0;
-                    }, 20000, '상품 목록 로딩 시간 초과');
+                    }, 30000, '상품 목록 로딩 시간 초과');
                     
                     // 추가 대기 시간
                     await driver.sleep(2000);
@@ -509,10 +524,12 @@ async function captureOliveyoungMainRanking(timeStr) {
                     });
                     
                     // 오류 발생 시 브라우저 재시작
-                    try {
-                        await driver.quit();
-                    } catch (e) {
-                        console.error('브라우저 종료 중 오류:', e.message);
+                    if (driver) {
+                        try {
+                            await driver.quit();
+                        } catch (e) {
+                            console.error('브라우저 종료 오류:', e.message);
+                        }
                     }
                     
                     // 새 브라우저 세션 시작
@@ -1068,25 +1085,28 @@ app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
     console.log('서버 시작 시간:', new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
     
-    // 서버 시작 시 자동 크롤링 스케줄링 활성화
-    console.log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
-    
-    // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
+    // 서버 시작 시 바로 크롤링 실행
+    log('서버 시작 - 초기 크롤링 실행');
+    crawlAllCategories().catch(error => {
+        log(`초기 크롤링 실패: ${error.message}`, 'error');
+    });
+
+    // 3시간 단위 자동 크롤링 스케줄링
+    log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
     scheduleNextCrawl();
 
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const today = new Date().toISOString().split('T')[0];
         fs.readdir(capturesDir, (err, files) => {
-            if (err) return console.error('캡처 디렉토리 읽기 오류:', err);
+            if (err) return log('캡처 디렉토리 읽기 오류: ' + err.message, 'error');
             files.forEach(file => {
-                // 파일명에서 날짜 추출 (예: ranking_카테고리_YYYY-MM-DD_HH-MM.jpeg)
                 const match = file.match(/_(\d{4}-\d{2}-\d{2})_/);
                 if (match) {
                     const filePath = path.join(capturesDir, file);
                     fs.unlink(filePath, err => {
-                        if (err) console.error('캡처 파일 삭제 오류:', filePath, err);
-                        else console.log('캡처본 삭제:', filePath);
+                        if (err) log('캡처 파일 삭제 오류: ' + filePath + ' ' + err.message, 'error');
+                        else log('캡처본 삭제: ' + filePath);
                     });
                 }
             });
