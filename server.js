@@ -167,11 +167,32 @@ async function crawlAllCategories() {
             console.log(`카테고리 '${category}' 크롤링 중...`);
             
             // 크롤링 로직
-            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
+            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do`;
             
-            const response = await axios.get(url, {
+            const response = await axios.post(url, {
+                dispCatNo: '900000100100001',
+                fltDispCatNo: categoryInfo.fltDispCatNo,
+                pageIdx: 1,
+                rowsPerPage: 24,
+                selectType: 'N'
+            }, {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://www.oliveyoung.co.kr',
+                    'Referer': 'https://www.oliveyoung.co.kr/store/main/getBestList.do',
+                    'Connection': 'keep-alive',
+                    'Sec-Ch-Ua': '"Not(A:Brand";v="99", "Google Chrome";v="136", "Chromium";v="136"',
+                    'Sec-Ch-Ua-Mobile': '?0',
+                    'Sec-Ch-Ua-Platform': '"macOS"',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
                 }
             });
 
@@ -350,7 +371,7 @@ async function captureOliveyoungMainRanking(timeStr) {
             // 순차적으로 각 카테고리 처리
             for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
                 try {
-                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
+                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do`;
                     
                     console.log(`${category} 랭킹 페이지로 이동...`);
                     
