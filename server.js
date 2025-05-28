@@ -65,26 +65,19 @@ app.use('/captures', express.static(path.join(__dirname, 'public', 'captures'), 
 }));
 
 // 도메인 리다이렉트 설정
+// Render 헬스체크와 비정상 요청 예외처리 포함 도메인 리디렉션
 app.use((req, res, next) => {
-    const host = req.hostname;
-    
-    // Render.com 헬스체크 요청은 리다이렉트하지 않음
-    if (req.path === '/health' && host.includes('onrender.com')) {
-        return next();
-    }
-    
-    // Render.com 도메인으로 접근 시 메인 도메인으로 리다이렉트
-    if (host.includes('onrender.com')) {
+    const isRenderBot = req.headers['user-agent']?.includes('Go-http-client');
+    const isHealthCheck = req.path === '/health';
+    const isProductionDomain = ['hwaseon-olive.com', 'www.hwaseon-olive.com'].includes(req.hostname);
+
+    if (!isRenderBot && !isHealthCheck && !isProductionDomain) {
         return res.redirect(301, `https://hwaseon-olive.com${req.url}`);
     }
-    
-    // www 서브도메인으로 접근 시 메인 도메인으로 리다이렉트
-    if (host.startsWith('www.')) {
-        return res.redirect(301, `https://hwaseon-olive.com${req.url}`);
-    }
-    
+
     next();
 });
+
 
 // 메모리 캐시 - 크롤링 결과 저장
 let productCache = {
@@ -1034,7 +1027,6 @@ app.post('/api/test-send-captures', async (req, res) => {
 
 // Render.com 헬스체크 요청 처리
 app.get('/health', (req, res) => {
-    // Render.com의 헬스체크 요청에 대해 즉시 응답
     res.status(200).send('OK');
 });
 
