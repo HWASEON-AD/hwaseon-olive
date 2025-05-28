@@ -239,12 +239,29 @@ async function crawlAllCategories() {
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15'
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0'
                 ];
                 const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
 
-                // 랜덤 대기 시간 (1-3초)
-                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+                // 랜덤 대기 시간 (5-10초)
+                await new Promise(resolve => setTimeout(resolve, 5000 + Math.random() * 5000));
+
+                // 랜덤 IP 생성
+                const randomIP = Array(4).fill(0).map(() => Math.floor(Math.random() * 256)).join('.');
+
+                // 쿠키 생성
+                const sessionId = Math.random().toString(36).substring(7);
+                const gaId = Math.random().toString(36).substring(7);
+                const timestamp = Date.now();
+                const cookies = [
+                    `JSESSIONID=${sessionId}`,
+                    `_ga=GA1.1.${gaId}`,
+                    `_ga_${gaId}=GS1.1.${timestamp}.1.1.${timestamp}.0.0.0`,
+                    `_gcl_au=1.1.${Math.random().toString(36).substring(7)}`,
+                    `_fbp=fb.1.${timestamp}.${Math.random().toString(36).substring(7)}`
+                ].join('; ');
 
                 const response = await axios.get(url, {
                     params,
@@ -264,12 +281,16 @@ async function crawlAllCategories() {
                         'Sec-Fetch-User': '?1',
                         'Upgrade-Insecure-Requests': '1',
                         'Cache-Control': 'max-age=0',
-                        'Cookie': 'JSESSIONID=' + Math.random().toString(36).substring(7)
+                        'Cookie': cookies,
+                        'X-Forwarded-For': randomIP,
+                        'X-Real-IP': randomIP,
+                        'DNT': '1',
+                        'Pragma': 'no-cache'
                     },
-                    timeout: 30000, // 30초 타임아웃
+                    timeout: 30000,
                     maxRedirects: 5,
                     validateStatus: function (status) {
-                        return status >= 200 && status < 500; // 500 미만의 모든 상태 코드 허용
+                        return status >= 200 && status < 500;
                     }
                 });
 
@@ -279,6 +300,8 @@ async function crawlAllCategories() {
 
                 // 응답 상태 코드 확인
                 if (response.status === 403) {
+                    console.log('접근이 거부되었습니다. 30초 후 재시도합니다...');
+                    await new Promise(resolve => setTimeout(resolve, 30000));
                     throw new Error('접근이 거부되었습니다. 잠시 후 다시 시도해주세요.');
                 }
 
