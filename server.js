@@ -227,18 +227,38 @@ async function organizeAndSendCaptures(timeStr) {
     }
 }
 
+// 로그 출력 제어 함수
+function log(message, type = 'info') {
+    // 중요한 로그만 출력
+    const importantLogs = [
+        '크롤링 시작',
+        '크롤링 완료',
+        '캡처 시작',
+        '캡처 완료',
+        '이메일 전송',
+        '오류 발생',
+        '서버 시작',
+        '서버 종료'
+    ];
+
+    if (importantLogs.some(log => message.includes(log))) {
+        console.log(`[${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}] ${message}`);
+    }
+}
+
+// API 요청 로깅 미들웨어
+app.use((req, res, next) => {
+    // API 요청 로그 출력 제한
+    if (req.path.startsWith('/api/')) {
+        log(`API 요청: ${req.method} ${req.path}`);
+    }
+    next();
+});
+
 // 모든 카테고리 크롤링 함수
 async function crawlAllCategories() {
     const kstNow = getKSTTime();
-    
-    console.log(`[${kstNow.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    })}] 3시간 정기 크롤링 시작`);
+    log(`크롤링 시작: ${kstNow.toLocaleString('ko-KR')}`);
     
     const today = kstNow.toISOString().split('T')[0];
     // 캡처 시작 타임스탬프 생성 (크롤링 시작 시점 기준)
@@ -357,16 +377,7 @@ async function crawlAllCategories() {
         
         // 현재 KST 시간을 정확하게 저장
         productCache.timestamp = getKSTTime();
-        console.log(`[${new Date().toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-            timeZone: 'Asia/Seoul'
-        })}] 3시간 정기 크롤링 완료`);
+        log('크롤링 완료');
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
@@ -387,7 +398,7 @@ async function crawlAllCategories() {
         }
         
     } catch (error) {
-        console.error(`크롤링 오류:`, error);
+        log(`크롤링 오류: ${error.message}`, 'error');
         // 오류가 발생해도 다음 크롤링은 스케줄링
         scheduleNextCrawl();
     }
@@ -397,6 +408,8 @@ async function captureOliveyoungMainRanking(timeStr) {
     let retryCount = 0;
     const maxRetries = 3;
     let driver = null;
+    
+    log('캡처 시작');
     
     async function attemptCapture() {
         console.log('='.repeat(50));
@@ -934,7 +947,7 @@ app.get('/api/captures', async (req, res) => {
         
         res.json(response);
     } catch (error) {
-        console.error('캡처 목록 조회 중 오류:', error);
+        log(`캡처 목록 조회 오류: ${error.message}`, 'error');
         res.status(500).json({
             success: false,
             error: '캡처 목록 조회 중 오류가 발생했습니다.',
@@ -1051,6 +1064,7 @@ process.on('SIGINT', () => { saveRankingOnExit(); process.exit(); });
 process.on('SIGTERM', () => { saveRankingOnExit(); process.exit(); });
 
 app.listen(port, () => {
+    log('서버 시작');
     console.log(`Server running at http://localhost:${port}`);
     console.log('서버 시작 시간:', new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
     
