@@ -23,11 +23,21 @@ if (!fs.existsSync(capturesDir)) {
   fs.mkdirSync(capturesDir, { recursive: true });
 }
 
-// CORS 미들웨어 설정
+// 서버 타임아웃 설정
+app.use((req, res, next) => {
+    // 요청 타임아웃 설정 (5분)
+    req.setTimeout(300000);
+    // 응답 타임아웃 설정 (5분)
+    res.setTimeout(300000);
+    next();
+});
+
+// CORS 설정 업데이트
 app.use(cors({
     origin: ['https://hwaseon-olive.com', 'http://hwaseon-olive.com'],
     methods: ['GET', 'POST'],
-    credentials: true
+    credentials: true,
+    maxAge: 86400 // 24시간
 }));
 
 // 보안 헤더 설정
@@ -36,12 +46,23 @@ app.use((req, res, next) => {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     next();
 });
 
 // 정적 파일 서빙을 위한 미들웨어 설정
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
+app.use(express.static(path.join(__dirname, 'public'), {
+    maxAge: '1h',
+    etag: true,
+    lastModified: true
+}));
+app.use('/captures', express.static(path.join(__dirname, 'public', 'captures'), {
+    maxAge: '1h',
+    etag: true,
+    lastModified: true
+}));
 
 // 도메인 리다이렉트 설정
 app.use((req, res, next) => {
@@ -980,7 +1001,8 @@ app.get('/health', async (req, res) => {
             chrome_path: chromePath,
             timestamp: new Date().toLocaleString('ko-KR', {
                 timeZone: 'Asia/Seoul'
-            })
+            }),
+            uptime: process.uptime()
         });
     } catch (error) {
         res.status(500).json({
@@ -989,7 +1011,8 @@ app.get('/health', async (req, res) => {
             error: error.message,
             timestamp: new Date().toLocaleString('ko-KR', {
                 timeZone: 'Asia/Seoul'
-            })
+            }),
+            uptime: process.uptime()
         });
     }
 });
@@ -1029,6 +1052,7 @@ process.on('SIGTERM', () => { saveRankingOnExit(); process.exit(); });
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
+    console.log('서버 시작 시간:', new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
     
     // 서버 시작 시 자동 크롤링 스케줄링 활성화
     console.log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
