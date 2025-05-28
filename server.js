@@ -273,29 +273,52 @@ async function crawlAllCategories() {
             };
             
             try {
+                // 랜덤 User-Agent 생성
+                const userAgents = [
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15'
+                ];
+                const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+
+                // 랜덤 대기 시간 (1-3초)
+                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+
                 const response = await axios.get(url, {
                     params,
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                        'User-Agent': randomUserAgent,
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                         'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
                         'Accept-Encoding': 'gzip, deflate, br',
                         'Connection': 'keep-alive',
                         'Referer': 'https://www.oliveyoung.co.kr/',
-                        'Sec-Ch-Ua': '"Not(A:Brand";v="99", "Google Chrome";v="114", "Chromium";v="114"',
+                        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
                         'Sec-Ch-Ua-Mobile': '?0',
                         'Sec-Ch-Ua-Platform': '"Windows"',
                         'Sec-Fetch-Dest': 'document',
                         'Sec-Fetch-Mode': 'navigate',
                         'Sec-Fetch-Site': 'same-origin',
                         'Sec-Fetch-User': '?1',
-                        'Upgrade-Insecure-Requests': '1'
+                        'Upgrade-Insecure-Requests': '1',
+                        'Cache-Control': 'max-age=0',
+                        'Cookie': 'JSESSIONID=' + Math.random().toString(36).substring(7)
                     },
-                    timeout: 30000 // 30초 타임아웃
+                    timeout: 30000, // 30초 타임아웃
+                    maxRedirects: 5,
+                    validateStatus: function (status) {
+                        return status >= 200 && status < 500; // 500 미만의 모든 상태 코드 허용
+                    }
                 });
 
                 if (!response.data) {
                     throw new Error('응답 데이터가 없습니다.');
+                }
+
+                // 응답 상태 코드 확인
+                if (response.status === 403) {
+                    throw new Error('접근이 거부되었습니다. 잠시 후 다시 시도해주세요.');
                 }
 
                 const $ = cheerio.load(response.data);
