@@ -67,10 +67,14 @@ app.use('/captures', express.static(path.join(__dirname, 'public', 'captures'), 
 // 도메인 리다이렉트 설정
 app.use((req, res, next) => {
     const host = req.hostname;
-    const isRenderDomain = host.includes('onrender.com');
+    
+    // Render.com 헬스체크 요청은 리다이렉트하지 않음
+    if (req.path === '/health' && host.includes('onrender.com')) {
+        return next();
+    }
     
     // Render.com 도메인으로 접근 시 메인 도메인으로 리다이렉트
-    if (isRenderDomain) {
+    if (host.includes('onrender.com')) {
         return res.redirect(301, `https://hwaseon-olive.com${req.url}`);
     }
     
@@ -236,29 +240,39 @@ async function organizeAndSendCaptures(timeStr) {
 
 // 로그 출력 제어 함수
 function log(message, type = 'info') {
-    // 중요한 로그만 출력
-    const importantLogs = [
+    // 필수 로그만 출력
+    const essentialLogs = [
         '크롤링 시작',
         '크롤링 완료',
         '캡처 시작',
         '캡처 완료',
         '이메일 전송',
-        '오류 발생',
         '서버 시작',
         '서버 종료'
     ];
 
-    if (importantLogs.some(log => message.includes(log))) {
+    // 오류 로그는 항상 출력
+    if (type === 'error') {
+        console.error(`[${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}] ${message}`);
+        return;
+    }
+
+    // 필수 로그만 출력
+    if (essentialLogs.some(log => message.includes(log))) {
         console.log(`[${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}] ${message}`);
     }
 }
 
 // API 요청 로깅 미들웨어
 app.use((req, res, next) => {
-    if (req.path === '/health') {
+    // 헬스체크와 정적 파일 요청은 로깅하지 않음
+    if (req.path === '/health' || 
+        req.path.startsWith('/static/') || 
+        req.path.endsWith('.png') || 
+        req.path.endsWith('.css') || 
+        req.path.endsWith('.js')) {
         return next();
     }
-    log(`API 요청: ${req.method} ${req.path}`);
     next();
 });
 
@@ -1020,10 +1034,8 @@ app.post('/api/test-send-captures', async (req, res) => {
 
 // Render.com 헬스체크 요청 처리
 app.get('/health', (req, res) => {
-    res.status(200).json({
-        status: 'healthy',
-        timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
-    });
+    // Render.com의 헬스체크 요청에 대해 즉시 응답
+    res.status(200).send('OK');
 });
 
 // 404 처리
@@ -1062,7 +1074,6 @@ process.on('SIGTERM', () => { saveRankingOnExit(); process.exit(); });
 app.listen(port, () => {
     log('서버 시작');
     console.log(`Server running at http://localhost:${port}`);
-    console.log('서버 시작 시간:', new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
     
     // 서버 시작 시 바로 크롤링 실행
     log('서버 시작 - 초기 크롤링 실행');
@@ -1073,24 +1084,4 @@ app.listen(port, () => {
     // 3시간 단위 자동 크롤링 스케줄링
     log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
     scheduleNextCrawl();
-
-    // 매일 00:00에 당일 캡처본 삭제
-    cron.schedule('0 0 * * *', () => {
-        const today = new Date().toISOString().split('T')[0];
-        fs.readdir(capturesDir, (err, files) => {
-            if (err) return log('캡처 디렉토리 읽기 오류: ' + err.message, 'error');
-            files.forEach(file => {
-                const match = file.match(/_(\d{4}-\d{2}-\d{2})_/);
-                if (match) {
-                    const filePath = path.join(capturesDir, file);
-                    fs.unlink(filePath, err => {
-                        if (err) log('캡처 파일 삭제 오류: ' + filePath + ' ' + err.message, 'error');
-                        else log('캡처본 삭제: ' + filePath);
-                    });
-                }
-            });
-        });
-    }, {
-        timezone: 'Asia/Seoul'
-    });
 });
