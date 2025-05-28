@@ -192,23 +192,32 @@ async function crawlAllCategories() {
             try {
                 const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
                 
+                console.log(`${category} 페이지 로딩 중...`);
                 await driver.get(url);
                 
-                // 페이지 로딩 대기
-                await driver.wait(until.elementLocated(By.css('.TabsConts')), 20000);
+                // 페이지 로딩 대기 시간 증가 (30초)
+                await driver.sleep(5000); // 초기 대기
+                
+                // 페이지 로딩 대기 (여러 선택자 시도)
+                try {
+                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 30000);
+                } catch (e) {
+                    console.log('.TabsConts를 찾을 수 없어 다른 선택자 시도...');
+                    await driver.wait(until.elementLocated(By.css('.prd_info')), 30000);
+                }
                 
                 // 필수 요소 로딩 대기
                 await driver.wait(async () => {
-                    const products = await driver.findElements(By.css('.TabsConts .prd_info'));
+                    const products = await driver.findElements(By.css('.prd_info'));
                     return products.length > 0;
-                }, 20000, '상품 목록 로딩 시간 초과');
+                }, 30000, '상품 목록 로딩 시간 초과');
                 
                 // 추가 대기 시간
-                await driver.sleep(2000);
+                await driver.sleep(3000);
                 
                 // 상품 정보 추출
                 const products = await driver.executeScript(`
-                    return Array.from(document.querySelectorAll('.TabsConts .prd_info')).map((element, index) => {
+                    return Array.from(document.querySelectorAll('.prd_info')).map((element, index) => {
                         return {
                             rank: index + 1,
                             brand: element.querySelector('.tx_brand')?.textContent.trim() || '',
@@ -222,6 +231,12 @@ async function crawlAllCategories() {
                         };
                     });
                 `);
+                
+                if (!products || products.length === 0) {
+                    throw new Error('상품 정보를 찾을 수 없습니다.');
+                }
+                
+                console.log(`${category}에서 ${products.length}개의 상품 정보 추출 완료`);
                 
                 // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
                 if (!productCache.data) productCache.data = {};
