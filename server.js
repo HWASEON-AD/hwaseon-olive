@@ -150,6 +150,8 @@ async function crawlAllCategories() {
     const today = kstNow.toISOString().split('T')[0];
     const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
     
+    let driver = null;
+    
     try {
         // 이전 캡처 파일 모두 삭제
         if (fs.existsSync(capturesDir)) {
@@ -162,138 +164,113 @@ async function crawlAllCategories() {
             }
         }
 
+        // Selenium 설정
+        const options = new chrome.Options()
+            .addArguments('--headless')
+            .addArguments('--no-sandbox')
+            .addArguments('--disable-dev-shm-usage')
+            .addArguments('--start-maximized')
+            .addArguments('--window-size=1920,1080')
+            .addArguments('--hide-scrollbars')
+            .addArguments('--disable-gpu')
+            .addArguments('--disable-extensions')
+            .addArguments('--disable-notifications');
+
+        if (process.env.CHROME_BIN) {
+            options.setChromeBinaryPath(process.env.CHROME_BIN);
+        }
+
+        driver = await new Builder()
+            .forBrowser('chrome')
+            .setChromeOptions(options)
+            .build();
+
         // 모든 카테고리에 대해 크롤링
         for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
             console.log(`카테고리 '${category}' 크롤링 중...`);
             
-            // 크롤링 로직
-            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do`;
-            
-            const response = await axios.post(url, {
-                dispCatNo: '900000100100001',
-                fltDispCatNo: categoryInfo.fltDispCatNo,
-                pageIdx: 1,
-                rowsPerPage: 24,
-                selectType: 'N'
-            }, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
-                    'Accept': 'application/json, text/plain, */*',
-                    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Content-Type': 'application/json',
-                    'Origin': 'https://www.oliveyoung.co.kr',
-                    'Referer': 'https://www.oliveyoung.co.kr/store/main/getBestList.do',
-                    'Connection': 'keep-alive',
-                    'Sec-Ch-Ua': '"Not(A:Brand";v="99", "Google Chrome";v="136", "Chromium";v="136"',
-                    'Sec-Ch-Ua-Mobile': '?0',
-                    'Sec-Ch-Ua-Platform': '"macOS"',
-                    'Sec-Fetch-Dest': 'empty',
-                    'Sec-Fetch-Mode': 'cors',
-                    'Sec-Fetch-Site': 'same-origin',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }
-            });
-
-            const $ = cheerio.load(response.data);
-            const products = [];
-
-            $('.TabsConts .prd_info').each((index, element) => {
-                const rank = index + 1;
-                const brand = $(element).find('.tx_brand').text().trim();
-                const name = $(element).find('.tx_name').text().trim();
-                const originalPrice = $(element).find('.tx_org').text().trim() || '없음';
-                const salePrice = $(element).find('.tx_cur').text().trim() || '없음';
-                const promotion = $(element).find('.icon_flag').text().trim() || '없음';
+            try {
+                const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
                 
-                const product = {
-                    rank,
-                    brand,
-                    name,
-                    originalPrice,
-                    salePrice,
-                    promotion,
-                    date: today,
-                    time: timeStr, // 크롤링 시간 저장
-                    category
-                };
+                await driver.get(url);
                 
-                products.push(product);
+                // 페이지 로딩 대기
+                await driver.wait(until.elementLocated(By.css('.TabsConts')), 20000);
+                
+                // 필수 요소 로딩 대기
+                await driver.wait(async () => {
+                    const products = await driver.findElements(By.css('.TabsConts .prd_info'));
+                    return products.length > 0;
+                }, 20000, '상품 목록 로딩 시간 초과');
+                
+                // 추가 대기 시간
+                await driver.sleep(2000);
+                
+                // 상품 정보 추출
+                const products = await driver.executeScript(`
+                    return Array.from(document.querySelectorAll('.TabsConts .prd_info')).map((element, index) => {
+                        return {
+                            rank: index + 1,
+                            brand: element.querySelector('.tx_brand')?.textContent.trim() || '',
+                            name: element.querySelector('.tx_name')?.textContent.trim() || '',
+                            originalPrice: element.querySelector('.tx_org')?.textContent.trim() || '없음',
+                            salePrice: element.querySelector('.tx_cur')?.textContent.trim() || '없음',
+                            promotion: element.querySelector('.icon_flag')?.textContent.trim() || '없음',
+                            date: '${today}',
+                            time: '${timeStr}',
+                            category: '${category}'
+                        };
+                    });
+                `);
+                
+                // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
+                if (!productCache.data) productCache.data = {};
+                
+                // 기존 데이터와 새 데이터 병합
+                const mergedData = [...products, ...(productCache.data[category] || [])];
+                
+                // 병합된 데이터를 순위, 날짜, 시간 순으로 정렬
+                productCache.data[category] = mergedData.sort((a, b) => {
+                    if (a.rank !== b.rank) return a.rank - b.rank;
+                    if (a.date !== b.date) return b.date.localeCompare(a.date);
+                    if (a.time && b.time) return b.time.localeCompare(a.time);
+                    return 0;
+                });
                 
                 // 전체 제품 목록에도 추가 (검색용)
-                if (!productCache.allProducts.some(p => 
-                    p.name === name && 
-                    p.category === category && 
-                    p.time === timeStr)) {
-                    productCache.allProducts.push(product);
-                }
-            });
-
-            // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
-            if (!productCache.data) productCache.data = {};
-            
-            // 기존 데이터와 새 데이터 병합
-            const mergedData = [...products, ...(productCache.data[category] || [])];
-            
-            // 병합된 데이터를 순위, 날짜, 시간 순으로 정렬
-            productCache.data[category] = mergedData.sort((a, b) => {
-                // 순위 기준으로 오름차순 정렬
-                if (a.rank !== b.rank) {
-                    return a.rank - b.rank;
+                for (const product of products) {
+                    if (!productCache.allProducts.some(p => 
+                        p.name === product.name && 
+                        p.category === category && 
+                        p.time === timeStr)) {
+                        productCache.allProducts.push(product);
+                    }
                 }
                 
-                // 같은 순위라면 날짜 기준으로 내림차순 정렬 (최신 날짜 우선)
-                if (a.date !== b.date) {
-                    return b.date.localeCompare(a.date);
+                console.log(`${category} 크롤링 완료: ${products.length}개 상품`);
+                
+            } catch (error) {
+                console.error(`${category} 크롤링 중 오류:`, error.message);
+                // 오류 발생 시 브라우저 재시작
+                try {
+                    await driver.quit();
+                } catch (e) {
+                    console.error('브라우저 종료 중 오류:', e.message);
                 }
                 
-                // 날짜까지 같다면 시간으로 내림차순 정렬 (최신 시간 우선)
-                if (a.time && b.time) {
-                    return b.time.localeCompare(a.time);
-                }
-                
-                return 0;
-            });
+                // 새 브라우저 세션 시작
+                driver = await new Builder()
+                    .forBrowser('chrome')
+                    .setChromeOptions(options)
+                    .build();
+                    
+                // 오류 후 잠시 대기
+                await driver.sleep(2000);
+            }
         }
-        
-        // 전체 목록도 정렬
-        productCache.allProducts.sort((a, b) => {
-            // 카테고리 기준으로 정렬
-            if (a.category !== b.category) {
-                return a.category.localeCompare(b.category);
-            }
-            
-            // 순위 기준으로 정렬
-            if (a.rank !== b.rank) {
-                return a.rank - b.rank;
-            }
-            
-            // 날짜 기준으로 정렬 (최신 우선)
-            if (a.date !== b.date) {
-                return b.date.localeCompare(a.date);
-            }
-            
-            // 시간 기준으로 정렬 (최신 우선)
-            if (a.time && b.time) {
-                return b.time.localeCompare(a.time);
-            }
-            
-            return 0;
-        });
         
         // 현재 KST 시간을 정확하게 저장
         productCache.timestamp = getKSTTime();
-        console.log(`[${new Date().toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-            timeZone: 'Asia/Seoul'
-        })}] 3시간 정기 크롤링 완료`);
         
         // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
@@ -317,6 +294,15 @@ async function crawlAllCategories() {
         console.error(`크롤링 오류:`, error);
         // 오류가 발생해도 다음 크롤링은 스케줄링
         scheduleNextCrawl();
+    } finally {
+        if (driver) {
+            try {
+                await driver.quit();
+                console.log('브라우저가 정상적으로 종료되었습니다.');
+            } catch (closeError) {
+                console.error('브라우저 종료 중 오류:', closeError.message);
+            }
+        }
     }
 }
 
