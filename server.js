@@ -269,37 +269,80 @@ async function crawlAllCategories() {
             try {
                 const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
                 
-                // 페이지 로드
+                console.log(`${category} 카테고리 URL 접속 시도: ${url}`);
                 await driver.get(url);
                 
-                // 랜덤 대기 시간 (5-8초)
-                await driver.sleep(5000 + Math.random() * 3000);
+                // 초기 대기 시간 증가 (8-10초)
+                const initialWait = 8000 + Math.random() * 2000;
+                console.log(`${category} 카테고리 초기 대기: ${Math.round(initialWait/1000)}초`);
+                await driver.sleep(initialWait);
 
                 // JavaScript 실행 대기
                 await driver.wait(until.elementLocated(By.css('body')), 30000);
                 
                 // 페이지 로딩 대기 (여러 선택자 시도)
-                try {
-                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 10000);
-                } catch (e) {
+                let productsFound = false;
+                const selectors = [
+                    '.TabsConts',
+                    '.prd_info',
+                    '.prd_list',
+                    '.prd_list .prd_info',
+                    '.prd_list_wrap',
+                    '.prd_list_wrap .prd_info'
+                ];
+                
+                for (const selector of selectors) {
                     try {
-                        await driver.wait(until.elementLocated(By.css('.prd_info')), 10000);
-                    } catch (e) {
-                        try {
-                            await driver.wait(until.elementLocated(By.css('.prd_list')), 10000);
-                        } catch (e) {
-                            throw new Error('상품 목록을 찾을 수 없습니다.');
+                        console.log(`${category} 카테고리에서 ${selector} 요소 찾는 중...`);
+                        await driver.wait(until.elementLocated(By.css(selector)), 20000);
+                        const elements = await driver.findElements(By.css(selector));
+                        if (elements.length > 0) {
+                            productsFound = true;
+                            console.log(`${category} 카테고리에서 ${selector} 요소 ${elements.length}개 찾음`);
+                            break;
                         }
+                    } catch (e) {
+                        console.log(`${category} 카테고리에서 ${selector} 요소를 찾지 못함`);
+                    }
+                }
+
+                if (!productsFound) {
+                    // 재시도 로직 추가
+                    console.log(`${category} 카테고리 첫 시도 실패, 재시도 중...`);
+                    await driver.sleep(5000);
+                    
+                    // 페이지 새로고침
+                    await driver.navigate().refresh();
+                    await driver.sleep(5000);
+                    
+                    // 다시 요소 찾기 시도
+                    for (const selector of selectors) {
+                        try {
+                            const elements = await driver.findElements(By.css(selector));
+                            if (elements.length > 0) {
+                                productsFound = true;
+                                console.log(`${category} 카테고리 재시도 성공: ${selector} 요소 ${elements.length}개 찾음`);
+                                break;
+                            }
+                        } catch (e) {
+                            continue;
+                        }
+                    }
+                    
+                    if (!productsFound) {
+                        throw new Error(`${category} 카테고리에서 상품 목록을 찾을 수 없습니다.`);
                     }
                 }
 
                 // 스크롤 다운으로 모든 콘텐츠 로드
+                console.log(`${category} 카테고리 스크롤 다운 시작`);
                 await driver.executeScript(`
                     window.scrollTo(0, document.body.scrollHeight);
                 `);
-                await driver.sleep(2000);
+                await driver.sleep(3000);
                 
                 // 상품 목록 로딩 대기
+                console.log(`${category} 카테고리 상품 목록 대기 중...`);
                 await driver.wait(async () => {
                     const products = await driver.findElements(By.css('.prd_info, .prd_list .prd_info'));
                     return products.length > 0;
