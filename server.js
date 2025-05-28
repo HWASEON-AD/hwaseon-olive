@@ -263,76 +263,106 @@ async function crawlAllCategories() {
             console.log(`카테고리 '${category}' 크롤링 중...`);
             
             // 크롤링 로직
-            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
+            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do`;
+            const params = {
+                dispCatNo: '900000100100001',
+                fltDispCatNo: categoryInfo.fltDispCatNo,
+                pageIdx: 1,
+                rowsPerPage: 24,
+                selectType: 'N'
+            };
             
-            const response = await axios.post(url, data, {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-                  'Referer': 'https://www.oliveyoung.co.kr/',
-                  'Content-Type': 'application/json',
-                }
-              });
-              
+            try {
+                const response = await axios.get(url, {
+                    params,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Referer': 'https://www.oliveyoung.co.kr/',
+                        'Sec-Ch-Ua': '"Not(A:Brand";v="99", "Google Chrome";v="114", "Chromium";v="114"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'same-origin',
+                        'Sec-Fetch-User': '?1',
+                        'Upgrade-Insecure-Requests': '1'
+                    },
+                    timeout: 30000 // 30초 타임아웃
+                });
 
-            const $ = cheerio.load(response.data);
-            const products = [];
+                if (!response.data) {
+                    throw new Error('응답 데이터가 없습니다.');
+                }
 
-            $('.TabsConts .prd_info').each((index, element) => {
-                const rank = index + 1;
-                const brand = $(element).find('.tx_brand').text().trim();
-                const name = $(element).find('.tx_name').text().trim();
-                const originalPrice = $(element).find('.tx_org').text().trim() || '없음';
-                const salePrice = $(element).find('.tx_cur').text().trim() || '없음';
-                const promotion = $(element).find('.icon_flag').text().trim() || '없음';
-                
-                const product = {
-                    rank,
-                    brand,
-                    name,
-                    originalPrice,
-                    salePrice,
-                    promotion,
-                    date: today,
-                    time: timeStr, // 크롤링 시간 저장
-                    category
-                };
-                
-                products.push(product);
-                
-                // 전체 제품 목록에도 추가 (검색용)
-                if (!productCache.allProducts.some(p => 
-                    p.name === name && 
-                    p.category === category && 
-                    p.time === timeStr)) {
-                    productCache.allProducts.push(product);
-                }
-            });
+                const $ = cheerio.load(response.data);
+                const products = [];
 
-            // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
-            if (!productCache.data) productCache.data = {};
-            
-            // 기존 데이터와 새 데이터 병합
-            const mergedData = [...products, ...(productCache.data[category] || [])];
-            
-            // 병합된 데이터를 순위, 날짜, 시간 순으로 정렬
-            productCache.data[category] = mergedData.sort((a, b) => {
-                // 순위 기준으로 오름차순 정렬
-                if (a.rank !== b.rank) {
-                    return a.rank - b.rank;
+                $('.TabsConts .prd_info').each((index, element) => {
+                    const rank = index + 1;
+                    const brand = $(element).find('.tx_brand').text().trim();
+                    const name = $(element).find('.tx_name').text().trim();
+                    const originalPrice = $(element).find('.tx_org').text().trim() || '없음';
+                    const salePrice = $(element).find('.tx_cur').text().trim() || '없음';
+                    const promotion = $(element).find('.icon_flag').text().trim() || '없음';
+                    
+                    if (!name) {
+                        console.log(`경고: ${category} 카테고리의 ${rank}위 상품명이 비어있습니다.`);
+                        return;
+                    }
+                    
+                    const product = {
+                        rank,
+                        brand,
+                        name,
+                        originalPrice,
+                        salePrice,
+                        promotion,
+                        date: today,
+                        time: timeStr,
+                        category
+                    };
+                    
+                    products.push(product);
+                });
+
+                if (products.length === 0) {
+                    throw new Error(`${category} 카테고리에서 상품을 찾을 수 없습니다.`);
                 }
+
+                console.log(`${category} 크롤링 완료: ${products.length}개 상품`);
                 
-                // 같은 순위라면 날짜 기준으로 내림차순 정렬 (최신 날짜 우선)
-                if (a.date !== b.date) {
-                    return b.date.localeCompare(a.date);
-                }
+                // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
+                if (!productCache.data) productCache.data = {};
                 
-                // 날짜까지 같다면 시간으로 내림차순 정렬 (최신 시간 우선)
-                if (a.time && b.time) {
-                    return b.time.localeCompare(a.time);
-                }
+                // 기존 데이터와 새 데이터 병합
+                const mergedData = [...products, ...(productCache.data[category] || [])];
                 
-                return 0;
-            });
+                // 병합된 데이터를 순위, 날짜, 시간 순으로 정렬
+                productCache.data[category] = mergedData.sort((a, b) => {
+                    // 순위 기준으로 오름차순 정렬
+                    if (a.rank !== b.rank) {
+                        return a.rank - b.rank;
+                    }
+                    
+                    // 같은 순위라면 날짜 기준으로 내림차순 정렬 (최신 날짜 우선)
+                    if (a.date !== b.date) {
+                        return b.date.localeCompare(a.date);
+                    }
+                    
+                    // 날짜까지 같다면 시간으로 내림차순 정렬 (최신 시간 우선)
+                    if (a.time && b.time) {
+                        return b.time.localeCompare(a.time);
+                    }
+                    
+                    return 0;
+                });
+            } catch (error) {
+                console.error(`${category} 크롤링 중 오류:`, error.message);
+            }
         }
         
         // 전체 목록도 정렬
