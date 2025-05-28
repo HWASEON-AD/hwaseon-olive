@@ -34,7 +34,7 @@ app.use((req, res, next) => {
 
 // CORS 설정 업데이트
 app.use(cors({
-    origin: ['https://hwaseon-olive.com', 'http://hwaseon-olive.com'],
+    origin: ['https://hwaseon-olive.com', 'http://hwaseon-olive.com', 'https://hwaseon-olive.onrender.com'],
     methods: ['GET', 'POST'],
     credentials: true,
     maxAge: 86400 // 24시간
@@ -66,14 +66,21 @@ app.use('/captures', express.static(path.join(__dirname, 'public', 'captures'), 
 
 // 도메인 리다이렉트 설정
 app.use((req, res, next) => {
-    if (req.hostname !== 'hwaseon-olive.com' && req.hostname !== 'www.hwaseon-olive.com') {
+    const host = req.hostname;
+    const isRenderDomain = host.includes('onrender.com');
+    
+    // Render.com 도메인으로 접근 시 메인 도메인으로 리다이렉트
+    if (isRenderDomain) {
         return res.redirect(301, `https://hwaseon-olive.com${req.url}`);
     }
+    
+    // www 서브도메인으로 접근 시 메인 도메인으로 리다이렉트
+    if (host.startsWith('www.')) {
+        return res.redirect(301, `https://hwaseon-olive.com${req.url}`);
+    }
+    
     next();
 });
-
-
-
 
 // 메모리 캐시 - 크롤링 결과 저장
 let productCache = {
@@ -248,10 +255,10 @@ function log(message, type = 'info') {
 
 // API 요청 로깅 미들웨어
 app.use((req, res, next) => {
-    // API 요청 로그 출력 제한
-    if (req.path.startsWith('/api/')) {
-        log(`API 요청: ${req.method} ${req.path}`);
+    if (req.path === '/health') {
+        return next();
     }
+    log(`API 요청: ${req.method} ${req.path}`);
     next();
 });
 
@@ -1011,40 +1018,12 @@ app.post('/api/test-send-captures', async (req, res) => {
     }
 });
 
-// Health check endpoint 개선
-app.get('/health', async (req, res) => {
-    try {
-        const chromePath = await findChrome();
-        const driver = await new Builder()
-            .forBrowser('chrome')
-            .setChromeOptions(new chrome.Options()
-                .addArguments('--headless')
-                .addArguments('--no-sandbox')
-                .addArguments('--disable-dev-shm-usage')
-                .addArguments('--window-size=1920,1080')
-            )
-            .build();
-        await driver.close();
-        res.json({
-            status: 'healthy',
-            domain: 'hwaseon-olive.com',
-            chrome_path: chromePath,
-            timestamp: new Date().toLocaleString('ko-KR', {
-                timeZone: 'Asia/Seoul'
-            }),
-            uptime: process.uptime()
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: 'unhealthy',
-            domain: 'hwaseon-olive.com',
-            error: error.message,
-            timestamp: new Date().toLocaleString('ko-KR', {
-                timeZone: 'Asia/Seoul'
-            }),
-            uptime: process.uptime()
-        });
-    }
+// Render.com 헬스체크 요청 처리
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+    });
 });
 
 // 404 처리
