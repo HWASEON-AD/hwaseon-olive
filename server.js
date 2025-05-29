@@ -165,50 +165,56 @@ const transporter = nodemailer.createTransport({
 
 
 
-// 캡처본 정리 및 이메일 전송 함수 (zip 첨부)
-async function organizeAndSendCaptures(timeStr) {
+// 캡처본 분할 zip 및 메일 전송 함수 (4개씩)
+async function organizeAndSendCapturesSplit(timeStr) {
     const today = new Date().toISOString().split('T')[0];
-    const zipPath = path.join(__dirname, `oliveyoung_captures_${today}_${timeStr}.zip`);
-    try {
-        // 오늘 날짜, 해당 타임스탬프의 캡처본만 zip에 추가
-        const files = fs.readdirSync(capturesDir);
-        const targetFiles = files.filter(file => {
-            const match = file.match(/ranking_.+_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
-            return match && match[1] === today && match[2] === timeStr;
-        });
-        if (targetFiles.length === 0) {
-            console.log(`[메일전송] ${today} ${timeStr} 캡처본 없음!`);
-            return;
-        }
+    const files = fs.readdirSync(capturesDir)
+        .filter(file => file.endsWith('.jpeg') && file.includes(today) && file.includes(timeStr));
+    if (files.length === 0) return;
+
+    const MAX_FILES_PER_MAIL = 4;
+    // 파일을 4개씩 그룹핑
+    const groups = [];
+    for (let i = 0; i < files.length; i += MAX_FILES_PER_MAIL) {
+        groups.push(files.slice(i, i + MAX_FILES_PER_MAIL));
+    }
+
+    for (let idx = 0; idx < groups.length; idx++) {
+        const group = groups[idx];
+        const zipPath = path.join(__dirname, `oliveyoung_captures_${today}_${timeStr}_part${idx+1}.zip`);
+        // zip 생성
         await new Promise((resolve, reject) => {
             const output = fs.createWriteStream(zipPath);
             const archive = archiver('zip', { zlib: { level: 9 } });
             output.on('close', resolve);
             archive.on('error', reject);
             archive.pipe(output);
-            for (const file of targetFiles) {
+            for (const file of group) {
                 archive.file(path.join(capturesDir, file), { name: file });
             }
             archive.finalize();
         });
-        // 이메일 전송
+
+        // 포함된 카테고리명 추출
+        const categories = group.map(f => {
+            const m = f.match(/ranking_(.+?)_/); return m ? m[1] : f;
+        }).join(', ');
+
+        // 메일 전송
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: 'gt.min@hwaseon.com',
-            subject: `올리브영 ${today} ${timeStr} 캡처본 (zip 첨부)` ,
-            text: `${today} ${timeStr} 올리브영 랭킹 캡처본이 zip 파일로 첨부되었습니다.`,
+            subject: `[${idx+1}/${groups.length}] 올리브영 캡처본 (카테고리 ${group.length}개)` ,
+            text: `이번 메일에는 다음 카테고리 캡처가 포함되어 있습니다:\n${categories}`,
             attachments: [
                 {
-                    filename: `oliveyoung_captures_${today}_${timeStr}.zip`,
+                    filename: `oliveyoung_captures_${today}_${timeStr}_part${idx+1}.zip`,
                     path: zipPath
                 }
             ]
         };
         await transporter.sendMail(mailOptions);
-        console.log(`${today} ${timeStr} 캡처본 zip 이메일 전송 완료`);
         fs.unlinkSync(zipPath);
-    } catch (error) {
-        console.error('캡처본 정리 및 이메일 전송 중 오류:', error);
     }
 }
 
@@ -359,8 +365,8 @@ async function crawlAllCategories() {
         console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
         await captureOliveyoungMainRanking(timeStr);
         
-        // 해당 타임스탬프 캡처본만 메일로 전송
-        await organizeAndSendCaptures(timeStr);
+        // 해당 타임스탬프 캡처본만 메일로 분할 전송
+        await organizeAndSendCapturesSplit(timeStr);
         
         // 다음 크롤링 스케줄링
         scheduleNextCrawl();
@@ -947,7 +953,7 @@ app.get('/api/download/:filename', (req, res) => {
 // 테스트 메일 전송 API
 app.post('/api/test-send-captures', async (req, res) => {
     try {
-        await organizeAndSendCaptures();
+        await organizeAndSendCapturesSplit();
         res.json({ success: true, message: '테스트 메일 전송 완료' });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -1023,8 +1029,8 @@ app.listen(port, () => {
         const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
         console.log('서버 재시작: 즉시 전체 카테고리 캡처 실행');
         await captureOliveyoungMainRanking(timeStr);
-        // 캡처 후 이메일 전송
-        await organizeAndSendCaptures(timeStr);
+        // 캡처 후 이메일 전송 (분할)
+        await organizeAndSendCapturesSplit(timeStr);
     })();
 
     // 매일 00:00에 당일 캡처본 삭제

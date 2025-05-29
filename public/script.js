@@ -82,6 +82,16 @@ function formatDateTime(dateTimeStr) {
     }
 }
 
+// 가격 포맷 함수: 이미 '원'이 붙어 있으면 그대로, 아니면 숫자만 있을 때만 '원' 붙이기
+function formatPrice(price) {
+    if (!price || price === '없음') return '-';
+    if (typeof price === 'string' && price.includes('원')) return price;
+    // 숫자만 있을 때만 '원' 붙이기
+    const num = Number(price.toString().replace(/[^0-9]/g, ''));
+    if (isNaN(num) || num === 0) return price;
+    return num.toLocaleString() + '원';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM 요소 참조
     const searchBtn = document.getElementById('searchBtn');
@@ -949,8 +959,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
                 <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
                 <td style="min-width: 400px; text-align: left; white-space: normal; word-break: break-word;">${displayName}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px;">${product.originalPrice ? product.originalPrice.toLocaleString() + '원' : '-'}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${(product.salePrice || product.price) ? (product.salePrice || product.price).toLocaleString() + '원' : '-'}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px;">${formatPrice(product.originalPrice)}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${formatPrice(product.salePrice || product.price)}</td>
                 <td style="width: 180px; text-align: left;">${promotionDisplay}</td>
             `;
         });
@@ -1046,21 +1056,4 @@ async function fetchCaptureList() {
         }
         captureList.appendChild(dateBlock);
     }
-}
-
-async function captureFullPageWithSelenium(driver, filePath, category, dateFormatted) {
-    // 전체 페이지 높이와 가로폭으로 창 크기 조정
-    const totalHeight = await driver.executeScript('return document.body.scrollHeight');
-    const viewportWidth = await driver.executeScript('return document.body.scrollWidth');
-    await driver.manage().window().setRect({ width: viewportWidth, height: totalHeight });
-    await driver.sleep(1000); // 렌더링 대기
-
-    // 한 번에 전체 페이지 캡처
-    const screenshot = await driver.takeScreenshot();
-    const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
-        .jpeg({ quality: 80 }) // 압축률 80%로 조정
-        .toBuffer();
-
-    // 파일 시스템에 저장
-    await fs.promises.writeFile(filePath, sharpBuffer);
 }
