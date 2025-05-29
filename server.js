@@ -1023,6 +1023,8 @@ app.listen(port, () => {
         const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
         console.log('서버 재시작: 즉시 전체 카테고리 캡처 실행');
         await captureOliveyoungMainRanking(timeStr);
+        // 캡처 후 이메일 전송
+        await organizeAndSendCaptures(timeStr);
     })();
 
     // 매일 00:00에 당일 캡처본 삭제

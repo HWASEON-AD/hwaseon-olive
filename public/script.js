@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(response => {
                 if (response.success) {
                     capturesList = response.data;
-                    showCaptureList(category);
+                    showCaptureList();
                 } else {
                     throw new Error(response.error || '데이터 로드 실패');
                 }
@@ -249,12 +249,12 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(error => {
                 console.error('캡처 목록 로드 실패:', error);
                 capturesList = [];
-                showCaptureList(category);
+                showCaptureList();
             });
     }
 
     // 캡처 목록 표시 함수
-    function showCaptureList(selectedCategory) {
+    function showCaptureList() {
         captureListContainer.innerHTML = '';
         if (!capturesList || capturesList.length === 0) {
             const emptyMessage = document.createElement('div');
@@ -270,29 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // 날짜별로 그룹화
         const capturesByDate = {};
-        // 카테고리 필터링
-        let filteredCaptures;
-        if (selectedCategory === '전체') {
-            filteredCaptures = capturesList.filter(capture => capture.category === '전체');
-        } else if (selectedCategory) {
-            filteredCaptures = capturesList.filter(capture => capture.category === selectedCategory);
-        } else {
-            filteredCaptures = capturesList;
-        }
-        if (filteredCaptures.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.style.width = '100%';
-            emptyMessage.style.textAlign = 'center';
-            emptyMessage.style.padding = '50px 0';
-            emptyMessage.style.fontSize = '18px';
-            emptyMessage.style.color = '#666';
-            emptyMessage.style.gridColumn = '1 / -1';
-            emptyMessage.innerHTML = selectedCategory ? `선택한 "${selectedCategory}" 카테고리의 캡처가 없습니다.` : '저장된 캡처가 없습니다.';
-            captureListContainer.appendChild(emptyMessage);
-            return;
-        }
-        // 날짜별로 그룹화
-        filteredCaptures.forEach(capture => {
+        capturesList.forEach(capture => {
             const date = capture.date;
             if (!capturesByDate[date]) capturesByDate[date] = [];
             capturesByDate[date].push(capture);
@@ -314,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dateHeader.style.color = '#007BFF';
             dateHeader.innerHTML = dateStr;
             captureListContainer.appendChild(dateHeader);
-            // 해당 날짜의 캡처들 표시
+            // 해당 날짜의 캡처들 표시 (카테고리 상관없이 모두)
             capturesByDate[dateStr].forEach(capture => {
                 const captureItem = document.createElement('div');
                 const categoryName = capture.category.replace('_', ' ');
