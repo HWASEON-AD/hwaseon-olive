@@ -562,9 +562,23 @@ async function captureOliveyoungMainRanking(timeStr) {
     }
 }
 
+// 전체 페이지 분할 캡처 후 이어붙이기 함수
+async function captureFullPageWithSelenium(driver, filePath, category, dateFormatted) {
+    // 전체 페이지 높이와 가로폭으로 창 크기 조정
+    const totalHeight = await driver.executeScript('return document.body.scrollHeight');
+    const viewportWidth = await driver.executeScript('return document.body.scrollWidth');
+    await driver.manage().window().setRect({ width: viewportWidth, height: totalHeight });
+    await driver.sleep(1000); // 렌더링 대기
 
+    // 한 번에 전체 페이지 캡처
+    const screenshot = await driver.takeScreenshot();
+    const sharpBuffer = await sharp(Buffer.from(screenshot, 'base64'))
+        .jpeg({ quality: 100 }) // 화질 증가
+        .toBuffer();
 
-
+    // 파일 시스템에 저장
+    await fs.promises.writeFile(filePath, sharpBuffer);
+}
 
 // 다음 크롤링 스케줄링 함수
 function scheduleNextCrawl() {
