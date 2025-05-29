@@ -746,26 +746,29 @@ document.addEventListener('DOMContentLoaded', () => {
             // 행사 정보를 개별 태그로 분리하여 표시
             if (product.promotion && product.promotion !== '없음' && product.promotion !== '-') {
                 const promotion = product.promotion.toLowerCase();
+                const promotions = promotion.split(',').map(p => p.trim());
                 
-                // 쿠폰 체크
-                if (promotion.includes('쿠폰')) {
-                    promotionDisplay += `<span style="display: inline-block; background-color: #96D165; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">쿠폰</span>`;
-                }
-                
-                // 증정 체크
-                if (promotion.includes('증정')) {
-                    promotionDisplay += `<span style="display: inline-block; background-color: #82CAFA; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">증정</span>`;
-                }
-                
-                // 오늘드림 체크
-                if (promotion.includes('오늘드림') || promotion.includes('드림')) {
-                    promotionDisplay += `<span style="display: inline-block; background-color: #F574B8; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">오늘드림</span>`;
-                }
-                
-                // 세일 체크
-                if (promotion.includes('세일')) {
-                    promotionDisplay += `<span style="display: inline-block; background-color: #FF6B6B; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">세일</span>`;
-                }
+                promotions.forEach(p => {
+                    // 쿠폰 체크
+                    if (p.includes('쿠폰')) {
+                        promotionDisplay += `<span style="display: inline-block; background-color: #96D165; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">쿠폰</span>`;
+                    }
+                    
+                    // 증정 체크
+                    if (p.includes('증정')) {
+                        promotionDisplay += `<span style="display: inline-block; background-color: #82CAFA; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">증정</span>`;
+                    }
+                    
+                    // 오늘드림 체크
+                    if (p.includes('오늘드림') || p.includes('드림')) {
+                        promotionDisplay += `<span style="display: inline-block; background-color: #F574B8; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">오늘드림</span>`;
+                    }
+                    
+                    // 세일 체크
+                    if (p.includes('세일')) {
+                        promotionDisplay += `<span style="display: inline-block; background-color: #FF6B6B; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">세일</span>`;
+                    }
+                });
                 
                 // 기타 행사가 있는 경우 (위 조건에 해당하지 않는 경우)
                 if (!promotionDisplay && product.promotion.trim()) {
@@ -802,8 +805,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
                 <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
                 <td style="min-width: 400px; text-align: left; white-space: normal; word-break: break-word;">${highlightedName}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px;">${product.originalPrice || '-'}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${product.salePrice || product.price || ''}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px;">${product.originalPrice ? product.originalPrice.toLocaleString() + '원' : '-'}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${(product.salePrice || product.price) ? (product.salePrice || product.price).toLocaleString() + '원' : '-'}</td>
                 <td style="width: 180px; text-align: left;">${promotionDisplay}</td>
             `;
         });
@@ -919,26 +922,29 @@ document.addEventListener('DOMContentLoaded', () => {
             // 행사 정보를 개별 태그로 분리하여 표시
             if (product.promotion && product.promotion !== '없음' && product.promotion !== '-') {
                 const promotion = product.promotion.toLowerCase();
+                const promotions = promotion.split(',').map(p => p.trim());
                 
-                // 쿠폰 체크
-                if (promotion.includes('쿠폰')) {
-                    promotionDisplay += `<span style="display: inline-block; background-color: #96D165; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">쿠폰</span>`;
-                }
-                
-                // 증정 체크
-                if (promotion.includes('증정')) {
-                    promotionDisplay += `<span style="display: inline-block; background-color: #82CAFA; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">증정</span>`;
-                }
-                
-                // 오늘드림 체크
-                if (promotion.includes('오늘드림') || promotion.includes('드림')) {
-                    promotionDisplay += `<span style="display: inline-block; background-color: #F574B8; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">오늘드림</span>`;
-                }
-                
-                // 세일 체크
-                if (promotion.includes('세일')) {
-                    promotionDisplay += `<span style="display: inline-block; background-color: #FF6B6B; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">세일</span>`;
-                }
+                promotions.forEach(p => {
+                    // 쿠폰 체크
+                    if (p.includes('쿠폰')) {
+                        promotionDisplay += `<span style="display: inline-block; background-color: #96D165; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">쿠폰</span>`;
+                    }
+                    
+                    // 증정 체크
+                    if (p.includes('증정')) {
+                        promotionDisplay += `<span style="display: inline-block; background-color: #82CAFA; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">증정</span>`;
+                    }
+                    
+                    // 오늘드림 체크
+                    if (p.includes('오늘드림') || p.includes('드림')) {
+                        promotionDisplay += `<span style="display: inline-block; background-color: #F574B8; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">오늘드림</span>`;
+                    }
+                    
+                    // 세일 체크
+                    if (p.includes('세일')) {
+                        promotionDisplay += `<span style="display: inline-block; background-color: #FF6B6B; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">세일</span>`;
+                    }
+                });
                 
                 // 기타 행사가 있는 경우 (위 조건에 해당하지 않는 경우)
                 if (!promotionDisplay && product.promotion.trim()) {
@@ -965,8 +971,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
                 <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
                 <td style="min-width: 400px; text-align: left; white-space: normal; word-break: break-word;">${displayName}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px;">${product.originalPrice || '-'}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${product.salePrice || product.price || ''}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px;">${product.originalPrice ? product.originalPrice.toLocaleString() + '원' : '-'}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${(product.salePrice || product.price) ? (product.salePrice || product.price).toLocaleString() + '원' : '-'}</td>
                 <td style="width: 180px; text-align: left;">${promotionDisplay}</td>
             `;
         });
