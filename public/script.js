@@ -793,8 +793,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
                 <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
                 <td style="min-width: 400px; text-align: left; white-space: normal; word-break: break-word;">${highlightedName}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px;">${product.originalPrice ? product.originalPrice.toLocaleString() + '원' : '-'}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${(product.salePrice || product.price) ? (product.salePrice || product.price).toLocaleString() + '원' : '-'}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px;">${formatPrice(product.originalPrice)}</td>
+                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${formatPrice(product.salePrice || product.price)}</td>
                 <td style="width: 180px; text-align: left;">${promotionDisplay}</td>
             `;
         });

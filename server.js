@@ -172,7 +172,7 @@ async function organizeAndSendCapturesSplit(timeStr) {
         .filter(file => file.endsWith('.jpeg') && file.includes(today) && file.includes(timeStr));
     if (files.length === 0) return;
 
-    const MAX_FILES_PER_MAIL = 4;
+    const MAX_FILES_PER_MAIL = 7;
     // 파일을 4개씩 그룹핑
     const groups = [];
     for (let i = 0; i < files.length; i += MAX_FILES_PER_MAIL) {
@@ -204,7 +204,7 @@ async function organizeAndSendCapturesSplit(timeStr) {
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: 'gt.min@hwaseon.com',
-            subject: `[${idx+1}/${groups.length}] 올리브영 캡처본 (카테고리 ${group.length}개)` ,
+            subject: `올리브영 ${today} ${timeStr.replace('-', ':')} 캡처본 (part ${idx+1}/${groups.length}, zip 첨부)` ,
             text: `이번 메일에는 다음 카테고리 캡처가 포함되어 있습니다:\n${categories}`,
             attachments: [
                 {
