@@ -166,10 +166,9 @@ const transporter = nodemailer.createTransport({
 
 
 // 캡처본 분할 zip 및 메일 전송 함수 (4개씩)
-async function organizeAndSendCapturesSplit(timeStr) {
-    const today = new Date().toISOString().split('T')[0];
+async function organizeAndSendCapturesSplit(timeStr, dateStr) {
     const files = fs.readdirSync(capturesDir)
-        .filter(file => file.endsWith('.jpeg') && file.includes(today) && file.includes(timeStr));
+        .filter(file => file.endsWith('.jpeg') && file.includes(dateStr) && file.includes(timeStr));
     if (files.length === 0) return;
 
     const MAX_FILES_PER_MAIL = 7;
@@ -181,7 +180,7 @@ async function organizeAndSendCapturesSplit(timeStr) {
 
     for (let idx = 0; idx < groups.length; idx++) {
         const group = groups[idx];
-        const zipPath = path.join(__dirname, `oliveyoung_captures_${today}_${timeStr}_part${idx+1}.zip`);
+        const zipPath = path.join(__dirname, `oliveyoung_captures_${dateStr}_${timeStr}_part${idx+1}.zip`);
         // zip 생성
         await new Promise((resolve, reject) => {
             const output = fs.createWriteStream(zipPath);
@@ -204,16 +203,21 @@ async function organizeAndSendCapturesSplit(timeStr) {
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: 'gt.min@hwaseon.com',
-            subject: `올리브영 ${today} ${timeStr.replace('-', ':')} 캡처본 (part ${idx+1}/${groups.length}, zip 첨부)` ,
+            subject: `올리브영 ${dateStr} ${timeStr.replace('-', ':')} 캡처본 (part ${idx+1}/${groups.length}, zip 첨부)` ,
             text: `이번 메일에는 다음 카테고리 캡처가 포함되어 있습니다:\n${categories}`,
             attachments: [
                 {
-                    filename: `oliveyoung_captures_${today}_${timeStr}_part${idx+1}.zip`,
+                    filename: `oliveyoung_captures_${dateStr}_${timeStr}_part${idx+1}.zip`,
                     path: zipPath
                 }
             ]
         };
-        await transporter.sendMail(mailOptions);
+        try {
+            await transporter.sendMail(mailOptions);
+            console.log(`[메일전송성공] ${mailOptions.subject}`);
+        } catch (e) {
+            console.error(`[메일전송실패] ${mailOptions.subject}`, e);
+        }
         fs.unlinkSync(zipPath);
     }
 }
@@ -366,7 +370,7 @@ async function crawlAllCategories() {
         await captureOliveyoungMainRanking(timeStr);
         
         // 해당 타임스탬프 캡처본만 메일로 분할 전송
-        await organizeAndSendCapturesSplit(timeStr);
+        await organizeAndSendCapturesSplit(timeStr, today);
         
         // 다음 크롤링 스케줄링
         scheduleNextCrawl();
@@ -950,15 +954,6 @@ app.get('/api/download/:filename', (req, res) => {
     }
 });
 
-// 테스트 메일 전송 API
-app.post('/api/test-send-captures', async (req, res) => {
-    try {
-        await organizeAndSendCapturesSplit();
-        res.json({ success: true, message: '테스트 메일 전송 완료' });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -1003,7 +998,6 @@ app.get('/health', async (req, res) => {
 
 
 
-
 // 서버 종료 시 랭킹 데이터 저장
 function saveRankingOnExit() {
     try {
@@ -1022,16 +1016,6 @@ app.listen(port, () => {
     console.log('3시간 단위 자동 크롤링 스케줄링을 시작합니다...');
     // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
     scheduleNextCrawl();
-
-    // 서버 재시작 시 캡처만 즉시 1회 실행
-    (async () => {
-        const now = getKSTTime();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
-        console.log('서버 재시작: 즉시 전체 카테고리 캡처 실행');
-        await captureOliveyoungMainRanking(timeStr);
-        // 캡처 후 이메일 전송 (분할)
-        await organizeAndSendCapturesSplit(timeStr);
-    })();
 
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
