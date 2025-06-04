@@ -643,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const endDate = endDateInput.value;
             
             // 서버에 검색 요청
-            const response = await fetch(`${BASE_URL}/api/search?keyword=${encodeURIComponent(searchTerm)}&startDate=${startDate}`, {
+            const response = await fetch(`${BASE_URL}/api/search?keyword=${encodeURIComponent(searchTerm)}&startDate=${startDate}&endDate=${endDate}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
