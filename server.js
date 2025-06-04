@@ -759,6 +759,7 @@ app.get('/api/search', (req, res) => {
             return false;
         };
 
+        let matchingResults = [];
         // 모든 카테고리 순회
         Object.values(productCache.data).forEach(categoryItems => {
             categoryItems.forEach(item => {
