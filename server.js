@@ -742,8 +742,22 @@ app.get('/api/search', (req, res) => {
 
         const lowerKeyword = keyword.toLowerCase();
 
-        // 날짜 필터 + 검색 한번에 처리
-        const matchingResults = [];
+        // 날짜 필터 (Date 객체로 비교, endDate까지 포함)
+        const isInDateRange = (itemDate, startDate, endDate) => {
+            if (!startDate && !endDate) return true;
+            if (startDate && !endDate) return itemDate === startDate;
+            if (!startDate && endDate) return itemDate === endDate;
+            if (startDate && endDate) {
+                // 문자열을 Date 객체로 변환
+                const d = new Date(itemDate);
+                const s = new Date(startDate);
+                const e = new Date(endDate);
+                // e.setHours(23,59,59,999); // 시간까지 비교할 경우(여기선 날짜만 비교)
+                // 날짜만 비교 (YYYY-MM-DD)
+                return d >= s && d <= e;
+            }
+            return false;
+        };
 
         // 모든 카테고리 순회
         Object.values(productCache.data).forEach(categoryItems => {
@@ -751,12 +765,7 @@ app.get('/api/search', (req, res) => {
                 if (!item.date) return;
 
                 // 날짜 필터
-                const inDateRange =
-                    (!startDate && !endDate) ||
-                    (startDate && !endDate && item.date === startDate) ||
-                    (!startDate && endDate && item.date === endDate) ||
-                    (startDate && endDate && item.date >= startDate && item.date <= endDate);
-
+                const inDateRange = isInDateRange(item.date, startDate, endDate);
                 if (!inDateRange) return;
 
                 // 키워드 포함 여부 (brand + name 전부 검사)
