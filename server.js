@@ -257,6 +257,9 @@ async function crawlAllCategories() {
         for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
             console.log(`카테고리 '${category}' 크롤링 중...`);
             
+            // 1~2초 랜덤 딜레이
+            await new Promise(res => setTimeout(res, 1000 + Math.random() * 1000));
+            
             // 크롤링 로직
             const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
             
@@ -385,6 +388,19 @@ async function crawlAllCategories() {
         
     } catch (error) {
         console.error(`크롤링 오류:`, error);
+        // 오류 메일 발송
+        try {
+            const now = new Date();
+            await transporter.sendMail({
+                from: process.env.EMAIL_USER,
+                to: process.env.EMAIL_USER,
+                subject: `[올리브영 크롤링 오류] ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`,
+                text: `오류 발생 시각: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n\n에러 내용:\n${error.stack || error.message || error}`
+            });
+            console.log('크롤링 오류 메일 발송 완료');
+        } catch (mailErr) {
+            console.error('크롤링 오류 메일 발송 실패:', mailErr);
+        }
         // 오류가 발생해도 다음 크롤링은 스케줄링
         scheduleNextCrawl();
     }
