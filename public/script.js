@@ -705,23 +705,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // 데이터 정렬: 1. 순위(오름차순) 2. 날짜+시간(내림차순)
+        // 데이터 정렬: 1. 시간(오름차순) 2. 날짜(오름차순) 3. 순위(오름차순)
         const sortedData = [...data].sort((a, b) => {
-            // 순위를 숫자로 변환하여 정렬 (순위가 없는 경우 999로 처리)
-            const rankA = parseInt(a.rank) || 999;
-            const rankB = parseInt(b.rank) || 999;
-            
-            if (rankA !== rankB) {
-                return rankA - rankB;
+            // 시간 비교 (01:30, 04:30, 07:30, 10:30, 13:30, 16:30, 19:30, 22:30 순서)
+            const timeA = a.time || '';
+            const timeB = b.time || '';
+            if (timeA !== timeB) {
+                return timeA.localeCompare(timeB);
             }
             
-            // 같은 순위라면 날짜 기준으로 정렬 (최신 데이터 우선)
-            const dateCompare = (b.date || '') > (a.date || '');
-            if (dateCompare) return 1;
-            if (dateCompare === false) return -1;
+            // 같은 시간이라면 날짜 기준으로 정렬 (오래된 날짜 우선)
+            const dateCompare = (a.date || '').localeCompare(b.date || '');
+            if (dateCompare !== 0) {
+                return dateCompare;
+            }
             
-            // 날짜까지 같다면 시간으로 정렬 (최신 시간 우선)
-            return (b.time || '') > (a.time || '') ? 1 : -1;
+            // 날짜까지 같다면 순위로 정렬 (낮은 순위 우선)
+            const rankA = parseInt(a.rank) || 999;
+            const rankB = parseInt(b.rank) || 999;
+            return rankA - rankB;
         });
         
         // 검색어 가져오기
@@ -884,23 +886,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 데이터 정렬: 1. 순위(오름차순) 2. 날짜+시간(내림차순)
+        // 데이터 정렬: 1. 시간(오름차순) 2. 날짜(오름차순) 3. 순위(오름차순)
         const sortedData = [...data].sort((a, b) => {
-            // 순위를 숫자로 변환하여 정렬 (순위가 없는 경우 999로 처리)
-            const rankA = parseInt(a.rank) || 999;
-            const rankB = parseInt(b.rank) || 999;
-            
-            if (rankA !== rankB) {
-                return rankA - rankB;
+            // 시간 비교 (01:30, 04:30, 07:30, 10:30, 13:30, 16:30, 19:30, 22:30 순서)
+            const timeA = a.time || '';
+            const timeB = b.time || '';
+            if (timeA !== timeB) {
+                return timeA.localeCompare(timeB);
             }
             
-            // 같은 순위라면 날짜 기준으로 정렬 (최신 데이터 우선)
-            const dateCompare = (b.date || '') > (a.date || '');
-            if (dateCompare) return 1;
-            if (dateCompare === false) return -1;
+            // 같은 시간이라면 날짜 기준으로 정렬 (오래된 날짜 우선)
+            const dateCompare = (a.date || '').localeCompare(b.date || '');
+            if (dateCompare !== 0) {
+                return dateCompare;
+            }
             
-            // 날짜까지 같다면 시간으로 정렬 (최신 시간 우선)
-            return (b.time || '') > (a.time || '') ? 1 : -1;
+            // 날짜까지 같다면 순위로 정렬 (낮은 순위 우선)
+            const rankA = parseInt(a.rank) || 999;
+            const rankB = parseInt(b.rank) || 999;
+            return rankA - rankB;
         });
 
         sortedData.forEach((product, index) => {
