@@ -85,6 +85,28 @@ if (fs.existsSync(RANKING_DATA_PATH)) {
     }
 }
 
+// 서버 시작 시 자동 캡처 및 이메일 전송 실행
+async function initialCaptureAndEmail() {
+    try {
+        console.log('서버 시작: 자동 캡처 및 이메일 전송 시작...');
+        const kstNow = getKSTTime();
+        const timeStr = kstNow.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+        
+        // 자동 캡처 실행
+        await captureOliveyoungMainRanking(timeStr);
+        
+        // 이메일 전송
+        await sendCaptureEmail();
+        
+        console.log('서버 시작: 자동 캡처 및 이메일 전송 완료');
+    } catch (error) {
+        console.error('서버 시작: 자동 캡처 및 이메일 전송 실패:', error);
+    }
+}
+
+// 서버 시작 시 실행
+initialCaptureAndEmail();
+
 // Chrome 실행 경로 설정
 async function findChrome() {
     try {
