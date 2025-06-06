@@ -90,13 +90,14 @@ async function initialCaptureAndEmail() {
     try {
         console.log('서버 시작: 자동 캡처 및 이메일 전송 시작...');
         const kstNow = getKSTTime();
-        const timeStr = kstNow.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const timeStr = kstNow.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(':', '-');
+        const dateStr = kstNow.toISOString().split('T')[0];
         
         // 자동 캡처 실행
         await captureOliveyoungMainRanking(timeStr);
         
-        // 이메일 전송
-        await sendCaptureEmail();
+        // 캡처본 이메일 전송
+        await organizeAndSendCapturesSplit(timeStr, dateStr);
         
         console.log('서버 시작: 자동 캡처 및 이메일 전송 완료');
     } catch (error) {
@@ -241,6 +242,16 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
             console.error(`[메일전송실패] ${mailOptions.subject}`, e);
         }
         fs.unlinkSync(zipPath);
+    }
+
+    // 이메일 전송이 완료된 후 캡처본 파일들 삭제
+    for (const file of files) {
+        try {
+            fs.unlinkSync(path.join(capturesDir, file));
+            console.log('캡처본 삭제 완료:', file);
+        } catch (error) {
+            console.error('캡처본 삭제 실패:', file, error);
+        }
     }
 }
 
@@ -896,82 +907,11 @@ app.get('/api/last-crawl-time', (req, res) => {
 
 // 캡처 목록 조회 API
 app.get('/api/captures', async (req, res) => {
-    try {
-        const today = new Date().toISOString().split('T')[0];
-        
-        console.log('캡처 목록 요청:', { today });
-        console.log('캡처 디렉토리:', capturesDir);
-        
-        // 파일 시스템에서 캡처 정보 읽기
-        let captures = [];
-        if (fs.existsSync(capturesDir)) {
-            const files = fs.readdirSync(capturesDir);
-            console.log('발견된 파일 수:', files.length);
-            
-            captures = files
-                .filter(file => file.endsWith('.jpeg'))
-                .map(fileName => {
-                    const match = fileName.match(/ranking_(.+)_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/);
-                    if (!match) {
-                        console.log('파일명 매치 실패:', fileName);
-                        return null;
-                    }
-                    
-                    const [, extractedCategory, date, time] = match;
-                    const filePath = path.join(capturesDir, fileName);
-                    
-                    try {
-                        const stats = fs.statSync(filePath);
-                        return {
-                            id: path.parse(fileName).name,
-                            fileName,
-                            category: extractedCategory,
-                            date,
-                            time: time.replace('-', ':'),
-                            timestamp: stats.mtime.getTime(),
-                            imageUrl: `/captures/${fileName}`,
-                            fileSize: stats.size
-                        };
-                    } catch (err) {
-                        console.error('파일 정보 읽기 실패:', fileName, err);
-                        return null;
-                    }
-                })
-                .filter(capture => capture !== null);
-        } else {
-            console.log('캡처 디렉토리가 존재하지 않음');
-        }
-
-       
-        // 날짜와 시간 기준으로 내림차순 정렬 (최신순)
-        captures.sort((a, b) => {
-            if (a.date !== b.date) {
-                return b.date.localeCompare(a.date);
-            }
-            return b.time.localeCompare(a.time);
-        });
-        
-       
-        
-        const response = {
-            success: true,
-            data: captures,
-            total: captures.length
-        };
-        
-        console.log('응답 데이터:', {
-            total: response.total,
-        });
-        
-        res.json(response);
-    } catch (error) {
-        console.error('캡처 목록 조회 중 오류:', error);
-        res.status(500).json({
-            success: false,
-            error: '캡처 목록 조회 중 오류가 발생했습니다.',
-            details: error.message
-        });
-    }
+    res.json({
+        success: true,
+        data: [],
+        total: 0
+    });
 });
 
 // 이미지 다운로드 API
