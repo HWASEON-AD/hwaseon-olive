@@ -238,183 +238,188 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
 
 // 모든 카테고리 크롤링 함수
 async function crawlAllCategories() {
-    const kstNow = getKSTTime();
-    
-    console.log(`[${kstNow.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    })}] 3시간 정기 크롤링 시작`);
-    
-    const today = kstNow.toISOString().split('T')[0];
-    // 캡처 시작 타임스탬프 생성 (크롤링 시작 시점 기준)
-    const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
-    
     try {
-        // 이전 캡처 파일 모두 삭제
-        if (fs.existsSync(capturesDir)) {
-            const files = fs.readdirSync(capturesDir);
-            for (const file of files) {
-                if (/^ranking_.*\.jpeg$/.test(file)) {
-                    fs.unlinkSync(path.join(capturesDir, file));
-                    console.log('이전 캡처 파일 삭제:', file);
+        const kstNow = getKSTTime();
+        
+        console.log(`[${kstNow.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        })}] 3시간 정기 크롤링 시작`);
+        
+        const today = kstNow.toISOString().split('T')[0];
+        // 캡처 시작 타임스탬프 생성 (크롤링 시작 시점 기준)
+        const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
+        
+        try {
+            // 이전 캡처 파일 모두 삭제
+            if (fs.existsSync(capturesDir)) {
+                const files = fs.readdirSync(capturesDir);
+                for (const file of files) {
+                    if (/^ranking_.*\.jpeg$/.test(file)) {
+                        fs.unlinkSync(path.join(capturesDir, file));
+                        console.log('이전 캡처 파일 삭제:', file);
+                    }
                 }
             }
-        }
 
-        // 모든 카테고리에 대해 크롤링
-        for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
-            console.log(`카테고리 '${category}' 크롤링 중...`);
+            // 모든 카테고리에 대해 크롤링
+            for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
+                console.log(`카테고리 '${category}' 크롤링 중...`);
+                
+                // 1~2초 랜덤 딜레이
+                await new Promise(res => setTimeout(res, 1000 + Math.random() * 1000));
+                
+                // 크롤링 로직
+                const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
+                
+                const response = await axios.get(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    }
+                });
+
+                const $ = cheerio.load(response.data);
+                const products = [];
+
+                $('.TabsConts .prd_info').each((index, element) => {
+                    const rank = index + 1;
+                    const brand = $(element).find('.tx_brand').text().trim();
+                    const name = $(element).find('.tx_name').text().trim();
+                    const originalPrice = $(element).find('.tx_org').text().trim() || '없음';
+                    const salePrice = $(element).find('.tx_cur').text().trim() || '없음';
+                    const promotion = $(element).find('.icon_flag').text().trim() || '없음';
+                    
+                    const product = {
+                        rank,
+                        brand,
+                        name,
+                        originalPrice,
+                        salePrice,
+                        promotion,
+                        date: today,
+                        time: timeStr, // 크롤링 시간 저장
+                        category
+                    };
+                    
+                    products.push(product);
+                    
+                    // 전체 제품 목록에도 추가 (검색용)
+                    if (!productCache.allProducts.some(p => 
+                        p.name === name && 
+                        p.category === category && 
+                        p.time === timeStr)) {
+                        productCache.allProducts.push(product);
+                    }
+                });
+
+                // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
+                if (!productCache.data) productCache.data = {};
+                
+                // 기존 데이터와 새 데이터 병합
+                const mergedData = [...products, ...(productCache.data[category] || [])];
+                
+                // 병합된 데이터를 순위, 날짜, 시간 순으로 정렬
+                productCache.data[category] = mergedData.sort((a, b) => {
+                    // 순위 기준으로 오름차순 정렬
+                    if (a.rank !== b.rank) {
+                        return a.rank - b.rank;
+                    }
+                    
+                    // 같은 순위라면 날짜 기준으로 내림차순 정렬 (최신 날짜 우선)
+                    if (a.date !== b.date) {
+                        return b.date.localeCompare(a.date);
+                    }
+                    
+                    // 날짜까지 같다면 시간으로 내림차순 정렬 (최신 시간 우선)
+                    if (a.time && b.time) {
+                        return b.time.localeCompare(a.time);
+                    }
+                    
+                    return 0;
+                });
+            }
             
-            // 1~2초 랜덤 딜레이
-            await new Promise(res => setTimeout(res, 1000 + Math.random() * 1000));
-            
-            // 크롤링 로직
-            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
-            
-            const response = await axios.get(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            // 전체 목록도 정렬
+            productCache.allProducts.sort((a, b) => {
+                // 카테고리 기준으로 정렬
+                if (a.category !== b.category) {
+                    return a.category.localeCompare(b.category);
                 }
-            });
-
-            const $ = cheerio.load(response.data);
-            const products = [];
-
-            $('.TabsConts .prd_info').each((index, element) => {
-                const rank = index + 1;
-                const brand = $(element).find('.tx_brand').text().trim();
-                const name = $(element).find('.tx_name').text().trim();
-                const originalPrice = $(element).find('.tx_org').text().trim() || '없음';
-                const salePrice = $(element).find('.tx_cur').text().trim() || '없음';
-                const promotion = $(element).find('.icon_flag').text().trim() || '없음';
                 
-                const product = {
-                    rank,
-                    brand,
-                    name,
-                    originalPrice,
-                    salePrice,
-                    promotion,
-                    date: today,
-                    time: timeStr, // 크롤링 시간 저장
-                    category
-                };
-                
-                products.push(product);
-                
-                // 전체 제품 목록에도 추가 (검색용)
-                if (!productCache.allProducts.some(p => 
-                    p.name === name && 
-                    p.category === category && 
-                    p.time === timeStr)) {
-                    productCache.allProducts.push(product);
-                }
-            });
-
-            // 캐시 업데이트 (기존 데이터 유지하면서 새 데이터 추가)
-            if (!productCache.data) productCache.data = {};
-            
-            // 기존 데이터와 새 데이터 병합
-            const mergedData = [...products, ...(productCache.data[category] || [])];
-            
-            // 병합된 데이터를 순위, 날짜, 시간 순으로 정렬
-            productCache.data[category] = mergedData.sort((a, b) => {
-                // 순위 기준으로 오름차순 정렬
+                // 순위 기준으로 정렬
                 if (a.rank !== b.rank) {
                     return a.rank - b.rank;
                 }
                 
-                // 같은 순위라면 날짜 기준으로 내림차순 정렬 (최신 날짜 우선)
+                // 날짜 기준으로 정렬 (최신 우선)
                 if (a.date !== b.date) {
                     return b.date.localeCompare(a.date);
                 }
                 
-                // 날짜까지 같다면 시간으로 내림차순 정렬 (최신 시간 우선)
+                // 시간 기준으로 정렬 (최신 우선)
                 if (a.time && b.time) {
                     return b.time.localeCompare(a.time);
                 }
                 
                 return 0;
             });
+            
+            // 현재 KST 시간을 정확하게 저장
+            productCache.timestamp = getKSTTime();
+            console.log(`[${new Date().toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZone: 'Asia/Seoul'
+            })}] 3시간 정기 크롤링 완료`);
+            
+            // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
+            console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
+            await captureOliveyoungMainRanking(timeStr);
+            
+            // 해당 타임스탬프 캡처본만 메일로 분할 전송
+            await organizeAndSendCapturesSplit(timeStr, today);
+            
+            // 다음 크롤링 스케줄링
+            scheduleNextCrawl();
+            
+            // 크롤링 완료 후 랭킹 데이터 저장
+            try {
+                fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(productCache, null, 2));
+                console.log('랭킹 데이터 저장 완료:', RANKING_DATA_PATH);
+            } catch (e) {
+                console.error('랭킹 데이터 저장 실패:', e);
+            }
+            
+        } catch (error) {
+            console.error(`크롤링 오류:`, error);
+            // 오류 메일 발송
+            try {
+                const now = new Date();
+                await transporter.sendMail({
+                    from: process.env.EMAIL_USER,
+                    to: process.env.EMAIL_USER,
+                    subject: `[올리브영 크롤링 오류] ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`,
+                    text: `오류 발생 시각: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n\n에러 내용:\n${error.stack || error.message || error}`
+                });
+                console.log('크롤링 오류 메일 발송 완료');
+            } catch (mailErr) {
+                console.error('크롤링 오류 메일 발송 실패:', mailErr);
+            }
+            // 오류가 발생해도 다음 크롤링은 스케줄링
+            scheduleNextCrawl();
         }
-        
-        // 전체 목록도 정렬
-        productCache.allProducts.sort((a, b) => {
-            // 카테고리 기준으로 정렬
-            if (a.category !== b.category) {
-                return a.category.localeCompare(b.category);
-            }
-            
-            // 순위 기준으로 정렬
-            if (a.rank !== b.rank) {
-                return a.rank - b.rank;
-            }
-            
-            // 날짜 기준으로 정렬 (최신 우선)
-            if (a.date !== b.date) {
-                return b.date.localeCompare(a.date);
-            }
-            
-            // 시간 기준으로 정렬 (최신 우선)
-            if (a.time && b.time) {
-                return b.time.localeCompare(a.time);
-            }
-            
-            return 0;
-        });
-        
-        // 현재 KST 시간을 정확하게 저장
-        productCache.timestamp = getKSTTime();
-        console.log(`[${new Date().toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-            timeZone: 'Asia/Seoul'
-        })}] 3시간 정기 크롤링 완료`);
-        
-        // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
-        console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
-        await captureOliveyoungMainRanking(timeStr);
-        
-        // 해당 타임스탬프 캡처본만 메일로 분할 전송
-        await organizeAndSendCapturesSplit(timeStr, today);
-        
-        // 다음 크롤링 스케줄링
-        scheduleNextCrawl();
-        
-        // 크롤링 완료 후 랭킹 데이터 저장
-        try {
-            fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(productCache, null, 2));
-            console.log('랭킹 데이터 저장 완료:', RANKING_DATA_PATH);
-        } catch (e) {
-            console.error('랭킹 데이터 저장 실패:', e);
-        }
-        
-    } catch (error) {
-        console.error(`크롤링 오류:`, error);
-        // 오류 메일 발송
-        try {
-            const now = new Date();
-            await transporter.sendMail({
-                from: process.env.EMAIL_USER,
-                to: process.env.EMAIL_USER,
-                subject: `[올리브영 크롤링 오류] ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`,
-                text: `오류 발생 시각: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n\n에러 내용:\n${error.stack || error.message || error}`
-            });
-            console.log('크롤링 오류 메일 발송 완료');
-        } catch (mailErr) {
-            console.error('크롤링 오류 메일 발송 실패:', mailErr);
-        }
-        // 오류가 발생해도 다음 크롤링은 스케줄링
-        scheduleNextCrawl();
+    } catch (err) {
+        console.error('crawlAllCategories 전체 에러:', err);
+        // 필요시 슬랙/이메일 등으로 알림
     }
 }
 
@@ -1004,4 +1009,13 @@ app.listen(port, () => {
     }, {
         timezone: 'Asia/Seoul'
     });
+});
+
+// 예기치 못한 에러로 서버가 죽지 않도록 핸들러 추가
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  // 서버를 죽이지 않고 에러만 로깅
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection:', reason);
 });
