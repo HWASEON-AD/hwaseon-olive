@@ -388,18 +388,16 @@ async function crawlAllCategories() {
 
                     if (!productCache.data) productCache.data = {};
                     
-                    const mergedData = [...products, ...(productCache.data[category] || [])];
-                    
-                    const sortedData = [...mergedData].sort((a, b) => {
-                        // 날짜 내림차순
+                    const sortedData = [...products].sort((a, b) => {
+                        // 날짜 내림차순 (최신 날짜가 위)
                         const dateCompare = (b.date || '').localeCompare(a.date || '');
                         if (dateCompare !== 0) return dateCompare;
 
-                        // 시간 내림차순
+                        // 시간 내림차순 (최신 시간이 위)
                         const timeCompare = (b.time || '').localeCompare(a.time || '');
                         if (timeCompare !== 0) return timeCompare;
 
-                        // 순위 오름차순
+                        // 순위 오름차순 (1등이 위)
                         const rankA = parseInt(a.rank) || 999;
                         const rankB = parseInt(b.rank) || 999;
                         return rankA - rankB;
