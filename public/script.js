@@ -482,6 +482,33 @@ document.addEventListener('DOMContentLoaded', () => {
             
             console.log('엑셀 다운로드 시작', data.length + '개 항목');
             
+            // 데이터 정렬: 1. 시간(내림차순) 2. 날짜(내림차순) 3. 카테고리 4. 순위(오름차순)
+            const sortedData = [...data].sort((a, b) => {
+                // 시간 비교 (내림차순)
+                const timeA = a.time || '';
+                const timeB = b.time || '';
+                if (timeA !== timeB) {
+                    return timeB.localeCompare(timeA);
+                }
+                
+                // 날짜 비교 (내림차순)
+                const dateCompare = (b.date || '').localeCompare(a.date || '');
+                if (dateCompare !== 0) {
+                    return dateCompare;
+                }
+                
+                // 카테고리 비교
+                const categoryCompare = (a.category || '').localeCompare(b.category || '');
+                if (categoryCompare !== 0) {
+                    return categoryCompare;
+                }
+                
+                // 순위 비교 (오름차순)
+                const rankA = parseInt(a.rank) || 999;
+                const rankB = parseInt(b.rank) || 999;
+                return rankA - rankB;
+            });
+            
             // ExcelJS 워크북 생성
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet('Sheet1');
@@ -517,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             // 데이터 추가
-            data.forEach(item => {
+            sortedData.forEach(item => {
                 // 가격에서 숫자만 추출하는 함수
                 const extractNumber = (price) => {
                     if (!price || price === '없음') return null;
