@@ -390,12 +390,22 @@ async function crawlAllCategories() {
                     
                     const mergedData = [...products, ...(productCache.data[category] || [])];
                     
-                    productCache.data[category] = mergedData.sort((a, b) => {
-                        if (a.rank !== b.rank) return a.rank - b.rank;
-                        if (a.date !== b.date) return b.date.localeCompare(a.date);
-                        if (a.time && b.time) return b.time.localeCompare(a.time);
-                        return 0;
+                    const sortedData = [...mergedData].sort((a, b) => {
+                        // 날짜 내림차순
+                        const dateCompare = (b.date || '').localeCompare(a.date || '');
+                        if (dateCompare !== 0) return dateCompare;
+
+                        // 시간 내림차순
+                        const timeCompare = (b.time || '').localeCompare(a.time || '');
+                        if (timeCompare !== 0) return timeCompare;
+
+                        // 순위 오름차순
+                        const rankA = parseInt(a.rank) || 999;
+                        const rankB = parseInt(b.rank) || 999;
+                        return rankA - rankB;
                     });
+
+                    productCache.data[category] = sortedData;
 
                     console.log(`${category} 크롤링 성공!`);
                     
