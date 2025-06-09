@@ -74,12 +74,31 @@ let scheduledCrawlTimer;
 if (fs.existsSync(RANKING_DATA_PATH)) {
     try {
         const raw = fs.readFileSync(RANKING_DATA_PATH, 'utf-8');
-        productCache = JSON.parse(raw);
+        let loaded = JSON.parse(raw);
+        // 복구: 카테고리별로 배열이 아니면 배열로 변환
+        if (loaded.data) {
+            for (const category of Object.keys(loaded.data)) {
+                if (!Array.isArray(loaded.data[category])) {
+                    // 기존 데이터가 배열이 아니면 배열로 변환
+                    loaded.data[category] = Object.values(loaded.data[category]);
+                }
+                // 중복 제거 및 정렬
+                loaded.data[category] = deduplicate(loaded.data[category]);
+                loaded.data[category].sort((a, b) => {
+                    const dateCompare = (b.date || '').localeCompare(a.date || '');
+                    if (dateCompare !== 0) return dateCompare;
+                    const timeCompare = (b.time || '').localeCompare(a.time || '');
+                    if (timeCompare !== 0) return timeCompare;
+                    return 0;
+                });
+            }
+        }
+        productCache = loaded;
         // timestamp를 Date 객체로 복원
         if (productCache.timestamp) {
             productCache.timestamp = new Date(productCache.timestamp);
         }
-        console.log('랭킹 데이터 복원 완료:', RANKING_DATA_PATH);
+        console.log('랭킹 데이터 복원 및 복구 완료:', RANKING_DATA_PATH);
     } catch (e) {
         console.error('랭킹 데이터 복원 실패:', e);
     }
@@ -388,22 +407,16 @@ async function crawlAllCategories() {
 
                     if (!productCache.data) productCache.data = {};
                     
-                    const sortedData = [...products].sort((a, b) => {
-                        // 날짜 내림차순 (최신 날짜가 위)
+                    if (!productCache.data[category]) productCache.data[category] = [];
+                    productCache.data[category].push(...products);
+                    productCache.data[category] = deduplicate(productCache.data[category]);
+                    productCache.data[category].sort((a, b) => {
                         const dateCompare = (b.date || '').localeCompare(a.date || '');
                         if (dateCompare !== 0) return dateCompare;
-
-                        // 시간 내림차순 (최신 시간이 위)
                         const timeCompare = (b.time || '').localeCompare(a.time || '');
                         if (timeCompare !== 0) return timeCompare;
-
-                        // 순위 오름차순 (1등이 위)
-                        const rankA = parseInt(a.rank) || 999;
-                        const rankB = parseInt(b.rank) || 999;
-                        return rankA - rankB;
+                        return 0;
                     });
-
-                    productCache.data[category] = sortedData;
 
                     console.log(`${category} 크롤링 성공!`);
                     
@@ -1101,3 +1114,13 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection:', reason);
 });
+
+// deduplicate 함수 추가 (카테고리별, 날짜+시간+순위+제품명 기준)
+function deduplicate(arr) {
+    const map = new Map();
+    arr.forEach(item => {
+        const key = `${item.date}_${item.time}_${item.rank}_${item.name}`;
+        map.set(key, item);
+    });
+    return Array.from(map.values());
+}

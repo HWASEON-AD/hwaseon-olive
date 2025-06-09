@@ -482,31 +482,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             console.log('엑셀 다운로드 시작', data.length + '개 항목');
             
-            // 데이터 정렬: 1. 시간(내림차순) 2. 날짜(내림차순) 3. 카테고리 4. 순위(오름차순)
+            // 데이터 정렬: 날짜 내림차순, 시간 내림차순 (순위는 신경쓰지 않음)
             const sortedData = [...data].sort((a, b) => {
-                // 시간 비교 (내림차순)
-                const timeA = a.time || '';
-                const timeB = b.time || '';
-                if (timeA !== timeB) {
-                    return timeB.localeCompare(timeA);
-                }
-                
-                // 날짜 비교 (내림차순)
+                // 날짜 내림차순 (최신 날짜가 위)
                 const dateCompare = (b.date || '').localeCompare(a.date || '');
-                if (dateCompare !== 0) {
-                    return dateCompare;
-                }
-                
-                // 카테고리 비교
-                const categoryCompare = (a.category || '').localeCompare(b.category || '');
-                if (categoryCompare !== 0) {
-                    return categoryCompare;
-                }
-                
-                // 순위 비교 (오름차순)
-                const rankA = parseInt(a.rank) || 999;
-                const rankB = parseInt(b.rank) || 999;
-                return rankA - rankB;
+                if (dateCompare !== 0) return dateCompare;
+
+                // 시간 내림차순 (최신 시간이 위)
+                const timeCompare = (b.time || '').localeCompare(a.time || '');
+                if (timeCompare !== 0) return timeCompare;
+
+                // 순위는 신경쓰지 않음
+                return 0;
             });
             
             // ExcelJS 워크북 생성
@@ -732,25 +719,18 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // 데이터 정렬: 1. 시간(오름차순) 2. 날짜(오름차순) 3. 순위(오름차순)
+        // 데이터 정렬: 날짜 내림차순, 시간 내림차순 (순위, 카테고리 등은 신경쓰지 않음)
         const sortedData = [...data].sort((a, b) => {
-            // 시간 비교 (01:30, 04:30, 07:30, 10:30, 13:30, 16:30, 19:30, 22:30 순서)
-            const timeA = a.time || '';
-            const timeB = b.time || '';
-            if (timeA !== timeB) {
-                return timeA.localeCompare(timeB);
-            }
-            
-            // 같은 시간이라면 날짜 기준으로 정렬 (오래된 날짜 우선)
-            const dateCompare = (a.date || '').localeCompare(b.date || '');
-            if (dateCompare !== 0) {
-                return dateCompare;
-            }
-            
-            // 날짜까지 같다면 순위로 정렬 (낮은 순위 우선)
-            const rankA = parseInt(a.rank) || 999;
-            const rankB = parseInt(b.rank) || 999;
-            return rankA - rankB;
+            // 날짜 내림차순 (최신 날짜가 위)
+            const dateCompare = (b.date || '').localeCompare(a.date || '');
+            if (dateCompare !== 0) return dateCompare;
+
+            // 시간 내림차순 (최신 시간이 위)
+            const timeCompare = (b.time || '').localeCompare(a.time || '');
+            if (timeCompare !== 0) return timeCompare;
+
+            // 그 외는 신경쓰지 않음
+            return 0;
         });
         
         // 검색어 가져오기
@@ -913,7 +893,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 데이터 정렬: 날짜 내림차순, 시간 내림차순, 순위 오름차순
+        // 데이터 정렬: 날짜 내림차순, 시간 내림차순 (순위는 신경쓰지 않음)
         const sortedData = [...data].sort((a, b) => {
             // 날짜 내림차순 (최신 날짜가 위)
             const dateCompare = (b.date || '').localeCompare(a.date || '');
@@ -923,10 +903,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const timeCompare = (b.time || '').localeCompare(a.time || '');
             if (timeCompare !== 0) return timeCompare;
 
-            // 순위 오름차순 (1등이 위)
-            const rankA = parseInt(a.rank) || 999;
-            const rankB = parseInt(b.rank) || 999;
-            return rankA - rankB;
+            // 순위는 신경쓰지 않음
+            return 0;
         });
 
         sortedData.forEach((product, index) => {
