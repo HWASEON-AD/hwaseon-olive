@@ -631,18 +631,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // 제품명으로 검색하는 함수
     async function searchProductByName() {
         const searchTerm = productSearchInput.value.trim();
-        
         if (searchTerm === '') {
             alert('검색어를 입력해주세요.');
             return;
         }
-        
         if (isLoading) return;
-        
         try {
             isLoading = true;
             productSearchBtn.disabled = true;
-            
+            // 로딩 오버레이 표시
+            document.getElementById('loadingOverlay').style.display = 'flex';
             // 로딩 표시
             productSearchTable.innerHTML = `
                 <tr>
@@ -651,11 +649,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     </td>
                 </tr>
             `;
-            
             const category = categorySelect.value;
             const startDate = startDateInput.value;
             const endDate = endDateInput.value;
-            
             // 서버에 검색 요청
             const response = await fetch(`${BASE_URL}/api/search?keyword=${encodeURIComponent(searchTerm)}&startDate=${startDate}&endDate=${endDate}`, {
                 method: 'GET',
@@ -664,26 +660,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Cache-Control': 'no-cache'
                 }
             });
-            
             if (!response.ok) {
                 throw new Error(`서버 오류: ${response.status}`);
             }
-            
             const result = await response.json();
-            
             if (!result.success) {
                 throw new Error(result.error || '검색 실패');
             }
-            
             // 전역 데이터 저장
             searchResultData = result.data;
-            
             // 검색 결과 표시
             displaySearchResults(result.data);
-            
-            // 마지막 크롤링 시간 가져오기 (랭킹 데이터 업데이트마다 다시 가져오지는 않음)
-            // fetchLastCrawlTime(); // 제거: 크롤링 시에만 업데이트되도록
-
         } catch (error) {
             console.error('Search Error:', error);
             // 에러 표시
@@ -699,6 +686,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             isLoading = false;
             productSearchBtn.disabled = false;
+            // 로딩 오버레이 숨기기
+            document.getElementById('loadingOverlay').style.display = 'none';
         }
     }
     

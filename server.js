@@ -12,6 +12,7 @@ const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 const FormData = require('form-data');
 const archiver = require('archiver');
+const os = require('os');
 require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5001;
@@ -515,10 +516,24 @@ async function crawlAllCategories() {
     }
 }
 
+// 임시 프로필 디렉토리 생성
+function createTempChromeProfile() {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-profile-'));
+    return tmpDir;
+}
+
+// 임시 프로필 디렉토리 삭제
+function removeTempChromeProfile(tmpDir) {
+    if (tmpDir && fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+}
+
 async function captureOliveyoungMainRanking(timeStr) {
     let retryCount = 0;
     const maxRetries = 3;
     let driver = null;
+    let tmpProfileDir = null;
     
     async function attemptCapture() {
         console.log('='.repeat(50));
@@ -528,13 +543,12 @@ async function captureOliveyoungMainRanking(timeStr) {
         
         const now = getKSTTime();
         const dateFormatted = now.toISOString().split('T')[0]; // YYYY-MM-DD
-        // const timeFormatted = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
-        // 파일명 포맷: ranking_카테고리_YYYY-MM-DD_HH-MM.jpeg
         let capturedCount = 0;
         const errors = [];
         
         try {
             // Selenium 설정
+            tmpProfileDir = createTempChromeProfile();
             const options = new chrome.Options()
                 .addArguments('--headless')
                 .addArguments('--no-sandbox')
@@ -547,7 +561,8 @@ async function captureOliveyoungMainRanking(timeStr) {
                 .addArguments('--screenshot-quality=80')
                 .addArguments('--disable-gpu')
                 .addArguments('--disable-extensions')
-                .addArguments('--disable-notifications');
+                .addArguments('--disable-notifications')
+                .addArguments(`--user-data-dir=${tmpProfileDir}`);
 
             if (process.env.CHROME_BIN) {
                 options.setChromeBinaryPath(process.env.CHROME_BIN);
@@ -584,7 +599,6 @@ async function captureOliveyoungMainRanking(timeStr) {
                     // 추가 대기 시간
                     await driver.sleep(2000);
                     
-                    
                     // 카테고리 헤더 추가
                     await driver.executeScript(`
                         const categoryDiv = document.createElement('div');
@@ -595,7 +609,6 @@ async function captureOliveyoungMainRanking(timeStr) {
                         document.body.style.marginTop = '40px';
                     `);
                     
-
                     // 스크린샷 캡처
                     const fileName = `ranking_${category}_${dateFormatted}_${timeStr}.jpeg`;
                     const filePath = path.join(capturesDir, fileName);
@@ -609,13 +622,14 @@ async function captureOliveyoungMainRanking(timeStr) {
                     // 카테고리 간 대기 시간
                     await driver.sleep(1000);
                     
-                    // 브라우저 세션 종료 후 새 세션 시작
+                    // 브라우저 세션 종료 후 임시 프로필 삭제, 새 세션 시작
                     await driver.quit();
+                    removeTempChromeProfile(tmpProfileDir);
+                    tmpProfileDir = createTempChromeProfile();
                     driver = await new Builder()
                         .forBrowser('chrome')
-                        .setChromeOptions(options)
+                        .setChromeOptions(options.addArguments(`--user-data-dir=${tmpProfileDir}`))
                         .build();
-                    
                 } catch (error) {
                     console.error(`${category} 캡처 중 오류:`, error.message);
                     errors.push({
@@ -623,32 +637,28 @@ async function captureOliveyoungMainRanking(timeStr) {
                         error: error.message,
                         timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
                     });
-                    
                     // 오류 발생 시 브라우저 재시작
                     try {
                         await driver.quit();
+                        removeTempChromeProfile(tmpProfileDir);
                     } catch (e) {
                         console.error('브라우저 종료 중 오류:', e.message);
                     }
-                    
-                    // 새 브라우저 세션 시작
+                    tmpProfileDir = createTempChromeProfile();
                     driver = await new Builder()
                         .forBrowser('chrome')
-                        .setChromeOptions(options)
+                        .setChromeOptions(options.addArguments(`--user-data-dir=${tmpProfileDir}`))
                         .build();
-                        
                     // 오류 후 잠시 대기
                     await driver.sleep(2000);
                 }
             }
-            
             return {
                 success: capturedCount > 0,
                 capturedCount,
                 totalCategories: Object.keys(CATEGORY_CODES).length,
                 errors: errors.length > 0 ? errors : null
             };
-            
         } catch (error) {
             console.error('캡처 프로세스 오류:', error.message);
             return {
@@ -658,19 +668,17 @@ async function captureOliveyoungMainRanking(timeStr) {
                 totalCategories: Object.keys(CATEGORY_CODES).length,
                 errors
             };
-            
         } finally {
             if (driver) {
                 try {
                     await driver.quit();
-                    console.log('브라우저가 정상적으로 종료되었습니다.');
                 } catch (closeError) {
                     console.error('브라우저 종료 중 오류:', closeError.message);
                 }
             }
+            removeTempChromeProfile(tmpProfileDir);
         }
     }
-    
     // 최대 3번까지 재시도
     while (retryCount < maxRetries) {
         console.log(`캡처 시도 ${retryCount + 1}/${maxRetries}`);
@@ -851,7 +859,7 @@ app.get('/api/ranking', async (req, res) => {
 
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, startDate, endDate } = req.query;
+        const { keyword, startDate, endDate, category } = req.query;
 
         if (!keyword || !startDate) {
             return res.status(400).json({
@@ -877,8 +885,10 @@ app.get('/api/search', (req, res) => {
         };
 
         let matchingResults = [];
-        // 모든 카테고리 순회
-        Object.values(productCache.data).forEach(categoryItems => {
+        
+        // 카테고리가 지정된 경우 해당 카테고리만 검색
+        if (category && productCache.data[category]) {
+            const categoryItems = productCache.data[category];
             categoryItems.forEach(item => {
                 if (!item.date) return;
 
@@ -892,7 +902,24 @@ app.get('/api/search', (req, res) => {
                     matchingResults.push(item);
                 }
             });
-        });
+        } else {
+            // 카테고리가 지정되지 않은 경우 모든 카테고리 검색
+            Object.values(productCache.data).forEach(categoryItems => {
+                categoryItems.forEach(item => {
+                    if (!item.date) return;
+
+                    // 날짜 필터
+                    const inDateRange = isInDateRange(item.date, startDate, endDate);
+                    if (!inDateRange) return;
+
+                    // 키워드 포함 여부 (brand + name 전부 검사)
+                    const text = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
+                    if (text.includes(lowerKeyword)) {
+                        matchingResults.push(item);
+                    }
+                });
+            });
+        }
 
         // 검색 결과를 날짜와 시간 기준으로 정렬 (내림차순)
         matchingResults.sort((a, b) => {

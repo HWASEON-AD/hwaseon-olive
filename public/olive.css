@@ -802,3 +802,16 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     border-left: 3px solid #4285f4;
 }
+
+.spinner {
+  border: 8px solid #f3f3f3;
+  border-top: 8px solid #3498db;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg);}
+  100% { transform: rotate(360deg);}
+}
