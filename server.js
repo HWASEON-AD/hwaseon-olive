@@ -282,8 +282,7 @@ function restartServer() {
         // 재시작 전에 현재 상태 저장
         const restartInfo = {
             timestamp: new Date().toISOString(),
-            nextCrawlTime: getNextCrawlTime(),
-            nextCaptureTime: getNextCaptureTime()
+            nextCrawlTime: getNextCrawlTime()
         };
         fs.writeFileSync(path.join(__dirname, 'restart_info.json'), JSON.stringify(restartInfo, null, 2));
         process.exit(1); // PM2나 다른 프로세스 매니저가 자동으로 재시작
