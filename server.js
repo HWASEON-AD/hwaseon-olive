@@ -320,6 +320,19 @@ async function initializeServer() {
     }
 }
 
+// axios 요청 재시도 유틸 함수
+async function fetchWithRetry(url, options, retries = 2) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await axios.get(url, options);
+        } catch (err) {
+            if (i === retries) throw err;
+            console.log(`[재시도] ${url} (${i+1}/${retries})`);
+            await new Promise(res => setTimeout(res, 2000)); // 2초 대기 후 재시도
+        }
+    }
+}
+
 // 모든 카테고리 크롤링 함수
 async function crawlAllCategories() {
     try {
@@ -359,7 +372,8 @@ async function crawlAllCategories() {
                     
                     const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
                     
-                    const response = await axios.get(url, {
+                    // axios 요청을 fetchWithRetry로 대체, timeout 20000ms
+                    const response = await fetchWithRetry(url, {
                         headers: {
                             'User-Agent': getRandomUserAgent(),
                             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -368,7 +382,7 @@ async function crawlAllCategories() {
                             'Pragma': 'no-cache',
                             'Referer': 'https://www.oliveyoung.co.kr/store/main/main.do'
                         },
-                        timeout: 10000
+                        timeout: 20000
                     });
 
                     const $ = cheerio.load(response.data);
