@@ -315,7 +315,6 @@ async function initializeServer() {
         
         // 다음 크롤링과 캡처 시간 설정
         scheduleNextCrawl();
-        scheduleNextCapture();
         
     } catch (error) {
         console.error('서버 초기화 중 오류 발생:', error);

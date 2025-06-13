@@ -652,8 +652,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const category = categorySelect.value;
             const startDate = startDateInput.value;
             const endDate = endDateInput.value;
-            // 서버에 검색 요청
-            const response = await fetch(`${BASE_URL}/api/search?keyword=${encodeURIComponent(searchTerm)}&startDate=${startDate}&endDate=${endDate}`, {
+            // 서버에 검색 요청 (category 파라미터 추가)
+            const response = await fetch(`${BASE_URL}/api/search?keyword=${encodeURIComponent(searchTerm)}&startDate=${startDate}&endDate=${endDate}&category=${encodeURIComponent(category)}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
