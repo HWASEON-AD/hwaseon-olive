@@ -289,34 +289,54 @@ function restartServer() {
     }, 5000);
 }
 
+// 다음 크롤링 스케줄링 함수
+function scheduleNextCrawl() {
+    // 기존 타이머 제거
+    if (scheduledCrawlTimer) {
+        clearTimeout(scheduledCrawlTimer);
+    }
+    
+    const nextCrawlTime = getNextCrawlTime();
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    
+    // 시간 차이 계산 (밀리초)
+    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
+    
+    const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
+    const hoursUntilNext = Math.floor(minutesUntilNext/60);
+    const remainingMinutes = minutesUntilNext % 60;
+    
+    console.log('='.repeat(50));
+    console.log(`다음 크롤링 예정 시간: ${nextCrawlTime.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    })}`);
+    console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
+    console.log('예정된 작업:');
+    console.log('- 전체 카테고리 크롤링');
+    console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
+    console.log('='.repeat(50));
+    
+    // 다음 크롤링 스케줄링
+    scheduledCrawlTimer = setTimeout(() => {
+        console.log('스케줄된 크롤링 시작...');
+        crawlAllCategories();
+    }, timeUntilNextCrawl);
+}
+
 // 서버 시작 시 실행되는 초기화 함수
 async function initializeServer() {
     try {
-        // 재시작 정보가 있다면 로드
-        const restartInfoPath = path.join(__dirname, 'restart_info.json');
-        if (fs.existsSync(restartInfoPath)) {
-            const restartInfo = JSON.parse(fs.readFileSync(restartInfoPath, 'utf8'));
-            console.log('이전 서버 상태 복구 중...');
-            
-            // 이전 크롤링 시간이 1시간 이내라면 즉시 크롤링 실행
-            const lastCrawlTime = new Date(restartInfo.timestamp);
-            const now = new Date();
-            const hoursSinceLastCrawl = (now - lastCrawlTime) / (1000 * 60 * 60);
-            
-            if (hoursSinceLastCrawl < 1) {
-                console.log('마지막 크롤링으로부터 1시간 이내 재시작. 즉시 크롤링을 시작합니다.');
-                await crawlAllCategories();
-            }
-            
-            // 재시작 정보 파일 삭제
-            fs.unlinkSync(restartInfoPath);
-        }
-        
         // 다음 크롤링과 캡처 시간 설정
         scheduleNextCrawl();
-        
     } catch (error) {
         console.error('서버 초기화 중 오류 발생:', error);
+        // 오류 발생 시에도 다음 크롤링 스케줄링
+        scheduleNextCrawl();
     }
 }
 
@@ -445,22 +465,8 @@ async function crawlAllCategories() {
                         status: error.response ? error.response.status : 'unknown'
                     });
 
-                    // 에러 발생 시 서버 재시작
-                    try {
-                        const now = new Date();
-                        await transporter.sendMail({
-                            from: process.env.EMAIL_USER,
-                            to: process.env.EMAIL_USER,
-                            subject: `[올리브영 크롤링 오류] 서버 재시작 예정`,
-                            text: `오류 발생 시각: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n\n서버를 재시작합니다.\n\n에러 내용:\n${error.stack || error.message || error}`
-                        });
-                        console.log('크롤링 오류 메일 발송 완료');
-                    } catch (mailErr) {
-                        console.error('크롤링 오류 메일 발송 실패:', mailErr);
-                    }
-                    
-                    restartServer();
-                    return;
+                    // 에러 발생 시에도 계속 진행
+                    continue;
                 }
             }
             
@@ -487,10 +493,32 @@ async function crawlAllCategories() {
             
             // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
             console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
-            await captureOliveyoungMainRanking(timeStr);
+            const captureResult = await captureOliveyoungMainRanking(timeStr);
             
-            // 해당 타임스탬프 캡처본만 메일로 분할 전송
-            await organizeAndSendCapturesSplit(timeStr, today);
+            if (!captureResult.success) {
+                console.error('캡처 실패:', captureResult.error);
+                console.log('성공한 카테고리:', captureResult.capturedCategories);
+                
+                // 캡처 실패 시에도 다음 크롤링 스케줄링
+                scheduleNextCrawl();
+                
+                // 에러 메일 발송
+                try {
+                    const now = new Date();
+                    await transporter.sendMail({
+                        from: process.env.EMAIL_USER,
+                        to: process.env.EMAIL_USER,
+                        subject: `[올리브영 캡처 오류] 일부 카테고리 캡처 실패`,
+                        text: `오류 발생 시각: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n\n실패한 카테고리:\n${JSON.stringify(captureResult.errors, null, 2)}\n\n성공한 카테고리:\n${captureResult.capturedCategories.join(', ')}`
+                    });
+                    console.log('캡처 오류 메일 발송 완료');
+                } catch (mailErr) {
+                    console.error('캡처 오류 메일 발송 실패:', mailErr);
+                }
+            } else {
+                // 해당 타임스탬프 캡처본만 메일로 분할 전송
+                await organizeAndSendCapturesSplit(timeStr, today);
+            }
             
             // 다음 크롤링 스케줄링
             scheduleNextCrawl();
@@ -511,20 +539,21 @@ async function crawlAllCategories() {
                 await transporter.sendMail({
                     from: process.env.EMAIL_USER,
                     to: process.env.EMAIL_USER,
-                    subject: `[올리브영 크롤링 오류] 서버 재시작 예정`,
-                    text: `오류 발생 시각: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n\n서버를 재시작합니다.\n\n에러 내용:\n${error.stack || error.message || error}`
+                    subject: `[올리브영 크롤링 오류]`,
+                    text: `오류 발생 시각: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n\n에러 내용:\n${error.stack || error.message || error}`
                 });
                 console.log('크롤링 오류 메일 발송 완료');
             } catch (mailErr) {
                 console.error('크롤링 오류 메일 발송 실패:', mailErr);
             }
             
-            restartServer();
-            return;
+            // 다음 크롤링 스케줄링
+            scheduleNextCrawl();
         }
     } catch (err) {
         console.error('crawlAllCategories 전체 에러:', err);
-        restartServer();
+        // 다음 크롤링 스케줄링
+        scheduleNextCrawl();
     }
 }
 
@@ -546,6 +575,7 @@ async function captureOliveyoungMainRanking(timeStr) {
     const maxRetries = 3;
     let driver = null;
     let tmpProfileDir = null;
+    let capturedCategories = new Set(); // 캡처 성공한 카테고리 추적
     
     async function attemptCapture() {
         console.log('='.repeat(50));
@@ -592,84 +622,89 @@ async function captureOliveyoungMainRanking(timeStr) {
             
             // 순차적으로 각 카테고리 처리
             for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
-                try {
-                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
-                    
-                    console.log(`${category} 랭킹 페이지로 이동...`);
-                    
-                    await driver.get(url);
-                    
-                    // 페이지 로딩 대기
-                    await driver.wait(until.elementLocated(By.css('.TabsConts')), 20000);
-                    
-                    // 필수 요소 로딩 대기
-                    await driver.wait(async () => {
-                        const products = await driver.findElements(By.css('.TabsConts .prd_info'));
-                        return products.length > 0;
-                    }, 20000, '상품 목록 로딩 시간 초과');
-                    
-                    // 추가 대기 시간
-                    await driver.sleep(2000);
-                    
-                    // 카테고리 헤더 추가
-                    await driver.executeScript(`
-                        const categoryDiv = document.createElement('div');
-                        categoryDiv.id = 'custom-category-header';
-                        categoryDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background-color:#333;color:white;text-align:center;padding:10px 0;font-size:16px;font-weight:bold;z-index:9999;';
-                        categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
-                        document.body.insertBefore(categoryDiv, document.body.firstChild);
-                        document.body.style.marginTop = '40px';
-                    `);
-                    
-                    // 스크린샷 캡처
-                    const fileName = `ranking_${category}_${dateFormatted}_${timeStr}.jpeg`;
-                    const filePath = path.join(capturesDir, fileName);
-                    await captureFullPageWithSelenium(driver, filePath, category, dateFormatted);
-                    
-                    capturedCount++;
-                    console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
-                    console.log(`진행률: ${capturedCount}/${Object.keys(CATEGORY_CODES).length} (${Math.round(capturedCount/Object.keys(CATEGORY_CODES).length*100)}%)`);
-                    console.log('-'.repeat(50));
-                    
-                    // 카테고리 간 대기 시간
-                    await driver.sleep(1000);
-                    
-                    // 브라우저 세션 종료 후 임시 프로필 삭제, 새 세션 시작
-                    await driver.quit();
-                    removeTempChromeProfile(tmpProfileDir);
-                    tmpProfileDir = createTempChromeProfile();
-                    driver = await new Builder()
-                        .forBrowser('chrome')
-                        .setChromeOptions(options.addArguments(`--user-data-dir=${tmpProfileDir}`))
-                        .build();
-                } catch (error) {
-                    console.error(`${category} 캡처 중 오류:`, error.message);
-                    errors.push({
-                        category,
-                        error: error.message,
-                        timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
-                    });
-                    // 오류 발생 시 브라우저 재시작
-                    try {
-                        await driver.quit();
-                        removeTempChromeProfile(tmpProfileDir);
-                    } catch (e) {
-                        console.error('브라우저 종료 중 오류:', e.message);
-                    }
-                    tmpProfileDir = createTempChromeProfile();
-                    driver = await new Builder()
-                        .forBrowser('chrome')
-                        .setChromeOptions(options.addArguments(`--user-data-dir=${tmpProfileDir}`))
-                        .build();
-                    // 오류 후 잠시 대기
-                    await driver.sleep(2000);
+                // 이미 캡처된 카테고리는 스킵
+                if (capturedCategories.has(category)) {
+                    console.log(`${category}는 이미 캡처 완료되어 스킵합니다.`);
+                    continue;
                 }
+
+                let categoryRetryCount = 0;
+                const maxCategoryRetries = 3;
+                
+                while (categoryRetryCount < maxCategoryRetries) {
+                    try {
+                        const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
+                        
+                        console.log(`${category} 랭킹 페이지로 이동... (시도 ${categoryRetryCount + 1}/${maxCategoryRetries})`);
+                        
+                        await driver.get(url);
+                        
+                        // 페이지 로딩 대기
+                        await driver.wait(until.elementLocated(By.css('.TabsConts')), 20000);
+                        
+                        // 필수 요소 로딩 대기
+                        await driver.wait(async () => {
+                            const products = await driver.findElements(By.css('.TabsConts .prd_info'));
+                            return products.length > 0;
+                        }, 20000, '상품 목록 로딩 시간 초과');
+                        
+                        // 추가 대기 시간
+                        await driver.sleep(2000);
+                        
+                        // 카테고리 헤더 추가
+                        await driver.executeScript(`
+                            const categoryDiv = document.createElement('div');
+                            categoryDiv.id = 'custom-category-header';
+                            categoryDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background-color:#333;color:white;text-align:center;padding:10px 0;font-size:16px;font-weight:bold;z-index:9999;';
+                            categoryDiv.textContent = '${category === '전체' ? '전체 랭킹' : category.replace('_', ' ') + ' 랭킹'}';
+                            document.body.insertBefore(categoryDiv, document.body.firstChild);
+                            document.body.style.marginTop = '40px';
+                        `);
+                        
+                        // 스크린샷 캡처
+                        const fileName = `ranking_${category}_${dateFormatted}_${timeStr}.jpeg`;
+                        const filePath = path.join(capturesDir, fileName);
+                        await captureFullPageWithSelenium(driver, filePath, category, dateFormatted);
+                        
+                        capturedCount++;
+                        capturedCategories.add(category);
+                        console.log(`${category} 랭킹 페이지 캡처 완료: ${fileName}`);
+                        console.log(`진행률: ${capturedCount}/${Object.keys(CATEGORY_CODES).length} (${Math.round(capturedCount/Object.keys(CATEGORY_CODES).length*100)}%)`);
+                        console.log('-'.repeat(50));
+                        
+                        // 성공적으로 캡처했으므로 while 루프 종료
+                        break;
+                        
+                    } catch (error) {
+                        categoryRetryCount++;
+                        console.error(`${category} 캡처 시도 ${categoryRetryCount}/${maxCategoryRetries} 실패:`, error.message);
+                        
+                        if (categoryRetryCount === maxCategoryRetries) {
+                            errors.push({
+                                category,
+                                error: error.message,
+                                timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+                            });
+                        } else {
+                            // 재시도 전 잠시 대기
+                            await driver.sleep(2000);
+                        }
+                    }
+                }
+                
+                // 카테고리 간 대기 시간
+                await driver.sleep(1000);
             }
+            
+            // 모든 카테고리 캡처가 완료되었는지 확인
+            const allCategoriesCaptured = Object.keys(CATEGORY_CODES).every(cat => capturedCategories.has(cat));
+            
             return {
-                success: capturedCount > 0,
+                success: allCategoriesCaptured,
                 capturedCount,
                 totalCategories: Object.keys(CATEGORY_CODES).length,
-                errors: errors.length > 0 ? errors : null
+                errors: errors.length > 0 ? errors : null,
+                capturedCategories: Array.from(capturedCategories)
             };
         } catch (error) {
             console.error('캡처 프로세스 오류:', error.message);
@@ -678,7 +713,8 @@ async function captureOliveyoungMainRanking(timeStr) {
                 error: error.message,
                 capturedCount,
                 totalCategories: Object.keys(CATEGORY_CODES).length,
-                errors
+                errors,
+                capturedCategories: Array.from(capturedCategories)
             };
         } finally {
             if (driver) {
@@ -691,6 +727,7 @@ async function captureOliveyoungMainRanking(timeStr) {
             removeTempChromeProfile(tmpProfileDir);
         }
     }
+    
     // 최대 3번까지 재시도
     while (retryCount < maxRetries) {
         console.log(`캡처 시도 ${retryCount + 1}/${maxRetries}`);
@@ -702,17 +739,20 @@ async function captureOliveyoungMainRanking(timeStr) {
             if (result.errors) {
                 console.log('일부 카테고리 캡처 실패:', result.errors);
             }
-            break;
+            return result;
         }
         
         retryCount++;
         if (retryCount < maxRetries) {
             console.log(`캡처 실패, ${retryCount + 1}번째 재시도 준비 중... (5초 대기)`);
             console.log('실패 원인:', result.error);
+            console.log('성공한 카테고리:', result.capturedCategories);
             await new Promise(resolve => setTimeout(resolve, 5000));
         } else {
             console.log('최대 재시도 횟수 초과, 캡처 작업을 중단합니다.');
             console.log('최종 실패 원인:', result.error);
+            console.log('성공한 카테고리:', result.capturedCategories);
+            return result;
         }
     }
 }
@@ -734,38 +774,6 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     // 파일 시스템에 저장
     await fs.promises.writeFile(filePath, sharpBuffer);
 }
-
-// 다음 크롤링 스케줄링 함수
-function scheduleNextCrawl() {
-    // 기존 타이머 제거
-    if (scheduledCrawlTimer) {
-        clearTimeout(scheduledCrawlTimer);
-    }
-    
-    const nextCrawlTime = getNextCrawlTime();
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    
-    // 시간 차이 계산 (밀리초)
-    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
-    
-    
-    const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
-    const hoursUntilNext = Math.floor(minutesUntilNext/60);
-    const remainingMinutes = minutesUntilNext % 60;
-    
-    console.log('='.repeat(50));
-    console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
-    console.log('예정된 작업:');
-    console.log('- 전체 카테고리 크롤링');
-    console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
-    console.log('='.repeat(50));
-    
-    // 다음 크롤링 스케줄링
-    scheduledCrawlTimer = setTimeout(() => {
-        crawlAllCategories();
-    }, timeUntilNextCrawl);
-}
-
 
 // Express 설정
 app.use(express.json());
