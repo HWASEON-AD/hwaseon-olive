@@ -223,7 +223,7 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
         // 메일 전송
         const mailOptions = {
             from: process.env.EMAIL_USER,
-            to: 'gt.min@hwaseon.com',
+            to: 'hwaseon@hwaseon.com',
             subject: `올리브영 ${dateStr} ${timeStr.replace('-', ':')} 캡처본 (part ${idx+1}/${groups.length}, zip 첨부)` ,
             text: `이번 메일에는 다음 카테고리 캡처가 포함되어 있습니다:\n${categories}`,
             attachments: [

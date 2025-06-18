@@ -304,47 +304,178 @@ tbody tr:hover {
 
 
 @media (max-width: 768px) {
+    body {
+        padding: 0;
+        margin: 0;
+        background: #f8f8f8;
+    }
+    .container {
+        padding: 8px 2vw;
+        margin: 0 auto;
+        border-radius: 14px;
+        max-width: 99vw;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        background: #fff;
+    }
+    header {
+        flex-direction: column;
+        text-align: center;
+        margin-bottom: 4px;
+    }
+    h1 {
+        font-size: 1.1rem;
+        margin-bottom: 2px;
+        letter-spacing: -1px;
+    }
+    .logo-container {
+        margin: 0 0 8px 0;
+    }
+    .hwaseon-logo {
+        width: 70px;
+        height: auto;
+    }
     .filters {
         flex-direction: column;
-        align-items: flex-start;
-    }
-
-    
-    label, select, input[type="date"], button {
+        gap: 8px;
+        margin: 8px 0 0 0;
         width: 100%;
-        margin-bottom: 15px; /* 항목들 사이의 간격 증가 */
+        align-items: stretch;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 12px 8px 8px 8px;
     }
-
-
-    h1 {
-        font-size: 2.5rem; /* 헤더 글꼴 크기 약간 키움 */
-    }
-
-
-    table, #productSearchTable {
-        font-size: 1rem; /* 작은 화면에서 테이블 폰트 크기 증가 */
-    }
-
-
-    table th, table td {
-        word-wrap: break-word; /* 긴 텍스트 줄 바꿈 처리 */
-    }
-
-
-    /* 열 너비 자동 조정 */
-    th:nth-child(1), td:nth-child(1), 
-    th:nth-child(4), td:nth-child(4),
-    th:nth-child(7), td:nth-child(7) {
-        width: 100%; /* 좁은 화면에서는 모든 열을 가득 채움 */
-    }
-
-
-    /* 나머지 열들 */
-    th:nth-child(2), td:nth-child(2),
-    th:nth-child(3), td:nth-child(3),
-    th:nth-child(5), td:nth-child(5),
-    th:nth-child(6), td:nth-child(6) {
+    .filter-group {
+        flex-direction: column;
         width: 100%;
+        gap: 2px;
+        margin-bottom: 0;
+    }
+    .filter-group label {
+        font-size: 0.92rem;
+        margin-bottom: 1px;
+        color: #444;
+    }
+    .filters select,
+    .filters input[type="date"],
+    #productSearchInput {
+        width: 100%;
+        font-size: 0.92rem;
+        padding: 7px 8px;
+        border-radius: 12px;
+        margin-bottom: 2px;
+    }
+    .button-container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+        width: 100%;
+        align-items: center;
+    }
+    .button-container button {
+        width: 100%;
+        font-size: 1rem;
+        padding: 12px 0;
+        border-radius: 22px;
+        margin-left: 0 !important;
+        font-weight: bold;
+        box-shadow: 0 1px 4px rgba(40,167,69,0.06);
+        letter-spacing: -0.5px;
+    }
+    .table-container {
+        margin-top: 12px;
+        overflow-x: auto;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+        padding: 4px 0 2px 0;
+    }
+    table {
+        display: none;
+    }
+    #mobileRankingList, #mobileProductList {
+        display: block !important;
+    }
+    .mobile-card-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+    }
+    .mobile-card {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        padding: 14px 12px 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .mobile-card .card-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.92rem;
+        margin-bottom: 2px;
+    }
+    .mobile-card .card-title {
+        font-weight: bold;
+        font-size: 1.05rem;
+        margin-bottom: 2px;
+        color: #222;
+    }
+    .mobile-card .card-sub {
+        color: #666;
+        font-size: 0.85rem;
+        margin-bottom: 2px;
+    }
+    .mobile-card .card-badge {
+        background: #f2f2f2;
+        border-radius: 8px;
+        padding: 2px 8px;
+        font-size: 0.8rem;
+        color: #333;
+        margin-left: 4px;
+    }
+    .mobile-card .card-price {
+        font-weight: bold;
+        color: #218838;
+        font-size: 1.02rem;
+    }
+    .mobile-card .card-rank {
+        font-weight: bold;
+        color: #28a745;
+        font-size: 1.1rem;
+        margin-right: 8px;
+    }
+    /* 안내문구 */
+    div[style*="color: rgba(0, 0, 0, 0.6)"] {
+        font-size: 0.75rem !important;
+        margin-top: 6px !important;
+    }
+}
+
+/* 태블릿 반응형 스타일 */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .container {
+        padding: 30px;
+    }
+
+    .filters {
+        gap: 30px;
+        margin-left: 30px;
+    }
+
+    .button-container {
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    .button-container button {
+        width: calc(50% - 10px);
+        margin-left: 0 !important;
     }
 }
 
