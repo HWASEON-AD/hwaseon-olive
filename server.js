@@ -491,6 +491,14 @@ async function crawlAllCategories() {
                 timeZone: 'Asia/Seoul'
             })}] 1시간 정기 크롤링 완료`);
             
+            // 크롤링 완료 직후 바로 랭킹 데이터 저장
+            try {
+                fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(productCache, null, 2));
+                console.log('랭킹 데이터 저장 완료:', RANKING_DATA_PATH);
+            } catch (e) {
+                console.error('랭킹 데이터 저장 실패:', e);
+            }
+            
             // 크롤링 완료 후 전체 랭킹 페이지 캡처 실행
             console.log('크롤링 완료 후 전체 랭킹 페이지 캡처 시작...');
             const captureResult = await captureOliveyoungMainRanking(timeStr);
@@ -522,14 +530,6 @@ async function crawlAllCategories() {
             
             // 다음 크롤링 스케줄링
             scheduleNextCrawl();
-            
-            // 크롤링 완료 후 랭킹 데이터 저장
-            try {
-                fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(productCache, null, 2));
-                console.log('랭킹 데이터 저장 완료:', RANKING_DATA_PATH);
-            } catch (e) {
-                console.error('랭킹 데이터 저장 실패:', e);
-            }
             
         } catch (error) {
             console.error(`크롤링 오류:`, error);
