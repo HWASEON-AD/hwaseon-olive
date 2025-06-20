@@ -391,9 +391,6 @@ tbody tr:hover {
         box-shadow: 0 1px 4px rgba(0,0,0,0.03);
         padding: 4px 0 2px 0;
     }
-    table {
-        display: none;
-    }
     #mobileRankingList, #mobileProductList {
         display: block !important;
     }
@@ -899,14 +896,12 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
 }
 
 .logo-container {
+    margin: 0;
     text-align: right;
-    margin-right: 150px;
-    margin-top: -20px;
-    margin-bottom: 30px;
 }
 
 .hwaseon-logo {
-    max-width: 150px;
+    max-width: 120px;
     height: auto;
 }
 
@@ -945,4 +940,20 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
 @keyframes spin {
   0% { transform: rotate(0deg);}
   100% { transform: rotate(360deg);}
+}
+
+.oy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding: 0 20px;
+}
+
+.oy-header h1 {
+    font-size: 2.3rem;
+    font-weight: 600;
+    margin: 0;
+    color: #333;
+    text-align: left;
 }
