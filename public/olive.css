@@ -942,10 +942,4 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
   100% { transform: rotate(360deg);}
 }
 
-.oy-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-    padding: 0 20px;
-}
+
