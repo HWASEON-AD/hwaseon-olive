@@ -7,10 +7,10 @@ const path = require('path');
 const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
+const chromedriverPath = path.join(__dirname, 'chromedriver', 'chromedriver-mac-arm64', 'chromedriver');
 const sharp = require('sharp');
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
-const FormData = require('form-data');
 const archiver = require('archiver');
 const os = require('os');
 require('dotenv').config();
@@ -24,6 +24,7 @@ if (!fs.existsSync(capturesDir)) {
   fs.mkdirSync(capturesDir, { recursive: true });
 }
 
+chromedriver.install();
 
 // 카테고리별 상품 코드
 const CATEGORY_CODES = {
@@ -58,7 +59,6 @@ app.use(cors());
 // 정적 파일 서빙을 위한 미들웨어 설정
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
-
 
 
 // 메모리 캐시 - 크롤링 결과 저장
@@ -252,8 +252,6 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
         }
     }
 }
-
-
 
 // User-Agent 목록
 const USER_AGENTS = [
@@ -613,9 +611,11 @@ async function captureOliveyoungMainRanking(timeStr) {
             console.log('Chrome 옵션:', options);
             console.log('브라우저 실행 시도...');
             
+            const service = new chrome.ServiceBuilder(chromedriverPath);
             driver = await new Builder()
                 .forBrowser('chrome')
                 .setChromeOptions(options)
+                .setChromeService(service)
                 .build();
                 
             console.log('브라우저 실행 성공!');
@@ -1161,6 +1161,7 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection:', reason);
 });
+
 
 // deduplicate 함수 추가 (카테고리별, 날짜+시간+순위+제품명 기준)
 function deduplicate(arr) {

@@ -949,11 +949,3 @@ th:nth-child(8), td:nth-child(8) { /* 행사 */
     margin-bottom: 30px;
     padding: 0 20px;
 }
-
-.oy-header h1 {
-    font-size: 2.3rem;
-    font-weight: 600;
-    margin: 0;
-    color: #333;
-    text-align: left;
-}
