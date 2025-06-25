@@ -33,9 +33,9 @@ ENTRYPOINT ["dumb-init", "--"]
 
 CMD [ "node", "server.js" ]
 
-# Additional steps for Chrome installation
+# 크롬 137 설치
 RUN apt-get update && apt-get install -y wget unzip
-RUN wget https://storage.googleapis.com/chrome-for-testing-public/138.0.7204.49/linux64/chrome-linux64.zip
+RUN wget https://storage.googleapis.com/chrome-for-testing-public/137.0.7012.124/linux64/chrome-linux64.zip
 RUN unzip chrome-linux64.zip
 RUN mv chrome-linux64 /opt/chrome
-RUN ln -s /opt/chrome/chrome /usr/bin/google-chrome 
+RUN ln -s /opt/chrome/chrome /usr/bin/google-chrome

@@ -7,7 +7,6 @@ const path = require('path');
 const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
-const chromedriverPath = path.join(__dirname, 'chromedriver', 'chromedriver-linux64', 'chromedriver');
 const sharp = require('sharp');
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
@@ -23,6 +22,7 @@ const capturesDir = path.join(__dirname, 'public', 'captures');
 if (!fs.existsSync(capturesDir)) {
   fs.mkdirSync(capturesDir, { recursive: true });
 }
+
 
 // 카테고리별 상품 코드
 const CATEGORY_CODES = {
@@ -57,6 +57,7 @@ app.use(cors());
 // 정적 파일 서빙을 위한 미들웨어 설정
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
+
 
 
 // 메모리 캐시 - 크롤링 결과 저장
@@ -124,7 +125,6 @@ async function findChrome() {
         return '/usr/bin/google-chrome-stable';
     }
 }
-
 
 
 function getKSTTime() {
@@ -241,13 +241,14 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
     }
 }
 
+
 // User-Agent 목록
 const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.49 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.49 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.49 Safari/537.36 Edg/138.0.7204.49',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59'
 ];
 
 // 랜덤 딜레이 함수
@@ -260,20 +261,6 @@ function getRandomUserAgent() {
     return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
-// 서버 재시작 함수
-function restartServer() {
-    console.log('서버 재시작을 시도합니다...');
-    // 5초 후 서버 재시작
-    setTimeout(() => {
-        // 재시작 전에 현재 상태 저장
-        const restartInfo = {
-            timestamp: new Date().toISOString(),
-            nextCrawlTime: getNextCrawlTime()
-        };
-        fs.writeFileSync(path.join(__dirname, 'restart_info.json'), JSON.stringify(restartInfo, null, 2));
-        process.exit(1); // PM2나 다른 프로세스 매니저가 자동으로 재시작
-    }, 5000);
-}
 
 // 다음 크롤링 스케줄링 함수
 function scheduleNextCrawl() {
@@ -591,7 +578,8 @@ async function captureOliveyoungMainRanking(timeStr) {
                 .addArguments('--disable-extensions')
                 .addArguments('--disable-notifications')
                 .addArguments(`--user-data-dir=${tmpProfileDir}`)
-                .setChromeBinaryPath('/opt/chrome/chrome');
+                .setChromeBinaryPath('/usr/bin/google-chrome');
+                
 
             if (process.env.CHROME_BIN) {
                 options.setChromeBinaryPath(process.env.CHROME_BIN);
@@ -600,11 +588,9 @@ async function captureOliveyoungMainRanking(timeStr) {
             console.log('Chrome 옵션:', options);
             console.log('브라우저 실행 시도...');
             
-            const service = new chrome.ServiceBuilder(chromedriverPath);
             driver = await new Builder()
                 .forBrowser('chrome')
                 .setChromeOptions(options)
-                .setChromeService(service)
                 .build();
                 
             console.log('브라우저 실행 성공!');
@@ -1150,7 +1136,6 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection:', reason);
 });
-
 
 // deduplicate 함수 추가 (카테고리별, 날짜+시간+순위+제품명 기준)
 function deduplicate(arr) {
