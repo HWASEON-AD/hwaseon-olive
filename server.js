@@ -578,7 +578,7 @@ async function captureOliveyoungMainRanking(timeStr) {
                 .addArguments('--disable-extensions')
                 .addArguments('--disable-notifications')
                 .addArguments(`--user-data-dir=${tmpProfileDir}`)
-                .setChromeBinaryPath('/usr/bin/google-chrome');
+                //.setChromeBinaryPath('/usr/bin/google-chrome');
                 
 
             if (process.env.CHROME_BIN) {
