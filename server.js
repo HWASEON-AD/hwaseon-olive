@@ -7,7 +7,6 @@ const path = require('path');
 const fs = require('fs');
 const { Builder, By, until } = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
-const chromedriverPath = path.join(__dirname, 'chromedriver', 'chromedriver-mac-arm64', 'chromedriver');
 const sharp = require('sharp');
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
@@ -23,8 +22,6 @@ const capturesDir = path.join(__dirname, 'public', 'captures');
 if (!fs.existsSync(capturesDir)) {
   fs.mkdirSync(capturesDir, { recursive: true });
 }
-
-chromedriver.install();
 
 // 카테고리별 상품 코드
 const CATEGORY_CODES = {
