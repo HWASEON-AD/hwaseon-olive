@@ -125,16 +125,6 @@ async function findChrome() {
     }
 }
 
-// 현재 시간 포맷 함수 (24시간제 HH:MM)
-function getCurrentTimeFormat() {
-    const now = new Date();
-    return now.toLocaleString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Seoul'
-    });
-}
 
 
 function getKSTTime() {
@@ -600,7 +590,8 @@ async function captureOliveyoungMainRanking(timeStr) {
                 .addArguments('--disable-gpu')
                 .addArguments('--disable-extensions')
                 .addArguments('--disable-notifications')
-                .addArguments(`--user-data-dir=${tmpProfileDir}`);
+                .addArguments(`--user-data-dir=${tmpProfileDir}`)
+                .setChromeBinaryPath('/opt/chrome/chrome');
 
             if (process.env.CHROME_BIN) {
                 options.setChromeBinaryPath(process.env.CHROME_BIN);
