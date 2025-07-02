@@ -108,7 +108,7 @@ if (fs.existsSync(RANKING_DATA_PATH)) {
         console.error('랭킹 데이터 복원 실패:', e);
     }
 }
-
+    */
 
 
 // Chrome 실행 경로 설정
@@ -130,7 +130,6 @@ async function findChrome() {
         return '/usr/bin/google-chrome-stable';
     }
 }
-    */
 
 
 function getKSTTime() {
