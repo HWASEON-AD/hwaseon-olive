@@ -301,6 +301,18 @@ async function crawlAllCategories() {
         const kstNow = getKSTTime();
         const yearMonth = kstNow.toISOString().slice(0, 7); // '2025-07'
         const RANKING_DATA_PATH = getRankingDataPath(yearMonth);
+        // 월별 파일 누적 로드
+        let productCache = { data: {}, allProducts: [], timestamp: null };
+        if (fs.existsSync(RANKING_DATA_PATH)) {
+            try {
+                const prev = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
+                if (prev && typeof prev === 'object') {
+                    productCache = prev;
+                }
+            } catch (e) {
+                console.error('기존 월별 랭킹 데이터 로드 실패:', e);
+            }
+        }
         console.log(`[${kstNow.toLocaleString('ko-KR', {
             year: 'numeric',
             month: 'numeric',
@@ -345,36 +357,166 @@ async function crawlAllCategories() {
                 for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
                     console.log(`카테고리 '${category}' 크롤링 중...(Selenium)`);
                     try {
-                        // 2~5초 랜덤 딜레이
-                        await new Promise(res => setTimeout(res, getRandomDelay(2000, 5000)));
+                        // 5~10초 랜덤 딜레이
+                        await new Promise(res => setTimeout(res, getRandomDelay(5000, 10000)));
                         // 올리브영 실제 랭킹 페이지 URL 구조에 맞게 수정
                         const categoryName = category.replace('_', ' ');
                         const encodedCategory = encodeURIComponent(categoryName);
                         const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodedCategory}`;
-                        await driver.get(url);
-                        await driver.wait(until.elementLocated(By.css('.TabsConts .prd_info')), 20000);
-                        await driver.sleep(2000);
-                        // 제품 정보 추출
-                        const products = await driver.findElements(By.css('.TabsConts .prd_info'));
+                        // Cloudflare(Just a moment...) 감지 및 재시도
+                        let cfRetry = 0;
+                        let cfMaxRetry = 3;
+                        while (cfRetry < cfMaxRetry) {
+                            await driver.get(url);
+                            await driver.sleep(4000 + Math.random() * 4000);
+                            const pageTitle = await driver.getTitle();
+                            if (pageTitle.includes('Just a moment')) {
+                                console.log('Cloudflare 대기 페이지 감지, 10초 후 재시도...');
+                                await driver.sleep(10000);
+                                cfRetry++;
+                                continue;
+                            }
+                            break;
+                        }
+                        
+                        // 페이지 로딩 대기
+                        await driver.wait(async () => {
+                            const readyState = await driver.executeScript('return document.readyState');
+                            return readyState === 'complete';
+                        }, 15000, '페이지 로딩 시간 초과');
+                        
+                        // 여러 선택자로 제품 정보 찾기 시도
+                        let products = [];
+                        const productSelectors = [
+                            'li.cate_prd_list_item .prd_info',
+                            '.prd_info',
+                            '.TabsConts .prd_info',
+                            '.best_list .item',
+                            '.best_item',
+                            '.item',
+                            '.product_item',
+                            '.ranking_list .item',
+                            '.list_item',
+                            '.prd_list .prd_info',
+                            '.best_list .prd_info',
+                            '.product_list .item',
+                            '.ranking_item',
+                            '.list_product .item',
+                            '.product_item .prd_info',
+                            '.best_item .prd_info',
+                            '.item .prd_info',
+                            '.prd_info .tx_brand',
+                            '.prd_info .tx_name',
+                            '.item .tx_brand',
+                            '.item .tx_name',
+                            '.prd_info',
+                            '.item',
+                            '.product_item',
+                            '.best_item'
+                        ];
+                        
+                        for (const selector of productSelectors) {
+                            try {
+                                const foundProducts = await driver.findElements(By.css(selector));
+                                if (foundProducts.length > 0) {
+                                    console.log(`제품 요소 발견: ${selector} (${foundProducts.length}개)`);
+                                    products = foundProducts;
+                                    break;
+                                }
+                            } catch (e) {
+                                console.log(`제품 요소 없음: ${selector}`);
+                            }
+                        }
+                        
+                        if (products.length === 0) {
+                            // 페이지 소스 확인
+                            const pageSource = await driver.getPageSource();
+                            console.log('페이지 소스 일부:', pageSource.substring(0, 2000));
+                            
+                            // 현재 URL 확인
+                            const currentUrl = await driver.getCurrentUrl();
+                            console.log('현재 URL:', currentUrl);
+                            
+                            throw new Error('제품 목록을 찾을 수 없습니다');
+                        }
                         const categoryProducts = [];
                         for (let i = 0; i < products.length; i++) {
                             const el = products[i];
-                            const brand = await el.findElement(By.css('.tx_brand')).getText().catch(() => '');
-                            const name = await el.findElement(By.css('.tx_name')).getText().catch(() => '');
-                            const originalPrice = await el.findElement(By.css('.tx_org')).getText().catch(() => '없음');
-                            const salePrice = await el.findElement(By.css('.tx_cur')).getText().catch(() => '없음');
-                            const promotion = await el.findElement(By.css('.icon_flag')).getText().catch(() => '없음');
-                            categoryProducts.push({
-                                rank: i + 1,
-                                brand,
-                                name,
-                                originalPrice,
-                                salePrice,
-                                promotion,
-                                date: today,
-                                time: timeStr,
-                                category
-                            });
+                            
+                            // 다양한 선택자로 제품 정보 추출 시도
+                            const brandSelectors = ['.tx_brand', '.brand', '.prd_brand', '.item_brand'];
+                            const nameSelectors = ['.tx_name', '.name', '.prd_name', '.item_name', '.product_name'];
+                            const originalPriceSelectors = ['.tx_org', '.original_price', '.org_price', '.price_org'];
+                            const salePriceSelectors = ['.tx_cur', '.sale_price', '.cur_price', '.price_cur', '.price'];
+                            const promotionSelectors = ['.icon_flag', '.promotion', '.flag', '.event', '.sale_flag'];
+                            
+                            let brand = '';
+                            let name = '';
+                            let originalPrice = '없음';
+                            let salePrice = '없음';
+                            let promotion = '없음';
+                            
+                            // 브랜드 추출
+                            for (const selector of brandSelectors) {
+                                try {
+                                    brand = await el.findElement(By.css(selector)).getText();
+                                    if (brand && brand.trim()) break;
+                                } catch (e) {}
+                            }
+                            
+                            // 제품명 추출
+                            for (const selector of nameSelectors) {
+                                try {
+                                    name = await el.findElement(By.css(selector)).getText();
+                                    if (name && name.trim()) break;
+                                } catch (e) {}
+                            }
+                            
+                            // 원가 추출
+                            for (const selector of originalPriceSelectors) {
+                                try {
+                                    originalPrice = await el.findElement(By.css(selector)).getText();
+                                    if (originalPrice && originalPrice.trim()) break;
+                                } catch (e) {}
+                            }
+                            
+                            // 판매가 추출
+                            for (const selector of salePriceSelectors) {
+                                try {
+                                    salePrice = await el.findElement(By.css(selector)).getText();
+                                    if (salePrice && salePrice.trim()) break;
+                                } catch (e) {}
+                            }
+                            
+                            // 행사 정보 추출
+                            for (const selector of promotionSelectors) {
+                                try {
+                                    const promoElements = await el.findElements(By.css(selector));
+                                    if (promoElements.length > 0) {
+                                        const promoTexts = [];
+                                        for (const promoEl of promoElements) {
+                                            const txt = await promoEl.getText();
+                                            if (txt && txt.trim()) promoTexts.push(txt.trim());
+                                        }
+                                        if (promoTexts.length > 0) promotion = promoTexts.join(', ');
+                                    }
+                                } catch (e) {}
+                            }
+                            
+                            // 제품 정보가 있는 경우만 추가
+                            if (name && name.trim()) {
+                                categoryProducts.push({
+                                    rank: i + 1,
+                                    brand: brand.trim(),
+                                    name: name.trim(),
+                                    originalPrice: originalPrice.trim(),
+                                    salePrice: salePrice.trim(),
+                                    promotion: promotion.trim(),
+                                    date: today,
+                                    time: timeStr,
+                                    category
+                                });
+                            }
                         }
                         if (!productCache.data) productCache.data = {};
                         if (!productCache.data[category]) productCache.data[category] = [];
