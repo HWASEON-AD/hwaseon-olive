@@ -1,7 +1,7 @@
 FROM node:20-slim
 
 # 1. 필요한 패키지 (wget, unzip, dumb-init) 설치
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
     dumb-init \

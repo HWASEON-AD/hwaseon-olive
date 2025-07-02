@@ -242,13 +242,53 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
 }
 
 
-// User-Agent 목록
+// User-Agent 목록 - 더 최신 버전으로 업데이트
 const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
+];
+
+// 추가 헤더 목록 - 더 현실적인 브라우저 헤더
+const ADDITIONAL_HEADERS = [
+    {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+        'Connection': 'keep-alive',
+        'DNT': '1'
+    },
+    {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"macOS"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+        'Connection': 'keep-alive',
+        'DNT': '1'
+    }
 ];
 
 // 랜덤 딜레이 함수
@@ -261,6 +301,15 @@ function getRandomUserAgent() {
     return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
+// 랜덤 헤더 선택 함수
+function getRandomHeaders() {
+    const baseHeaders = ADDITIONAL_HEADERS[Math.floor(Math.random() * ADDITIONAL_HEADERS.length)];
+    return {
+        ...baseHeaders,
+        'User-Agent': getRandomUserAgent(),
+        'Referer': 'https://www.oliveyoung.co.kr/store/main/main.do'
+    };
+}
 
 // 다음 크롤링 스케줄링 함수
 function scheduleNextCrawl() {
@@ -313,15 +362,43 @@ async function initializeServer() {
     }
 }
 
-// axios 요청 재시도 유틸 함수
-async function fetchWithRetry(url, options, retries = 2) {
+// axios 요청 재시도 유틸 함수 - 개선된 버전
+async function fetchWithRetry(url, headers, retries = 3) {
     for (let i = 0; i <= retries; i++) {
         try {
-            return await axios.get(url, options);
+            const options = {
+                headers: headers,
+                timeout: 30000, // 30초로 증가
+                maxRedirects: 5,
+                validateStatus: function (status) {
+                    return status >= 200 && status < 500; // 403도 일단 받아서 처리
+                }
+            };
+            
+            const response = await axios.get(url, options);
+            
+            // 403 오류인 경우 특별 처리
+            if (response.status === 403) {
+                console.log(`[403 오류] ${url} - 시도 ${i+1}/${retries+1}`);
+                if (i === retries) {
+                    throw new Error(`Request failed with status code 403 after ${retries+1} attempts`);
+                }
+                // 지수 백오프: 5초, 10초, 20초
+                const delay = Math.pow(2, i) * 5000;
+                console.log(`${delay/1000}초 후 재시도...`);
+                await new Promise(res => setTimeout(res, delay));
+                continue;
+            }
+            
+            return response;
         } catch (err) {
             if (i === retries) throw err;
-            console.log(`[재시도] ${url} (${i+1}/${retries})`);
-            await new Promise(res => setTimeout(res, 2000)); // 2초 대기 후 재시도
+            console.log(`[재시도] ${url} (${i+1}/${retries+1})`);
+            
+            // 지수 백오프: 3초, 6초, 12초
+            const delay = Math.pow(2, i) * 3000;
+            console.log(`${delay/1000}초 후 재시도...`);
+            await new Promise(res => setTimeout(res, delay));
         }
     }
 }
@@ -365,19 +442,8 @@ async function crawlAllCategories() {
                     
                     const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
                     
-                    // axios 요청을 fetchWithRetry로 대체, timeout 20000ms
-                    const response = await fetchWithRetry(url, {
-                        headers: {
-                            'User-Agent': getRandomUserAgent(),
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-                            'Cache-Control': 'no-cache',
-                            'Pragma': 'no-cache',
-                            'Referer': 'https://www.oliveyoung.co.kr/store/main/main.do'
-                        },
-                        timeout: 20000
-                    });
-
+                    // axios 요청을 fetchWithRetry로 대체, timeout 30000ms
+                    const response = await fetchWithRetry(url, getRandomHeaders());
                     const $ = cheerio.load(response.data);
                     const products = [];
 
@@ -577,9 +643,34 @@ async function captureOliveyoungMainRanking(timeStr) {
                 .addArguments('--disable-gpu')
                 .addArguments('--disable-extensions')
                 .addArguments('--disable-notifications')
+                .addArguments('--disable-web-security')
+                .addArguments('--disable-features=VizDisplayCompositor')
+                .addArguments('--disable-background-timer-throttling')
+                .addArguments('--disable-backgrounding-occluded-windows')
+                .addArguments('--disable-renderer-backgrounding')
+                .addArguments('--disable-field-trial-config')
+                .addArguments('--disable-ipc-flooding-protection')
+                .addArguments('--disable-hang-monitor')
+                .addArguments('--disable-prompt-on-repost')
+                .addArguments('--disable-client-side-phishing-detection')
+                .addArguments('--disable-component-update')
+                .addArguments('--disable-default-apps')
+                .addArguments('--disable-sync')
+                .addArguments('--metrics-recording-only')
+                .addArguments('--no-first-run')
+                .addArguments('--safebrowsing-disable-auto-update')
+                .addArguments('--disable-translate')
+                .addArguments('--disable-plugins-discovery')
+                .addArguments('--disable-plugins')
+                .addArguments('--enable-javascript')
+                .addArguments('--enable-dom-storage')
+                .addArguments('--enable-local-storage')
+                .addArguments('--enable-session-storage')
+                .addArguments('--enable-cookies')
+                .addArguments('--enable-images')
+                .addArguments('--enable-scripts')
                 .addArguments(`--user-data-dir=${tmpProfileDir}`)
-                //.setChromeBinaryPath('/usr/bin/google-chrome');
-                
+                .addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
             if (process.env.CHROME_BIN) {
                 options.setChromeBinaryPath(process.env.CHROME_BIN);
@@ -615,12 +706,97 @@ async function captureOliveyoungMainRanking(timeStr) {
                         await driver.get(url);
                         
                         // 페이지 로딩 대기
-                        await driver.wait(until.elementLocated(By.css('.TabsConts')), 20000);
+                        await driver.wait(until.elementLocated(By.css('body')), 20000);
+                        await driver.sleep(3000);
                         
-                        // 필수 요소 로딩 대기
+                        // 페이지가 완전히 로드될 때까지 대기
                         await driver.wait(async () => {
-                            const products = await driver.findElements(By.css('.TabsConts .prd_info'));
-                            return products.length > 0;
+                            const readyState = await driver.executeScript('return document.readyState');
+                            return readyState === 'complete';
+                        }, 15000, '페이지 로딩 시간 초과');
+                        
+                        // 추가 대기 시간
+                        await driver.sleep(3000);
+                        
+                        // 여러 선택자로 요소 찾기 시도
+                        let elementFound = false;
+                        const selectors = [
+                            '.TabsConts',
+                            '.prd_info',
+                            '.best_list',
+                            '.product_list',
+                            '.best_item',
+                            '.item',
+                            '.product_item',
+                            '.ranking_list',
+                            '.list_item'
+                        ];
+                        
+                        for (const selector of selectors) {
+                            try {
+                                const elements = await driver.findElements(By.css(selector));
+                                if (elements.length > 0) {
+                                    console.log(`요소 발견: ${selector} (${elements.length}개)`);
+                                    elementFound = true;
+                                    break;
+                                }
+                            } catch (e) {
+                                console.log(`요소 없음: ${selector}`);
+                            }
+                        }
+                        
+                        if (!elementFound) {
+                            // 페이지 소스 확인
+                            const pageSource = await driver.getPageSource();
+                            console.log('페이지 소스 일부:', pageSource.substring(0, 1000));
+                            
+                            // 현재 URL 확인
+                            const currentUrl = await driver.getCurrentUrl();
+                            console.log('현재 URL:', currentUrl);
+                            
+                            // 페이지 제목 확인
+                            const pageTitle = await driver.getTitle();
+                            console.log('페이지 제목:', pageTitle);
+                            
+                            // JavaScript 오류 확인
+                            const jsErrors = await driver.executeScript(`
+                                return window.performance.getEntries().filter(entry => 
+                                    entry.entryType === 'resource' && entry.name.includes('error')
+                                ).length;
+                            `).catch(() => 0);
+                            console.log('JavaScript 오류 수:', jsErrors);
+                            
+                            throw new Error('페이지 로딩 실패 - 필수 요소를 찾을 수 없습니다');
+                        }
+                        
+                        // 추가 대기 시간
+                        await driver.sleep(2000);
+                        
+                        // 필수 요소 로딩 대기 - 더 유연한 선택자 사용
+                        await driver.wait(async () => {
+                            const selectors = [
+                                '.TabsConts .prd_info',
+                                '.prd_info',
+                                '.best_list .item',
+                                '.best_item',
+                                '.item',
+                                '.product_item',
+                                '.ranking_list .item',
+                                '.list_item'
+                            ];
+                            
+                            for (const selector of selectors) {
+                                try {
+                                    const products = await driver.findElements(By.css(selector));
+                                    if (products.length > 0) {
+                                        console.log(`상품 요소 발견: ${selector} (${products.length}개)`);
+                                        return true;
+                                    }
+                                } catch (e) {
+                                    // 무시하고 다음 선택자 시도
+                                }
+                            }
+                            return false;
                         }, 20000, '상품 목록 로딩 시간 초과');
                         
                         // 추가 대기 시간
