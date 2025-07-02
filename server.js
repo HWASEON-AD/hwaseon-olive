@@ -12,6 +12,7 @@ const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 const archiver = require('archiver');
 const os = require('os');
+const chromedriver = require('undetected-chromedriver');
 require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5001;
@@ -339,19 +340,12 @@ async function crawlAllCategories() {
             let tmpProfileDir = null;
             try {
                 tmpProfileDir = createTempChromeProfile();
-                const options = new chrome.Options()
-                    .addArguments('--headless')
+                driver = await new chromedriver.Builder()
+                    .headless()
                     .addArguments('--no-sandbox')
                     .addArguments('--disable-dev-shm-usage')
                     .addArguments('--window-size=1920,1500')
-                    .addArguments(`--user-data-dir=${tmpProfileDir}`)
-                    .addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-                if (process.env.CHROME_BIN) {
-                    options.setChromeBinaryPath(process.env.CHROME_BIN);
-                }
-                driver = await new Builder()
-                    .forBrowser('chrome')
-                    .setChromeOptions(options)
+                    .addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
                     .build();
                 // 모든 카테고리에 대해 크롤링
                 for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
@@ -659,58 +653,12 @@ async function captureOliveyoungMainRanking(timeStr) {
         try {
             // Selenium 설정
             tmpProfileDir = createTempChromeProfile();
-            const options = new chrome.Options()
-                .addArguments('--headless')
+            driver = await new chromedriver.Builder()
+                .headless()
                 .addArguments('--no-sandbox')
                 .addArguments('--disable-dev-shm-usage')
-                .addArguments('--start-maximized')
                 .addArguments('--window-size=1920,1500')
-                .addArguments('--hide-scrollbars')
-                .addArguments('--force-device-scale-factor=1')
-                .addArguments('--screenshot-format=jpeg')
-                .addArguments('--screenshot-quality=80')
-                .addArguments('--disable-gpu')
-                .addArguments('--disable-extensions')
-                .addArguments('--disable-notifications')
-                .addArguments('--disable-web-security')
-                .addArguments('--disable-features=VizDisplayCompositor')
-                .addArguments('--disable-background-timer-throttling')
-                .addArguments('--disable-backgrounding-occluded-windows')
-                .addArguments('--disable-renderer-backgrounding')
-                .addArguments('--disable-field-trial-config')
-                .addArguments('--disable-ipc-flooding-protection')
-                .addArguments('--disable-hang-monitor')
-                .addArguments('--disable-prompt-on-repost')
-                .addArguments('--disable-client-side-phishing-detection')
-                .addArguments('--disable-component-update')
-                .addArguments('--disable-default-apps')
-                .addArguments('--disable-sync')
-                .addArguments('--metrics-recording-only')
-                .addArguments('--no-first-run')
-                .addArguments('--safebrowsing-disable-auto-update')
-                .addArguments('--disable-translate')
-                .addArguments('--disable-plugins-discovery')
-                .addArguments('--disable-plugins')
-                .addArguments('--enable-javascript')
-                .addArguments('--enable-dom-storage')
-                .addArguments('--enable-local-storage')
-                .addArguments('--enable-session-storage')
-                .addArguments('--enable-cookies')
-                .addArguments('--enable-images')
-                .addArguments('--enable-scripts')
-                .addArguments(`--user-data-dir=${tmpProfileDir}`)
-                .addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
-            if (process.env.CHROME_BIN) {
-                options.setChromeBinaryPath(process.env.CHROME_BIN);
-            }
-            
-            console.log('Chrome 옵션:', options);
-            console.log('브라우저 실행 시도...');
-            
-            driver = await new Builder()
-                .forBrowser('chrome')
-                .setChromeOptions(options)
+                .addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
                 .build();
                 
             console.log('브라우저 실행 성공!');
@@ -1215,14 +1163,11 @@ app.use((err, req, res, next) => {
 app.get('/health', async (req, res) => {
     try {
         const chromePath = await findChrome();
-        const driver = await new Builder()
-            .forBrowser('chrome')
-            .setChromeOptions(new chrome.Options()
-                .addArguments('--headless')
-                .addArguments('--no-sandbox')
-                .addArguments('--disable-dev-shm-usage')
-                .addArguments('--window-size=1920,1080')
-            )
+        const driver = await new chromedriver.Builder()
+            .headless()
+            .addArguments('--no-sandbox')
+            .addArguments('--disable-dev-shm-usage')
+            .addArguments('--window-size=1920,1080')
             .build();
         await driver.close();
         res.json({
