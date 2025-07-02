@@ -16,7 +16,10 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5001;
 
-const RANKING_DATA_PATH = '/data/ranking.json';
+// 월별 랭킹 데이터 경로 생성 함수
+function getRankingDataPath(yearMonth) {
+    return `/data/ranking_${yearMonth}.json`;
+}
 
 const capturesDir = path.join(__dirname, 'public', 'captures');
 if (!fs.existsSync(capturesDir)) {
@@ -64,12 +67,14 @@ app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')))
 let productCache = {
     timestamp: new Date(),
     data: {},
-    allProducts: []  // 모든 제품 데이터 (검색용)
+    allProducts: []
 };
 
 // 크롤링 스케줄링 관련 변수
 let scheduledCrawlTimer;
 
+
+/*
 // 서버 시작 시 랭킹 데이터 복원
 if (fs.existsSync(RANKING_DATA_PATH)) {
     try {
@@ -125,6 +130,7 @@ async function findChrome() {
         return '/usr/bin/google-chrome-stable';
     }
 }
+    */
 
 
 function getKSTTime() {
@@ -242,53 +248,13 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
 }
 
 
-// User-Agent 목록 - 더 최신 버전으로 업데이트
+// User-Agent 목록
 const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
-];
-
-// 추가 헤더 목록 - 더 현실적인 브라우저 헤더
-const ADDITIONAL_HEADERS = [
-    {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-        'Connection': 'keep-alive',
-        'DNT': '1'
-    },
-    {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"macOS"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-        'Connection': 'keep-alive',
-        'DNT': '1'
-    }
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59'
 ];
 
 // 랜덤 딜레이 함수
@@ -301,15 +267,6 @@ function getRandomUserAgent() {
     return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
-// 랜덤 헤더 선택 함수
-function getRandomHeaders() {
-    const baseHeaders = ADDITIONAL_HEADERS[Math.floor(Math.random() * ADDITIONAL_HEADERS.length)];
-    return {
-        ...baseHeaders,
-        'User-Agent': getRandomUserAgent(),
-        'Referer': 'https://www.oliveyoung.co.kr/store/main/main.do'
-    };
-}
 
 // 다음 크롤링 스케줄링 함수
 function scheduleNextCrawl() {
@@ -362,43 +319,15 @@ async function initializeServer() {
     }
 }
 
-// axios 요청 재시도 유틸 함수 - 개선된 버전
-async function fetchWithRetry(url, headers, retries = 3) {
+// axios 요청 재시도 유틸 함수
+async function fetchWithRetry(url, options, retries = 2) {
     for (let i = 0; i <= retries; i++) {
         try {
-            const options = {
-                headers: headers,
-                timeout: 30000, // 30초로 증가
-                maxRedirects: 5,
-                validateStatus: function (status) {
-                    return status >= 200 && status < 500; // 403도 일단 받아서 처리
-                }
-            };
-            
-            const response = await axios.get(url, options);
-            
-            // 403 오류인 경우 특별 처리
-            if (response.status === 403) {
-                console.log(`[403 오류] ${url} - 시도 ${i+1}/${retries+1}`);
-                if (i === retries) {
-                    throw new Error(`Request failed with status code 403 after ${retries+1} attempts`);
-                }
-                // 지수 백오프: 5초, 10초, 20초
-                const delay = Math.pow(2, i) * 5000;
-                console.log(`${delay/1000}초 후 재시도...`);
-                await new Promise(res => setTimeout(res, delay));
-                continue;
-            }
-            
-            return response;
+            return await axios.get(url, options);
         } catch (err) {
             if (i === retries) throw err;
-            console.log(`[재시도] ${url} (${i+1}/${retries+1})`);
-            
-            // 지수 백오프: 3초, 6초, 12초
-            const delay = Math.pow(2, i) * 3000;
-            console.log(`${delay/1000}초 후 재시도...`);
-            await new Promise(res => setTimeout(res, delay));
+            console.log(`[재시도] ${url} (${i+1}/${retries})`);
+            await new Promise(res => setTimeout(res, 2000)); // 2초 대기 후 재시도
         }
     }
 }
@@ -407,6 +336,8 @@ async function fetchWithRetry(url, headers, retries = 3) {
 async function crawlAllCategories() {
     try {
         const kstNow = getKSTTime();
+        const yearMonth = kstNow.toISOString().slice(0, 7); // '2025-07'
+        const RANKING_DATA_PATH = getRankingDataPath(yearMonth);
         
         console.log(`[${kstNow.toLocaleString('ko-KR', {
             year: 'numeric',
@@ -442,8 +373,19 @@ async function crawlAllCategories() {
                     
                     const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&selectType=N`;
                     
-                    // axios 요청을 fetchWithRetry로 대체, timeout 30000ms
-                    const response = await fetchWithRetry(url, getRandomHeaders());
+                    // axios 요청을 fetchWithRetry로 대체, timeout 20000ms
+                    const response = await fetchWithRetry(url, {
+                        headers: {
+                            'User-Agent': getRandomUserAgent(),
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache',
+                            'Referer': 'https://www.oliveyoung.co.kr/store/main/main.do'
+                        },
+                        timeout: 20000
+                    });
+
                     const $ = cheerio.load(response.data);
                     const products = [];
 
@@ -530,7 +472,7 @@ async function crawlAllCategories() {
                 timeZone: 'Asia/Seoul'
             })}] 1시간 정기 크롤링 완료`);
             
-            // 크롤링 완료 직후 바로 랭킹 데이터 저장
+            // 크롤링 완료 직후 월별 랭킹 데이터 저장
             try {
                 fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(productCache, null, 2));
                 console.log('랭킹 데이터 저장 완료:', RANKING_DATA_PATH);
@@ -937,86 +879,51 @@ app.get('/', (req, res) => {
 // 랭킹 데이터 가져오기
 app.get('/api/ranking', async (req, res) => {
     try {
-        const { category = '스킨케어', page = 1, startDate, endDate } = req.query;
-        const categoryInfo = CATEGORY_CODES[category] || CATEGORY_CODES['스킨케어'];
-        
-        // 현재 시간
-        const now = new Date();
-        const today = now.toISOString().split('T')[0];
-        
-        console.log('요청된 날짜 범위:', startDate, endDate);
-        
-        // 날짜 필터링 함수
-        const filterByDate = (data) => {
-            // 날짜 선택이 없으면 모든 데이터 반환
-            if (!startDate && !endDate) {
-                return data;
-            }
-            
-            // 날짜 필터링 적용
-            return data.filter(item => {
-                // 날짜가 없는 항목은 제외
-                if (!item.date) return false;
-                
-                // 시작일만 선택된 경우
-                if (startDate && !endDate) {
-                    return item.date === startDate;
-                }
-                
-                // 종료일만 선택된 경우
-                if (!startDate && endDate) {
-                    return item.date === endDate;
-                }
-                
-                // 날짜 범위가 선택된 경우
-                return item.date >= startDate && item.date <= endDate;
-            });
-        };
-        
-        // 데이터 정렬 함수 - 날짜 내림차순, 같은 날짜는 시간 내림차순, 같은 시간은 순위 기준 오름차순
-        const sortByDateAndTime = (data) => {
-            return [...data].sort((a, b) => {
-                // 날짜로 정렬 (내림차순 - 최신 날짜 우선)
-                const dateCompare = b.date.localeCompare(a.date);
-                if (dateCompare !== 0) return dateCompare;
-                
-                // 같은 날짜라면 시간으로 정렬 (내림차순 - 최신 시간 우선)
-                if (a.time && b.time) {
-                    const timeCompare = b.time.localeCompare(a.time);
-                    if (timeCompare !== 0) return timeCompare;
-                }
-                
-                // 같은 날짜와 시간이라면 순위로 정렬 (오름차순)
-                return a.rank - b.rank;
-            });
-        };
-        
-        // 기존에 이미 크롤링한 데이터만 사용
-        if (productCache.data && productCache.data[category]) {
-            // 캐시된 데이터에 날짜 필터 적용
-            const filteredData = filterByDate(productCache.data[category]);
-            // 필터링된 데이터를 날짜와 시간 기준으로 정렬
-            const sortedData = sortByDateAndTime(filteredData);
-            
-            console.log(`캐시에서 ${productCache.data[category].length}개 중 ${filteredData.length}개 필터링됨`);
-            
-            return res.json({
-                success: true,
-                data: sortedData,
-                total: sortedData.length,
-                category,
-                fromCache: true
-            });
-        } else {
-            // 데이터가 없는 경우 빈 배열 반환
+        const { category = '스킨케어', page = 1, startDate, endDate, yearMonth } = req.query;
+        const ym = yearMonth || new Date().toISOString().slice(0, 7); // 기본값: 현재 월
+        const filePath = getRankingDataPath(ym);
+        if (!fs.existsSync(filePath)) {
             return res.json({
                 success: true,
                 data: [],
                 total: 0,
                 category,
-                message: '해당 카테고리의 데이터가 없습니다. 크롤링이 필요합니다.'
+                message: `${ym} 데이터가 없습니다. 크롤링이 필요합니다.`
             });
         }
+        const fileData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        const categoryData = fileData.data && fileData.data[category] ? fileData.data[category] : [];
+        // 날짜 필터
+        const filterByDate = (data) => {
+            if (!startDate && !endDate) return data;
+            return data.filter(item => {
+                if (!item.date) return false;
+                if (startDate && !endDate) return item.date === startDate;
+                if (!startDate && endDate) return item.date === endDate;
+                return item.date >= startDate && item.date <= endDate;
+            });
+        };
+        // 정렬
+        const sortByDateAndTime = (data) => {
+            return [...data].sort((a, b) => {
+                const dateCompare = b.date.localeCompare(a.date);
+                if (dateCompare !== 0) return dateCompare;
+                if (a.time && b.time) {
+                    const timeCompare = b.time.localeCompare(a.time);
+                    if (timeCompare !== 0) return timeCompare;
+                }
+                return a.rank - b.rank;
+            });
+        };
+        const filteredData = filterByDate(categoryData);
+        const sortedData = sortByDateAndTime(filteredData);
+        return res.json({
+            success: true,
+            data: sortedData,
+            total: sortedData.length,
+            category,
+            fromCache: false
+        });
     } catch (error) {
         console.error('랭킹 데이터 조회 오류:', error);
         return res.status(500).json({
@@ -1030,18 +937,26 @@ app.get('/api/ranking', async (req, res) => {
 
 app.get('/api/search', (req, res) => {
     try {
-        const { keyword, startDate, endDate, category } = req.query;
-
+        const { keyword, startDate, endDate, category, yearMonth } = req.query;
         if (!keyword || !startDate) {
             return res.status(400).json({
                 success: false,
                 error: '검색어와 시작 날짜를 입력해주세요.'
             });
         }
-
+        const ym = yearMonth || new Date().toISOString().slice(0, 7);
+        const filePath = getRankingDataPath(ym);
+        if (!fs.existsSync(filePath)) {
+            return res.json({
+                success: true,
+                data: [],
+                total: 0,
+                message: `${ym} 데이터가 없습니다. 크롤링이 필요합니다.`
+            });
+        }
+        const fileData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         const lowerKeyword = keyword.toLowerCase();
-
-        // 날짜 필터 (Date 객체로 비교, endDate까지 포함)
+        // 날짜 필터
         const isInDateRange = (itemDate, startDate, endDate) => {
             if (!startDate && !endDate) return true;
             if (startDate && !endDate) return itemDate === startDate;
@@ -1054,36 +969,22 @@ app.get('/api/search', (req, res) => {
             }
             return false;
         };
-
         let matchingResults = [];
-        
-        // 카테고리가 지정된 경우 해당 카테고리만 검색
-        if (category && productCache.data[category]) {
-            const categoryItems = productCache.data[category];
+        if (category && fileData.data[category]) {
+            const categoryItems = fileData.data[category];
             categoryItems.forEach(item => {
                 if (!item.date) return;
-
-                // 날짜 필터
-                const inDateRange = isInDateRange(item.date, startDate, endDate);
-                if (!inDateRange) return;
-
-                // 키워드 포함 여부 (brand + name 전부 검사)
+                if (!isInDateRange(item.date, startDate, endDate)) return;
                 const text = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
                 if (text.includes(lowerKeyword)) {
                     matchingResults.push(item);
                 }
             });
         } else {
-            // 카테고리가 지정되지 않은 경우 모든 카테고리 검색
-            Object.values(productCache.data).forEach(categoryItems => {
+            Object.values(fileData.data).forEach(categoryItems => {
                 categoryItems.forEach(item => {
                     if (!item.date) return;
-
-                    // 날짜 필터
-                    const inDateRange = isInDateRange(item.date, startDate, endDate);
-                    if (!inDateRange) return;
-
-                    // 키워드 포함 여부 (brand + name 전부 검사)
+                    if (!isInDateRange(item.date, startDate, endDate)) return;
                     const text = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
                     if (text.includes(lowerKeyword)) {
                         matchingResults.push(item);
@@ -1091,28 +992,19 @@ app.get('/api/search', (req, res) => {
                 });
             });
         }
-
-        // 검색 결과를 날짜와 시간 기준으로 정렬 (내림차순)
+        // 정렬: 날짜 내림차순, 시간 내림차순, 카테고리, 순위
         matchingResults.sort((a, b) => {
-            // 날짜로 정렬 (내림차순 - 최신 날짜 우선)
             const dateCompare = b.date.localeCompare(a.date);
             if (dateCompare !== 0) return dateCompare;
-            
-            // 같은 날짜라면 시간으로 정렬 (내림차순 - 최신 시간 우선)
             if (a.time && b.time) {
                 const timeCompare = b.time.localeCompare(a.time);
                 if (timeCompare !== 0) return timeCompare;
             }
-            
-            // 같은 날짜와 시간이라면 카테고리로 정렬
             if (a.category !== b.category) {
                 return a.category.localeCompare(b.category);
             }
-            
-            // 같은 카테고리라면 순위로 정렬
             return a.rank - b.rank;
         });
-
         return res.json({
             success: true,
             data: matchingResults,
