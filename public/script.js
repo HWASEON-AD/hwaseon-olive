@@ -818,7 +818,9 @@ document.addEventListener('DOMContentLoaded', () => {
             let url = `${BASE_URL}/api/ranking?category=${category}`;
             if (startDate) url += `&startDate=${startDate}`;
             if (endDate) url += `&endDate=${endDate}`;
-            
+            // yearMonth 파라미터 추가 (startDate 기준)
+            if (startDate) url += `&yearMonth=${startDate.slice(0, 7)}`;
+
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
