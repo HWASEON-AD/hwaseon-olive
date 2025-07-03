@@ -111,6 +111,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // 초기 시간 표시 업데이트
     fetchLastCrawlTime();
 
+    // 주기적으로 시간 업데이트 (5분마다)
+    setInterval(() => {
+        fetchLastCrawlTime();
+    }, 5 * 60 * 1000); // 5분
+
     // 날짜 관련 함수 - 현재 한국 시간 기준으로 날짜 설정
     function setCurrentDate() {
         // 현재 날짜 객체 생성
