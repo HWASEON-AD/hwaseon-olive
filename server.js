@@ -456,10 +456,7 @@ async function crawlAllCategories() {
                             }
                             return false;
                         }, 20000, '상품 목록 로딩 시간 초과');
-                        let products = await categoryDriver.findElements(By.css('.best_list .item'));
-                        if (products.length === 0) {
-                            products = await categoryDriver.findElements(By.css('.prd_list_type1 .prd_info'));
-                        }
+                        let products = await categoryDriver.findElements(By.css('li.flag'));
                         console.log(`${category} ${page}페이지 상품 개수: ${products.length}개`);
                         for (let i = 0; i < products.length; i++) {
                             if (localProductCache.data[category].length >= 100) break;
