@@ -456,15 +456,18 @@ async function crawlAllCategories() {
                             }
                             return false;
                         }, 20000, '상품 목록 로딩 시간 초과');
-                        const products = await categoryDriver.findElements(By.css('.prd_info, .best_item, .item, .product_item, .ranking_list .item, .list_item'));
+                        const products = await categoryDriver.findElements(By.css('.best_list .item'));
+                        if (products.length === 0) {
+                            products = await categoryDriver.findElements(By.css('.prd_list_type1 .prd_info'));
+                        }
                         console.log(`${category} ${page}페이지 상품 개수: ${products.length}개`);
                         for (let i = 0; i < products.length; i++) {
                             if (localProductCache.data[category].length >= 100) break;
                             try {
                                 const product = products[i];
-                                const nameElement = await product.findElement(By.css('.prd_name, .name, .title, h3, h4')).catch(() => null);
+                                const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
                                 let name = nameElement ? await nameElement.getText() : `상품${totalRank}`;
-                                let brandElement = await product.findElement(By.css('.prd_brand, .brand, .company, .tx_brand')).catch(() => null);
+                                let brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
                                 let brand = brandElement ? await brandElement.getText() : '';
                                 // 브랜드가 비어 있으면 제품명에서 추출
                                 if (!brand && name) {
@@ -486,13 +489,26 @@ async function crawlAllCategories() {
                                 if (brand && name && name.startsWith(brand)) {
                                     name = name.slice(brand.length).trim();
                                 }
-                                const priceElement = await product.findElement(By.css('.prd_price, .price, .cost')).catch(() => null);
-                                const priceText = priceElement ? await priceElement.getText() : '';
-                                const priceMatch = priceText.match(/(\d{1,3}(?:,\d{3})*)/g);
-                                const originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
-                                const salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
+                                // 가격 정보 추출 (더 정확하게)
+                                let originalPrice = '';
+                                let salePrice = '';
+                                const orgPriceElement = await product.findElement(By.css('.prd_price .tx_org .tx_num')).catch(() => null);
+                                const curPriceElement = await product.findElement(By.css('.prd_price .tx_cur .tx_num')).catch(() => null);
+                                if (orgPriceElement) {
+                                    originalPrice = (await orgPriceElement.getText()).replace(/,/g, '');
+                                }
+                                if (curPriceElement) {
+                                    salePrice = (await curPriceElement.getText()).replace(/,/g, '');
+                                }
+                                if (!originalPrice || !salePrice) {
+                                    const priceElement = await product.findElement(By.css('.prd_price')).catch(() => null);
+                                    const priceText = priceElement ? await priceElement.getText() : '';
+                                    const priceMatch = priceText.match(/(\d{1,3}(?:,\d{3})*)/g);
+                                    if (!originalPrice) originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
+                                    if (!salePrice) salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
+                                }
                                 // 행사/프로모션 정보 추출 (여러 개 태그 합치기)
-                                const promoElements = await product.findElements(By.css('.prd_tag, .tag, .promotion, .badge, .flag, .ico_coupon, .ico_today, .ico_gift, .ico_event, .ico_sale'));
+                                const promoElements = await product.findElements(By.css('.icon_flag')).catch(() => []);
                                 let promotion = '';
                                 if (promoElements && promoElements.length > 0) {
                                     const promoTexts = [];
@@ -683,11 +699,22 @@ async function crawlAllCategories() {
                 hour12: false,
                 timeZone: 'Asia/Seoul'
             })}] 1시간 정기 크롤링 및 캡처 완료 (Selenium)`);
+            
+            // 다음 크롤링 스케줄 설정
+            console.log('다음 크롤링 스케줄 설정 중...');
+            scheduleNextCrawl();
+            
         } catch (error) {
             console.error('크롤링 프로세스 오류:', error.message);
+            // 오류 발생 시에도 다음 스케줄 설정
+            console.log('오류 발생으로 인한 다음 크롤링 스케줄 설정 중...');
+            scheduleNextCrawl();
         }
     } catch (err) {
         console.error('crawlAllCategories 전체 에러:', err);
+        // 전체 오류 발생 시에도 다음 스케줄 설정
+        console.log('전체 오류 발생으로 인한 다음 크롤링 스케줄 설정 중...');
+        scheduleNextCrawl();
     }
 }
 
@@ -1178,7 +1205,9 @@ app.get('/api/last-crawl-time', (req, res) => {
             });
         }
         
-        const formattedTime = productCache.timestamp.toLocaleString('ko-KR', {
+        // KST 시간으로 변환하여 표시
+        const kstTimestamp = new Date(productCache.timestamp.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const formattedTime = kstTimestamp.toLocaleString('ko-KR', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -1201,7 +1230,7 @@ app.get('/api/last-crawl-time', (req, res) => {
         // 디버그용 로그
         console.log('현재 서버 시간:', new Date().toLocaleString());
         console.log('현재 KST 시간:', getKSTTime().toLocaleString());
-        console.log('마지막 크롤링 시간:', formattedTime);
+        console.log('마지막 크롤링 시간 (KST):', formattedTime);
         console.log('다음 크롤링 예정 시간:', nextTime);
         
         return res.json({
