@@ -1,7 +1,7 @@
-// ✅ server.js (axios + cheerio 기반 빠른 크롤링)
+// ========================================
+// 📦 모듈 및 환경 설정
+// ========================================
 const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
@@ -12,21 +12,23 @@ const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 const archiver = require('archiver');
 const os = require('os');
-const chromedriver = require('undetected-chromedriver');
 require('dotenv').config();
+
+// Express 앱 및 포트 설정
 const app = express();
 const port = process.env.PORT || 5001;
 
-// 월별 랭킹 데이터 경로 생성 함수
-function getRankingDataPath(yearMonth) {
-    return `/data/ranking_${yearMonth}.json`;
-}
-
+// ========================================
+// 📁 디렉토리 및 파일 경로 설정
+// ========================================
 const capturesDir = path.join(__dirname, 'public', 'captures');
 if (!fs.existsSync(capturesDir)) {
   fs.mkdirSync(capturesDir, { recursive: true });
 }
 
+// ========================================
+// 🏷️ 상수 정의
+// ========================================
 
 // 카테고리별 상품 코드
 const CATEGORY_CODES = {
@@ -53,7 +55,56 @@ const CATEGORY_CODES = {
     '취미_팬시': {fltDispCatNo: '10000030006' }
 };
 
+// User-Agent 목록 (2024년 최신 버전)
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/106.0.0.0',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+];
 
+// ========================================
+// 🔧 유틸리티 함수들
+// ========================================
+
+// 월별 랭킹 데이터 경로 생성 함수
+function getRankingDataPath(yearMonth) {
+    return `/data/ranking_${yearMonth}.json`;
+}
+
+// KST 시간 가져오기
+function getKSTTime() {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+}
+
+// 랜덤 딜레이 함수
+function getRandomDelay(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// 랜덤 User-Agent 선택 함수
+function getRandomUserAgent() {
+    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+// 중복 제거 함수
+function deduplicate(arr) {
+    const map = new Map();
+    arr.forEach(item => {
+        const key = `${item.date}_${item.time}_${item.rank}_${item.name}`;
+        map.set(key, item);
+    });
+    return Array.from(map.values());
+}
+
+
+
+// ========================================
+// 🌐 Express 앱 설정
+// ========================================
 
 // CORS 미들웨어 설정
 app.use(cors());
@@ -62,7 +113,13 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/captures', express.static(path.join(__dirname, 'public', 'captures')));
 
+// JSON 파싱 미들웨어
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
+// ========================================
+// 💾 전역 변수 및 캐시
+// ========================================
 
 // 메모리 캐시 - 크롤링 결과 저장
 let productCache = {
@@ -75,6 +132,10 @@ let productCache = {
 let scheduledCrawlTimer;
 
 
+
+// ========================================
+// 🖥️ Chrome 및 브라우저 관련 함수들
+// ========================================
 
 // Chrome 실행 경로 설정
 async function findChrome() {
@@ -96,10 +157,22 @@ async function findChrome() {
     }
 }
 
-
-function getKSTTime() {
-    return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+// 임시 프로필 디렉토리 생성
+function createTempChromeProfile() {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-profile-'));
+    return tmpDir;
 }
+
+// 임시 프로필 디렉토리 삭제
+function removeTempChromeProfile(tmpDir) {
+    if (tmpDir && fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+}
+
+// ========================================
+// ⏰ 스케줄링 관련 함수들
+// ========================================
 
 // 다음 크롤링 시간 계산 함수
 function getNextCrawlTime() {
@@ -130,6 +203,61 @@ function getNextCrawlTime() {
     return nextCrawlTime;
 }
 
+// 다음 크롤링 스케줄링 함수
+function scheduleNextCrawl() {
+    // 기존 타이머 제거
+    if (scheduledCrawlTimer) {
+        clearTimeout(scheduledCrawlTimer);
+    }
+    
+    const nextCrawlTime = getNextCrawlTime();
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    
+    // 시간 차이 계산 (밀리초)
+    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
+    
+    const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
+    const hoursUntilNext = Math.floor(minutesUntilNext/60);
+    const remainingMinutes = minutesUntilNext % 60;
+    
+    console.log('='.repeat(50));
+    console.log(`다음 크롤링 예정 시간: ${nextCrawlTime.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    })}`);
+    console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
+    console.log('예정된 작업:');
+    console.log('- 전체 카테고리 크롤링');
+    console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
+    console.log('='.repeat(50));
+    
+    // 다음 크롤링 스케줄링
+    scheduledCrawlTimer = setTimeout(() => {
+        console.log('스케줄된 크롤링 시작...');
+        crawlAllCategories();
+    }, timeUntilNextCrawl);
+}
+
+// 서버 시작 시 실행되는 초기화 함수
+async function initializeServer() {
+    try {
+        // 다음 크롤링과 캡처 시간 설정
+        scheduleNextCrawl();
+    } catch (error) {
+        console.error('서버 초기화 중 오류 발생:', error);
+        // 오류 발생 시에도 다음 크롤링 스케줄링
+        scheduleNextCrawl();
+    }
+}
+
+
+// ========================================
+// 📧 이메일 관련 설정 및 함수들
+// ========================================
 
 // 이메일 전송 설정
 const transporter = nodemailer.createTransport({
@@ -141,8 +269,6 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS
     }
 });
-
-
 
 // 캡처본 분할 zip 및 메일 전송 함수 (4개씩)
 async function organizeAndSendCapturesSplit(timeStr, dateStr) {
@@ -212,24 +338,7 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
 }
 
 
-// User-Agent 목록
-const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59'
-];
 
-// 랜덤 딜레이 함수
-function getRandomDelay(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-// 랜덤 User-Agent 선택 함수
-function getRandomUserAgent() {
-    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
 
 
 // 다음 크롤링 스케줄링 함수
@@ -283,18 +392,9 @@ async function initializeServer() {
     }
 }
 
-// axios 요청 재시도 유틸 함수
-async function fetchWithRetry(url, options, retries = 2) {
-    for (let i = 0; i <= retries; i++) {
-        try {
-            return await axios.get(url, options);
-        } catch (err) {
-            if (i === retries) throw err;
-            console.log(`[재시도] ${url} (${i+1}/${retries})`);
-            await new Promise(res => setTimeout(res, 2000)); // 2초 대기 후 재시도
-        }
-    }
-}
+// ========================================
+// 🕷️ 크롤링 관련 함수들
+// ========================================
 
 // 모든 카테고리 크롤링 함수 (Selenium 기반)
 async function crawlAllCategories() {
@@ -335,43 +435,60 @@ async function crawlAllCategories() {
                     }
                 }
             }
-            // Selenium 드라이버 준비 (카테고리별로 재사용)
-            let driver = null;
-            let tmpProfileDir = null;
-            try {
-                tmpProfileDir = createTempChromeProfile();
-                driver = await new chromedriver.Builder()
-                    .headless()
-                    .addArguments('--no-sandbox')
-                    .addArguments('--disable-dev-shm-usage')
-                    .addArguments('--window-size=1920,1500')
-                    .addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-                    .build();
-                // 모든 카테고리에 대해 크롤링
-                for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
-                    console.log(`카테고리 '${category}' 크롤링 중...(Selenium)`);
-                    try {
-                        // 5~10초 랜덤 딜레이
-                        await new Promise(res => setTimeout(res, getRandomDelay(5000, 10000)));
-                        // 올리브영 실제 랭킹 페이지 URL 구조에 맞게 수정
-                        const categoryName = category.replace('_', ' ');
-                        const encodedCategory = encodeURIComponent(categoryName);
-                        const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodedCategory}`;
-                        // Cloudflare(Just a moment...) 감지 및 재시도
-                        let cfRetry = 0;
-                        let cfMaxRetry = 3;
-                        while (cfRetry < cfMaxRetry) {
-                            await driver.get(url);
-                            await driver.sleep(4000 + Math.random() * 4000);
-                            const pageTitle = await driver.getTitle();
-                            if (pageTitle.includes('Just a moment')) {
-                                console.log('Cloudflare 대기 페이지 감지, 10초 후 재시도...');
-                                await driver.sleep(10000);
-                                cfRetry++;
-                                continue;
-                            }
-                            break;
+            // 모든 카테고리에 대해 크롤링 (카테고리별로 드라이버 새로 생성)
+            for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
+                console.log(`카테고리 '${category}' 크롤링 중...(Selenium)`);
+                
+                // 카테고리별로 새로운 드라이버 생성
+                let driver = null;
+                let tmpProfileDir = null;
+                
+                try {
+                    // 5~10초 랜덤 딜레이
+                    await new Promise(res => setTimeout(res, getRandomDelay(5000, 10000)));
+                    
+                    // 새로운 임시 프로필 생성
+                    tmpProfileDir = createTempChromeProfile();
+                    
+                    // Chrome 옵션 설정
+                    const options = new chrome.Options()
+                        .addArguments('--headless')
+                        .addArguments('--no-sandbox')
+                        .addArguments('--disable-dev-shm-usage')
+                        .addArguments('--window-size=1920,1500')
+                        .addArguments(`--user-data-dir=${tmpProfileDir}`)
+                        .addArguments(`--user-agent=${getRandomUserAgent()}`); // 랜덤 User-Agent 사용
+                    
+                    if (process.env.CHROME_BIN) {
+                        options.setChromeBinaryPath(process.env.CHROME_BIN);
+                    }
+                    
+                    // 새로운 드라이버 생성
+                    driver = await new Builder()
+                        .forBrowser('chrome')
+                        .setChromeOptions(options)
+                        .build();
+                    
+                    // 올리브영 실제 랭킹 페이지 URL 구조에 맞게 수정
+                    const categoryName = category.replace('_', ' ');
+                    const encodedCategory = encodeURIComponent(categoryName);
+                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=1&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodedCategory}`;
+                    
+                    // Cloudflare(Just a moment...) 감지 및 재시도
+                    let cfRetry = 0;
+                    let cfMaxRetry = 3;
+                    while (cfRetry < cfMaxRetry) {
+                        await driver.get(url);
+                        await driver.sleep(4000 + Math.random() * 4000);
+                        const pageTitle = await driver.getTitle();
+                        if (pageTitle.includes('Just a moment')) {
+                            console.log('Cloudflare 대기 페이지 감지, 10초 후 재시도...');
+                            await driver.sleep(10000);
+                            cfRetry++;
+                            continue;
                         }
+                        break;
+                    }
                         
                         // 페이지 로딩 대기
                         await driver.wait(async () => {
@@ -539,15 +656,22 @@ async function crawlAllCategories() {
                             error: error.message,
                             status: error.response ? error.response.status : 'unknown'
                         });
-                        continue;
+                    } finally {
+                        // 카테고리별 드라이버 정리
+                        if (driver) {
+                            try { 
+                                await driver.quit(); 
+                                console.log(`${category} 드라이버 종료 완료`);
+                            } catch (e) { 
+                                console.error(`${category} 드라이버 종료 중 오류:`, e.message); 
+                            }
+                        }
+                        if (tmpProfileDir) {
+                            removeTempChromeProfile(tmpProfileDir);
+                            console.log(`${category} 임시 프로필 삭제 완료`);
+                        }
                     }
                 }
-            } finally {
-                if (driver) {
-                    try { await driver.quit(); } catch (e) { console.error('브라우저 종료 중 오류:', e.message); }
-                }
-                removeTempChromeProfile(tmpProfileDir);
-            }
             // 전체 목록 정렬
             productCache.allProducts.sort((a, b) => {
                 if (a.category !== b.category) return a.category.localeCompare(b.category);
@@ -632,6 +756,10 @@ function removeTempChromeProfile(tmpDir) {
     }
 }
 
+// ========================================
+// 📸 캡처 관련 함수들
+// ========================================
+
 async function captureOliveyoungMainRanking(timeStr) {
     let retryCount = 0;
     const maxRetries = 3;
@@ -653,17 +781,63 @@ async function captureOliveyoungMainRanking(timeStr) {
         try {
             // Selenium 설정
             tmpProfileDir = createTempChromeProfile();
-            driver = await new chromedriver.Builder()
-                .headless()
+            const options = new chrome.Options()
+                .addArguments('--headless')
                 .addArguments('--no-sandbox')
                 .addArguments('--disable-dev-shm-usage')
+                .addArguments('--start-maximized')
                 .addArguments('--window-size=1920,1500')
-                .addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+                .addArguments('--hide-scrollbars')
+                .addArguments('--force-device-scale-factor=1')
+                .addArguments('--screenshot-format=jpeg')
+                .addArguments('--screenshot-quality=80')
+                .addArguments('--disable-gpu')
+                .addArguments('--disable-extensions')
+                .addArguments('--disable-notifications')
+                .addArguments('--disable-web-security')
+                .addArguments('--disable-features=VizDisplayCompositor')
+                .addArguments('--disable-background-timer-throttling')
+                .addArguments('--disable-backgrounding-occluded-windows')
+                .addArguments('--disable-renderer-backgrounding')
+                .addArguments('--disable-field-trial-config')
+                .addArguments('--disable-ipc-flooding-protection')
+                .addArguments('--disable-hang-monitor')
+                .addArguments('--disable-prompt-on-repost')
+                .addArguments('--disable-client-side-phishing-detection')
+                .addArguments('--disable-component-update')
+                .addArguments('--disable-default-apps')
+                .addArguments('--disable-sync')
+                .addArguments('--metrics-recording-only')
+                .addArguments('--no-first-run')
+                .addArguments('--safebrowsing-disable-auto-update')
+                .addArguments('--disable-translate')
+                .addArguments('--disable-plugins-discovery')
+                .addArguments('--disable-plugins')
+                .addArguments('--enable-javascript')
+                .addArguments('--enable-dom-storage')
+                .addArguments('--enable-local-storage')
+                .addArguments('--enable-session-storage')
+                .addArguments('--enable-cookies')
+                .addArguments('--enable-images')
+                .addArguments('--enable-scripts')
+                .addArguments(`--user-data-dir=${tmpProfileDir}`)
+                .addArguments(`--user-agent=${getRandomUserAgent()}`);
+
+            if (process.env.CHROME_BIN) {
+                options.setChromeBinaryPath(process.env.CHROME_BIN);
+            }
+            
+            console.log('Chrome 옵션:', options);
+            console.log('브라우저 실행 시도...');
+            
+            driver = await new Builder()
+                .forBrowser('chrome')
+                .setChromeOptions(options)
                 .build();
                 
             console.log('브라우저 실행 성공!');
             
-            // 순차적으로 각 카테고리 처리
+            // 순차적으로 각 카테고리 처리 (카테고리별로 드라이버 새로 생성)
             for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
                 // 이미 캡처된 카테고리는 스킵
                 if (capturedCategories.has(category)) {
@@ -671,8 +845,71 @@ async function captureOliveyoungMainRanking(timeStr) {
                     continue;
                 }
 
-                let categoryRetryCount = 0;
-                const maxCategoryRetries = 3;
+                // 카테고리별로 새로운 드라이버 생성
+                let categoryDriver = null;
+                let categoryTmpProfileDir = null;
+                
+                try {
+                    // 새로운 임시 프로필 생성
+                    categoryTmpProfileDir = createTempChromeProfile();
+                    
+                    // Chrome 옵션 설정 (캡처용)
+                    const categoryOptions = new chrome.Options()
+                        .addArguments('--headless')
+                        .addArguments('--no-sandbox')
+                        .addArguments('--disable-dev-shm-usage')
+                        .addArguments('--start-maximized')
+                        .addArguments('--window-size=1920,1500')
+                        .addArguments('--hide-scrollbars')
+                        .addArguments('--force-device-scale-factor=1')
+                        .addArguments('--screenshot-format=jpeg')
+                        .addArguments('--screenshot-quality=80')
+                        .addArguments('--disable-gpu')
+                        .addArguments('--disable-extensions')
+                        .addArguments('--disable-notifications')
+                        .addArguments('--disable-web-security')
+                        .addArguments('--disable-features=VizDisplayCompositor')
+                        .addArguments('--disable-background-timer-throttling')
+                        .addArguments('--disable-backgrounding-occluded-windows')
+                        .addArguments('--disable-renderer-backgrounding')
+                        .addArguments('--disable-field-trial-config')
+                        .addArguments('--disable-ipc-flooding-protection')
+                        .addArguments('--disable-hang-monitor')
+                        .addArguments('--disable-prompt-on-repost')
+                        .addArguments('--disable-client-side-phishing-detection')
+                        .addArguments('--disable-component-update')
+                        .addArguments('--disable-default-apps')
+                        .addArguments('--disable-sync')
+                        .addArguments('--metrics-recording-only')
+                        .addArguments('--no-first-run')
+                        .addArguments('--safebrowsing-disable-auto-update')
+                        .addArguments('--disable-translate')
+                        .addArguments('--disable-plugins-discovery')
+                        .addArguments('--disable-plugins')
+                        .addArguments('--enable-javascript')
+                        .addArguments('--enable-dom-storage')
+                        .addArguments('--enable-local-storage')
+                        .addArguments('--enable-session-storage')
+                        .addArguments('--enable-cookies')
+                        .addArguments('--enable-images')
+                        .addArguments('--enable-scripts')
+                        .addArguments(`--user-data-dir=${categoryTmpProfileDir}`)
+                        .addArguments(`--user-agent=${getRandomUserAgent()}`); // 랜덤 User-Agent 사용
+
+                    if (process.env.CHROME_BIN) {
+                        categoryOptions.setChromeBinaryPath(process.env.CHROME_BIN);
+                    }
+                    
+                    // 새로운 드라이버 생성
+                    categoryDriver = await new Builder()
+                        .forBrowser('chrome')
+                        .setChromeOptions(categoryOptions)
+                        .build();
+                    
+                    console.log(`${category} 캡처용 드라이버 생성 완료`);
+
+                    let categoryRetryCount = 0;
+                    const maxCategoryRetries = 3;
                 
                 while (categoryRetryCount < maxCategoryRetries) {
                     try {
@@ -795,7 +1032,7 @@ async function captureOliveyoungMainRanking(timeStr) {
                         // 스크린샷 캡처
                         const fileName = `ranking_${category}_${dateFormatted}_${timeStr}.jpeg`;
                         const filePath = path.join(capturesDir, fileName);
-                        await captureFullPageWithSelenium(driver, filePath, category, dateFormatted);
+                        await captureFullPageWithSelenium(categoryDriver, filePath, category, dateFormatted);
                         
                         capturedCount++;
                         capturedCategories.add(category);
@@ -818,13 +1055,34 @@ async function captureOliveyoungMainRanking(timeStr) {
                             });
                         } else {
                             // 재시도 전 잠시 대기
-                            await driver.sleep(2000);
+                            await categoryDriver.sleep(2000);
                         }
+                    }
+                } catch (error) {
+                    console.error(`${category} 캡처 중 오류:`, error.message);
+                    errors.push({
+                        category,
+                        error: error.message,
+                        timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+                    });
+                } finally {
+                    // 카테고리별 드라이버 정리
+                    if (categoryDriver) {
+                        try {
+                            await categoryDriver.quit();
+                            console.log(`${category} 캡처 드라이버 종료 완료`);
+                        } catch (closeError) {
+                            console.error(`${category} 캡처 드라이버 종료 중 오류:`, closeError.message);
+                        }
+                    }
+                    if (categoryTmpProfileDir) {
+                        removeTempChromeProfile(categoryTmpProfileDir);
+                        console.log(`${category} 캡처 임시 프로필 삭제 완료`);
                     }
                 }
                 
                 // 카테고리 간 대기 시간
-                await driver.sleep(1000);
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
             
             // 모든 카테고리 캡처가 완료되었는지 확인
@@ -906,13 +1164,17 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     await fs.promises.writeFile(filePath, sharpBuffer);
 }
 
-// Express 설정
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
+// ========================================
+// 🌐 API 라우트들
+// ========================================
+
+// 메인 페이지
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
+
+
 
 // 랭킹 데이터 가져오기
 app.get('/api/ranking', async (req, res) => {
@@ -1121,34 +1383,13 @@ app.get('/api/captures', async (req, res) => {
     });
 });
 
-// 이미지 다운로드 API
-app.get('/api/download/:filename', (req, res) => {
-    try {
-        const filename = req.params.filename;
-        const filePath = path.join(capturesDir, filename);
-        
-        console.log('이미지 다운로드 요청:', filename);
-        console.log('파일 경로:', filePath);
-        
-        if (!fs.existsSync(filePath)) {
-            console.log('파일을 찾을 수 없음:', filePath);
-            return res.status(404).json({ 
-                success: false,
-                error: '파일을 찾을 수 없습니다.' 
-            });
-        }
 
-        res.set('Content-Type', 'image/jpeg');
-        res.sendFile(filePath);
-    } catch (error) {
-        console.error('파일 다운로드 중 오류:', error);
-        res.status(500).json({ 
-            success: false,
-            error: '파일 다운로드 중 오류가 발생했습니다.' 
-        });
-    }
-});
 
+
+
+// ========================================
+// 🛠️ 서버 설정 및 시작
+// ========================================
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -1163,11 +1404,14 @@ app.use((err, req, res, next) => {
 app.get('/health', async (req, res) => {
     try {
         const chromePath = await findChrome();
-        const driver = await new chromedriver.Builder()
-            .headless()
-            .addArguments('--no-sandbox')
-            .addArguments('--disable-dev-shm-usage')
-            .addArguments('--window-size=1920,1080')
+        const driver = await new Builder()
+            .forBrowser('chrome')
+            .setChromeOptions(new chrome.Options()
+                .addArguments('--headless')
+                .addArguments('--no-sandbox')
+                .addArguments('--disable-dev-shm-usage')
+                .addArguments('--window-size=1920,1080')
+            )
             .build();
         await driver.close();
         res.json({
@@ -1187,7 +1431,6 @@ app.get('/health', async (req, res) => {
         });
     }
 });
-
 
 
 
@@ -1220,21 +1463,5 @@ app.listen(port, () => {
     });
 });
 
-// 예기치 못한 에러로 서버가 죽지 않도록 핸들러 추가
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  // 서버를 죽이지 않고 에러만 로깅
-});
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection:', reason);
-});
 
-// deduplicate 함수 추가 (카테고리별, 날짜+시간+순위+제품명 기준)
-function deduplicate(arr) {
-    const map = new Map();
-    arr.forEach(item => {
-        const key = `${item.date}_${item.time}_${item.rank}_${item.name}`;
-        map.set(key, item);
-    });
-    return Array.from(map.values());
-}
+

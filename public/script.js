@@ -96,12 +96,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM 요소 참조
     const searchBtn = document.getElementById('searchBtn');
     const rankingTable = document.getElementById('rankingTable').getElementsByTagName('tbody')[0];
-    const rankingUpdateTime = document.getElementById('rankingUpdateTime');
     const categorySelect = document.getElementById('category');
     const productSearchBtn = document.getElementById('productSearchBtn');
     const productSearchInput = document.getElementById('productSearchInput');
     const productSearchTable = document.getElementById('productSearchTable').getElementsByTagName('tbody')[0];
-    const updateTime = document.getElementById('updateTime');
     const startDateInput = document.getElementById('startDate');
     const endDateInput = document.getElementById('endDate');
     const productSearchDownloadBtn = document.getElementById('productSearchDownloadBtn');
@@ -1017,40 +1015,3 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCapturesFromServer();
 });
 
-// 캡처 목록 불러오기 함수 수정
-async function fetchCaptureList() {
-    const res = await fetch('/api/captures');
-    const result = await res.json();
-    if (!result.success) return;
-    const captures = result.data;
-    // 날짜별로 그룹화 (카테고리 무시)
-    const grouped = {};
-    for (const cap of captures) {
-        if (!grouped[cap.date]) grouped[cap.date] = [];
-        grouped[cap.date].push(cap);
-    }
-    // 최신 날짜 우선 정렬
-    const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-    const captureList = document.getElementById('captureList');
-    captureList.innerHTML = '';
-    for (const date of sortedDates) {
-        const dateBlock = document.createElement('div');
-        dateBlock.className = 'capture-date-block';
-        const dateTitle = document.createElement('h3');
-        dateTitle.textContent = date;
-        dateBlock.appendChild(dateTitle);
-        // 시간순(최신순) 정렬
-        grouped[date].sort((a, b) => b.time.localeCompare(a.time));
-        for (const cap of grouped[date]) {
-            const item = document.createElement('div');
-            item.className = 'capture-item';
-            item.innerHTML = `
-                <div><b>${cap.time}</b></div>
-                <img src="${cap.imageUrl}" style="max-width: 400px; display: block; margin: 8px 0;" />
-                <a href="${cap.imageUrl}" download>다운로드</a>
-            `;
-            dateBlock.appendChild(item);
-        }
-        captureList.appendChild(dateBlock);
-    }
-}
