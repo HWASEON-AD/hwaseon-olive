@@ -175,7 +175,7 @@ function removeTempChromeProfile(tmpDir) {
 // ========================================
 
 // 이메일 전송 설정
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
     host: 'smtp.worksmobile.com',
     port: 465,
     secure: true,
