@@ -349,6 +349,7 @@ async function crawlAllCategories() {
                     if (!localProductCache.data[category]) localProductCache.data[category] = [];
                     let totalRank = 1;
                     for (let page = 1; page <= 5; page++) {
+                        console.log(`[DEBUG] ${category} ${page}페이지 진입, 현재 누적 상품: ${localProductCache.data[category].length}개`);
                         // 새로운 임시 프로필 생성
                         categoryTmpProfileDir = createTempChromeProfile();
                         // Chrome 옵션 설정 (크롤링용)
@@ -457,9 +458,12 @@ async function crawlAllCategories() {
                             return false;
                         }, 20000, '상품 목록 로딩 시간 초과');
                         let products = await categoryDriver.findElements(By.css('li.flag'));
-                        console.log(`${category} ${page}페이지 상품 개수: ${products.length}개`);
+                        console.log(`[DEBUG] ${category} ${page}페이지 상품 개수: ${products.length}개, 누적 상품: ${localProductCache.data[category].length}개`);
                         for (let i = 0; i < products.length; i++) {
-                            if (localProductCache.data[category].length >= 100) break;
+                            if (localProductCache.data[category].length >= 100) {
+                                console.log(`[DEBUG] ${category} break: 누적 상품 100개 도달, i=${i}, page=${page}`);
+                                break;
+                            }
                             try {
                                 const product = products[i];
                                 const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
@@ -524,7 +528,7 @@ async function crawlAllCategories() {
                                 localProductCache.data[category].push(productData);
                                 totalRank++;
                             } catch (productError) {
-                                console.error(`${category} ${totalRank}번 상품 데이터 추출 실패:`, productError.message);
+                                console.error(`[ERROR] ${category} ${totalRank}번 상품 데이터 추출 에러:`, productError);
                                 localProductCache.data[category].push({
                                     rank: totalRank,
                                     brand: '',
@@ -539,9 +543,11 @@ async function crawlAllCategories() {
                                 totalRank++;
                             }
                         }
-                        await safeQuitDriver(categoryDriver, category);
-                        safeRemoveTempProfile(categoryTmpProfileDir, category);
-                        if (localProductCache.data[category].length >= 100) break;
+                        console.log(`[DEBUG] ${category} ${page}페이지 끝, 누적 상품: ${localProductCache.data[category].length}개`);
+                        if (localProductCache.data[category].length >= 100) {
+                            console.log(`[DEBUG] ${category} break: for-page, 누적 상품 100개 도달, page=${page}`);
+                            break;
+                        }
                         await new Promise(resolve => setTimeout(resolve, 1000));
                     }
                     // 중복 제거 및 정렬
