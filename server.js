@@ -477,6 +477,7 @@ async function crawlAllCategories() {
 
                     localProductCache.data[category] = deduplicate(localProductCache.data[category]);
                     localProductCache.data[category].sort((a, b) => a.rank - b.rank);
+                    localProductCache.data[category] = localProductCache.data[category].slice(0, 100);
 
                     for (const p of localProductCache.data[category]) {
                         if (!localProductCache.allProducts.some(ap => ap.name === p.name && ap.category === p.category && ap.time === p.time)) {
