@@ -468,13 +468,11 @@ async function crawlAllCategories() {
                                 let brand = brandElement ? await brandElement.getText() : '';
                                 // 브랜드가 비어 있으면 제품명에서 추출
                                 if (!brand && name) {
-                                    // 줄바꿈 기준 분리 (브랜드가 첫 줄, 제품명이 두 번째 줄)
                                     const lines = name.split('\n');
                                     if (lines.length > 1) {
                                         brand = lines[0].trim();
                                         name = lines.slice(1).join(' ').trim();
                                     } else {
-                                        // 괄호, 공백 등 특수문자 기준으로도 분리 시도
                                         const match = name.match(/^([\w가-힣A-Za-z0-9]+)[\s\[]?(.*)$/);
                                         if (match) {
                                             brand = match[1].trim();
@@ -482,11 +480,9 @@ async function crawlAllCategories() {
                                         }
                                     }
                                 }
-                                // 브랜드가 추출된 경우, 제품명 맨 앞에 브랜드명이 있으면 제거
                                 if (brand && name && name.startsWith(brand)) {
                                     name = name.slice(brand.length).trim();
                                 }
-                                // 가격 정보 추출 (더 정확하게)
                                 let originalPrice = '';
                                 let salePrice = '';
                                 const orgPriceElement = await product.findElement(By.css('.prd_price .tx_org .tx_num')).catch(() => null);
@@ -504,7 +500,6 @@ async function crawlAllCategories() {
                                     if (!originalPrice) originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
                                     if (!salePrice) salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
                                 }
-                                // 행사/프로모션 정보 추출 (여러 개 태그 합치기)
                                 const promoElements = await product.findElements(By.css('.icon_flag')).catch(() => []);
                                 let promotion = '';
                                 if (promoElements && promoElements.length > 0) {
