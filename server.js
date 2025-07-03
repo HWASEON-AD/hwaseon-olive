@@ -654,53 +654,25 @@ async function crawlAllCategories() {
             console.log(`최종 크롤링 결과: 성공 ${crawlSuccessSet.size}/${allCategories.length} 카테고리`);
             console.log('='.repeat(50));
             
-            // 모든 카테고리 캡처가 완료되었는지 확인
-            const allCategoriesCaptured = Object.keys(CATEGORY_CODES).every(cat => localProductCache.data[cat] && localProductCache.data[cat].length > 0);
+            // ========================================
+            // 크롤링 완료 직후 데이터 저장
+            // ========================================
+            console.log('='.repeat(50));
+            console.log('크롤링 데이터 저장 시작...');
+            console.log('='.repeat(50));
             
-            return {
-                success: allCategoriesCaptured,
-                capturedCount: Object.keys(CATEGORY_CODES).reduce((count, cat) => count + localProductCache.data[cat].length, 0),
-                totalCategories: Object.keys(CATEGORY_CODES).length,
-                errors: localProductCache.failedCategories ? localProductCache.failedCategories.map(error => ({
-                    category: error.category,
-                    error: error.error,
-                    timestamp: error.timestamp
-                })) : null,
-                capturedCategories: Object.keys(localProductCache.data)
-            };
-        } catch (error) {
-            console.error('캡처 프로세스 오류:', error.message);
-            return {
-                success: false,
-                error: error.message,
-                capturedCount: 0,
-                totalCategories: Object.keys(CATEGORY_CODES).length,
-                errors: localProductCache.failedCategories ? localProductCache.failedCategories.map(error => ({
-                    category: error.category,
-                    error: error.error,
-                    timestamp: error.timestamp
-                })) : null,
-                capturedCategories: []
-            };
-        } finally {
             localProductCache.timestamp = getKSTTime();
-            console.log(`[${new Date().toLocaleString('ko-KR', {
-                year: 'numeric',
-                month: 'numeric',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-                timeZone: 'Asia/Seoul'
-            })}] 1시간 정기 크롤링 완료 (Selenium)`);
-            // 크롤링 완료 직후 월별 랭킹 데이터 저장
             try {
                 fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(localProductCache, null, 2));
-                console.log(`[랭킹 데이터 저장] ${RANKING_DATA_PATH} (${Object.keys(localProductCache.data).length}개 카테고리)`);
+                console.log(`[랭킹 데이터 저장 완료] ${RANKING_DATA_PATH} (${Object.keys(localProductCache.data).length}개 카테고리)`);
             } catch (e) {
                 console.error('[랭킹 데이터 저장 실패]', RANKING_DATA_PATH, e);
             }
+            
+            console.log('='.repeat(50));
+            console.log('크롤링 데이터 저장 완료');
+            console.log('='.repeat(50));
+            
             // ========================================
             // 2단계: 캡처 실행 (21개 카테고리)
             // ========================================
@@ -742,6 +714,19 @@ async function crawlAllCategories() {
                     console.error('크롤링 오류 메일 발송 실패:', mailErr);
                 }
             }
+            
+            console.log(`[${new Date().toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZone: 'Asia/Seoul'
+            })}] 1시간 정기 크롤링 및 캡처 완료 (Selenium)`);
+        } catch (error) {
+            console.error('크롤링 프로세스 오류:', error.message);
         }
     } catch (err) {
         console.error('crawlAllCategories 전체 에러:', err);
