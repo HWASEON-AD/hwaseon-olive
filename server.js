@@ -456,7 +456,7 @@ async function crawlAllCategories() {
                             }
                             return false;
                         }, 20000, '상품 목록 로딩 시간 초과');
-                        const products = await categoryDriver.findElements(By.css('.best_list .item'));
+                        let products = await categoryDriver.findElements(By.css('.best_list .item'));
                         if (products.length === 0) {
                             products = await categoryDriver.findElements(By.css('.prd_list_type1 .prd_info'));
                         }
@@ -1336,14 +1336,9 @@ app.listen(port, async () => {
     console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
     console.log('='.repeat(50));
 
-
-/*
-    // 서버 시작 시 캡처만 즉시 실행
-    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
-    await captureOliveyoungMainRanking(timeStr);
-*/
-
+    // 서버 시작 시 크롤링+캡처 즉시 1회 실행
+    console.log('서버 시작 직후 즉시 크롤링 및 캡처 작업 실행!');
+    await crawlAllCategories();
 
     // 크롤링은 예약 스케줄에만 동작
     initializeServer();
