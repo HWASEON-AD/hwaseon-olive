@@ -171,96 +171,11 @@ function removeTempChromeProfile(tmpDir) {
 }
 
 // ========================================
-// ⏰ 스케줄링 관련 함수들
-// ========================================
-
-// 다음 크롤링 시간 계산 함수
-function getNextCrawlTime() {
-    // 현재 KST 시간 가져오기
-    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    const scheduledMinutes = 15; // 매 시간 15분에 실행
-    
-    // 현재 시간
-    const currentHour = kstNow.getHours();
-    const currentMinute = kstNow.getMinutes();
-
-    // 다음 크롤링 시간 계산
-    let nextCrawlTime = new Date(kstNow);
-    
-    // 현재 시간이 15분을 지났다면 다음 시간으로 설정
-    if (currentMinute >= scheduledMinutes) {
-        nextCrawlTime.setHours(currentHour + 1, scheduledMinutes, 0, 0);
-    } else {
-        // 현재 시간의 15분으로 설정
-        nextCrawlTime.setHours(currentHour, scheduledMinutes, 0, 0);
-    }
-    
-    // 다음 날로 넘어가는 경우 처리
-    if (nextCrawlTime <= kstNow) {
-        nextCrawlTime.setHours(nextCrawlTime.getHours() + 1);
-    }
-
-    return nextCrawlTime;
-}
-
-// 다음 크롤링 스케줄링 함수
-function scheduleNextCrawl() {
-    // 기존 타이머 제거
-    if (scheduledCrawlTimer) {
-        clearTimeout(scheduledCrawlTimer);
-    }
-    
-    const nextCrawlTime = getNextCrawlTime();
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    
-    // 시간 차이 계산 (밀리초)
-    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
-    
-    const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
-    const hoursUntilNext = Math.floor(minutesUntilNext/60);
-    const remainingMinutes = minutesUntilNext % 60;
-    
-    console.log('='.repeat(50));
-    console.log(`다음 크롤링 예정 시간: ${nextCrawlTime.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    })}`);
-    console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
-    console.log('예정된 작업:');
-    console.log('- 전체 카테고리 크롤링');
-    console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
-    console.log('='.repeat(50));
-    
-    // 다음 크롤링 스케줄링
-    scheduledCrawlTimer = setTimeout(() => {
-        console.log('스케줄된 크롤링 시작...');
-        crawlAllCategories();
-    }, timeUntilNextCrawl);
-}
-
-// 서버 시작 시 실행되는 초기화 함수
-async function initializeServer() {
-    try {
-        // 다음 크롤링과 캡처 시간 설정
-        scheduleNextCrawl();
-    } catch (error) {
-        console.error('서버 초기화 중 오류 발생:', error);
-        // 오류 발생 시에도 다음 크롤링 스케줄링
-        scheduleNextCrawl();
-    }
-}
-
-
-// ========================================
-// 📧 이메일 관련 설정 및 함수들
+// 🔧 이메일 관련 설정 및 함수들
 // ========================================
 
 // 이메일 전송 설정
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
     host: 'smtp.worksmobile.com',
     port: 465,
     secure: true,
@@ -337,60 +252,6 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
     }
 }
 
-
-
-
-
-// 다음 크롤링 스케줄링 함수
-function scheduleNextCrawl() {
-    // 기존 타이머 제거
-    if (scheduledCrawlTimer) {
-        clearTimeout(scheduledCrawlTimer);
-    }
-    
-    const nextCrawlTime = getNextCrawlTime();
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    
-    // 시간 차이 계산 (밀리초)
-    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
-    
-    const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
-    const hoursUntilNext = Math.floor(minutesUntilNext/60);
-    const remainingMinutes = minutesUntilNext % 60;
-    
-    console.log('='.repeat(50));
-    console.log(`다음 크롤링 예정 시간: ${nextCrawlTime.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    })}`);
-    console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
-    console.log('예정된 작업:');
-    console.log('- 전체 카테고리 크롤링');
-    console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
-    console.log('='.repeat(50));
-    
-    // 다음 크롤링 스케줄링
-    scheduledCrawlTimer = setTimeout(() => {
-        console.log('스케줄된 크롤링 시작...');
-        crawlAllCategories();
-    }, timeUntilNextCrawl);
-}
-
-// 서버 시작 시 실행되는 초기화 함수
-async function initializeServer() {
-    try {
-        // 다음 크롤링과 캡처 시간 설정
-        scheduleNextCrawl();
-    } catch (error) {
-        console.error('서버 초기화 중 오류 발생:', error);
-        // 오류 발생 시에도 다음 크롤링 스케줄링
-        scheduleNextCrawl();
-    }
-}
 
 // ========================================
 // 🕷️ 크롤링 관련 함수들
@@ -704,7 +565,6 @@ async function crawlAllCategories() {
             if (!captureResult.success) {
                 console.error('캡처 실패:', captureResult.error);
                 console.log('성공한 카테고리:', captureResult.capturedCategories);
-                scheduleNextCrawl();
                 try {
                     const now = new Date();
                     await transporter.sendMail({
@@ -720,7 +580,6 @@ async function crawlAllCategories() {
             } else {
                 await organizeAndSendCapturesSplit(timeStr, today);
             }
-            scheduleNextCrawl();
         } catch (error) {
             console.error(`크롤링 오류:`, error);
             try {
@@ -735,11 +594,9 @@ async function crawlAllCategories() {
             } catch (mailErr) {
                 console.error('크롤링 오류 메일 발송 실패:', mailErr);
             }
-            scheduleNextCrawl();
         }
     } catch (err) {
         console.error('crawlAllCategories 전체 에러:', err);
-        scheduleNextCrawl();
     }
 }
 
@@ -848,71 +705,63 @@ async function captureOliveyoungMainRanking(timeStr) {
                 // 카테고리별로 새로운 드라이버 생성
                 let categoryDriver = null;
                 let categoryTmpProfileDir = null;
-                
-                try {
-                    // 새로운 임시 프로필 생성
-                    categoryTmpProfileDir = createTempChromeProfile();
-                    
-                    // Chrome 옵션 설정 (캡처용)
-                    const categoryOptions = new chrome.Options()
-                        .addArguments('--headless')
-                        .addArguments('--no-sandbox')
-                        .addArguments('--disable-dev-shm-usage')
-                        .addArguments('--start-maximized')
-                        .addArguments('--window-size=1920,1500')
-                        .addArguments('--hide-scrollbars')
-                        .addArguments('--force-device-scale-factor=1')
-                        .addArguments('--screenshot-format=jpeg')
-                        .addArguments('--screenshot-quality=80')
-                        .addArguments('--disable-gpu')
-                        .addArguments('--disable-extensions')
-                        .addArguments('--disable-notifications')
-                        .addArguments('--disable-web-security')
-                        .addArguments('--disable-features=VizDisplayCompositor')
-                        .addArguments('--disable-background-timer-throttling')
-                        .addArguments('--disable-backgrounding-occluded-windows')
-                        .addArguments('--disable-renderer-backgrounding')
-                        .addArguments('--disable-field-trial-config')
-                        .addArguments('--disable-ipc-flooding-protection')
-                        .addArguments('--disable-hang-monitor')
-                        .addArguments('--disable-prompt-on-repost')
-                        .addArguments('--disable-client-side-phishing-detection')
-                        .addArguments('--disable-component-update')
-                        .addArguments('--disable-default-apps')
-                        .addArguments('--disable-sync')
-                        .addArguments('--metrics-recording-only')
-                        .addArguments('--no-first-run')
-                        .addArguments('--safebrowsing-disable-auto-update')
-                        .addArguments('--disable-translate')
-                        .addArguments('--disable-plugins-discovery')
-                        .addArguments('--disable-plugins')
-                        .addArguments('--enable-javascript')
-                        .addArguments('--enable-dom-storage')
-                        .addArguments('--enable-local-storage')
-                        .addArguments('--enable-session-storage')
-                        .addArguments('--enable-cookies')
-                        .addArguments('--enable-images')
-                        .addArguments('--enable-scripts')
-                        .addArguments(`--user-data-dir=${categoryTmpProfileDir}`)
-                        .addArguments(`--user-agent=${getRandomUserAgent()}`); // 랜덤 User-Agent 사용
-
-                    if (process.env.CHROME_BIN) {
-                        categoryOptions.setChromeBinaryPath(process.env.CHROME_BIN);
-                    }
-                    
-                    // 새로운 드라이버 생성
-                    categoryDriver = await new Builder()
-                        .forBrowser('chrome')
-                        .setChromeOptions(categoryOptions)
-                        .build();
-                    
-                    console.log(`${category} 캡처용 드라이버 생성 완료`);
-
-                    let categoryRetryCount = 0;
-                    const maxCategoryRetries = 3;
-                
+                let categoryRetryCount = 0;
+                const maxCategoryRetries = 3;
                 while (categoryRetryCount < maxCategoryRetries) {
                     try {
+                        // 새로운 임시 프로필 생성
+                        categoryTmpProfileDir = createTempChromeProfile();
+                        // Chrome 옵션 설정 (캡처용)
+                        const categoryOptions = new chrome.Options()
+                            .addArguments('--headless')
+                            .addArguments('--no-sandbox')
+                            .addArguments('--disable-dev-shm-usage')
+                            .addArguments('--start-maximized')
+                            .addArguments('--window-size=1920,1500')
+                            .addArguments('--hide-scrollbars')
+                            .addArguments('--force-device-scale-factor=1')
+                            .addArguments('--screenshot-format=jpeg')
+                            .addArguments('--screenshot-quality=80')
+                            .addArguments('--disable-gpu')
+                            .addArguments('--disable-extensions')
+                            .addArguments('--disable-notifications')
+                            .addArguments('--disable-web-security')
+                            .addArguments('--disable-features=VizDisplayCompositor')
+                            .addArguments('--disable-background-timer-throttling')
+                            .addArguments('--disable-backgrounding-occluded-windows')
+                            .addArguments('--disable-renderer-backgrounding')
+                            .addArguments('--disable-field-trial-config')
+                            .addArguments('--disable-ipc-flooding-protection')
+                            .addArguments('--disable-hang-monitor')
+                            .addArguments('--disable-prompt-on-repost')
+                            .addArguments('--disable-client-side-phishing-detection')
+                            .addArguments('--disable-component-update')
+                            .addArguments('--disable-default-apps')
+                            .addArguments('--disable-sync')
+                            .addArguments('--metrics-recording-only')
+                            .addArguments('--no-first-run')
+                            .addArguments('--safebrowsing-disable-auto-update')
+                            .addArguments('--disable-translate')
+                            .addArguments('--disable-plugins-discovery')
+                            .addArguments('--disable-plugins')
+                            .addArguments('--enable-javascript')
+                            .addArguments('--enable-dom-storage')
+                            .addArguments('--enable-local-storage')
+                            .addArguments('--enable-session-storage')
+                            .addArguments('--enable-cookies')
+                            .addArguments('--enable-images')
+                            .addArguments('--enable-scripts')
+                            .addArguments(`--user-data-dir=${categoryTmpProfileDir}`)
+                            .addArguments(`--user-agent=${getRandomUserAgent()}`);
+                        if (process.env.CHROME_BIN) {
+                            categoryOptions.setChromeBinaryPath(process.env.CHROME_BIN);
+                        }
+                        // 새로운 드라이버 생성
+                        categoryDriver = await new Builder()
+                            .forBrowser('chrome')
+                            .setChromeOptions(categoryOptions)
+                            .build();
+                        
                         // 올리브영 실제 랭킹 페이지 URL 구조에 맞게 수정
                         const categoryName = category.replace('_', ' ');
                         const encodedCategory = encodeURIComponent(categoryName);
@@ -1045,8 +894,6 @@ async function captureOliveyoungMainRanking(timeStr) {
                         
                     } catch (error) {
                         categoryRetryCount++;
-                        console.error(`${category} 캡처 시도 ${categoryRetryCount}/${maxCategoryRetries} 실패:`, error.message);
-                        
                         if (categoryRetryCount === maxCategoryRetries) {
                             errors.push({
                                 category,
@@ -1054,33 +901,19 @@ async function captureOliveyoungMainRanking(timeStr) {
                                 timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
                             });
                         } else {
-                            // 재시도 전 잠시 대기
-                            await categoryDriver.sleep(2000);
+                            await new Promise(resolve => setTimeout(resolve, 2000));
                         }
-                    }
-                } catch (error) {
-                    console.error(`${category} 캡처 중 오류:`, error.message);
-                    errors.push({
-                        category,
-                        error: error.message,
-                        timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
-                    });
-                } finally {
-                    // 카테고리별 드라이버 정리
-                    if (categoryDriver) {
-                        try {
-                            await categoryDriver.quit();
-                            console.log(`${category} 캡처 드라이버 종료 완료`);
-                        } catch (closeError) {
-                            console.error(`${category} 캡처 드라이버 종료 중 오류:`, closeError.message);
+                    } finally {
+                        if (categoryDriver) {
+                            try {
+                                await categoryDriver.quit();
+                            } catch (closeError) {}
                         }
-                    }
-                    if (categoryTmpProfileDir) {
-                        removeTempChromeProfile(categoryTmpProfileDir);
-                        console.log(`${category} 캡처 임시 프로필 삭제 완료`);
+                        if (categoryTmpProfileDir) {
+                            removeTempChromeProfile(categoryTmpProfileDir);
+                        }
                     }
                 }
-                
                 // 카테고리 간 대기 시간
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
@@ -1439,7 +1272,7 @@ app.listen(port, () => {
     // 서버 시작 시 자동 크롤링 스케줄링 활성화
     console.log('1시간 단위 자동 크롤링 스케줄링을 시작합니다...');
     // 첫 번째 크롤링 실행 후 다음 크롤링 스케줄링
-    initializeServer();
+    crawlAllCategories();
 
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
@@ -1463,5 +1296,86 @@ app.listen(port, () => {
     });
 });
 
+// ========================================
+// ⏰ 스케줄링 관련 함수들
+// ========================================
 
+// 다음 크롤링 시간 계산 함수
+function getNextCrawlTime() {
+    // 현재 KST 시간 가져오기
+    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const scheduledMinutes = 15; // 매 시간 15분에 실행
+    
+    // 현재 시간
+    const currentHour = kstNow.getHours();
+    const currentMinute = kstNow.getMinutes();
 
+    // 다음 크롤링 시간 계산
+    let nextCrawlTime = new Date(kstNow);
+    
+    // 현재 시간이 15분을 지났다면 다음 시간으로 설정
+    if (currentMinute >= scheduledMinutes) {
+        nextCrawlTime.setHours(currentHour + 1, scheduledMinutes, 0, 0);
+    } else {
+        // 현재 시간의 15분으로 설정
+        nextCrawlTime.setHours(currentHour, scheduledMinutes, 0, 0);
+    }
+    
+    // 다음 날로 넘어가는 경우 처리
+    if (nextCrawlTime <= kstNow) {
+        nextCrawlTime.setHours(nextCrawlTime.getHours() + 1);
+    }
+
+    return nextCrawlTime;
+}
+
+// 다음 크롤링 스케줄링 함수
+function scheduleNextCrawl() {
+    // 기존 타이머 제거
+    if (scheduledCrawlTimer) {
+        clearTimeout(scheduledCrawlTimer);
+    }
+    
+    const nextCrawlTime = getNextCrawlTime();
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    
+    // 시간 차이 계산 (밀리초)
+    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
+    
+    const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
+    const hoursUntilNext = Math.floor(minutesUntilNext/60);
+    const remainingMinutes = minutesUntilNext % 60;
+    
+    console.log('='.repeat(50));
+    console.log(`다음 크롤링 예정 시간: ${nextCrawlTime.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    })}`);
+    console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
+    console.log('예정된 작업:');
+    console.log('- 전체 카테고리 크롤링');
+    console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
+    console.log('='.repeat(50));
+    
+    // 다음 크롤링 스케줄링
+    scheduledCrawlTimer = setTimeout(() => {
+        console.log('스케줄된 크롤링 시작...');
+        crawlAllCategories();
+    }, timeUntilNextCrawl);
+}
+
+// 서버 시작 시 실행되는 초기화 함수
+async function initializeServer() {
+    try {
+        // 다음 크롤링과 캡처 시간 설정
+        scheduleNextCrawl();
+    } catch (error) {
+        console.error('서버 초기화 중 오류 발생:', error);
+        // 오류 발생 시에도 다음 크롤링 스케줄링
+        scheduleNextCrawl();
+    }
+}
