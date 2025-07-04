@@ -153,8 +153,6 @@ let productCache = {
 // 크롤링 스케줄링 관련 변수
 let scheduledCrawlTimer;
 
-
-
 // ========================================
 // 🖥️ Chrome 및 브라우저 관련 함수들
 // ========================================
@@ -288,7 +286,6 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
     console.log('='.repeat(50));
 }
 
-
 // ========================================
 // 🕷️ 크롤링 관련 함수들
 // ========================================
@@ -347,9 +344,13 @@ async function crawlAllCategories() {
                     console.log(`${category} 랭킹 페이지 크롤링 시도... (${attemptNumber}차 시도)`);
                     if (!localProductCache.data) localProductCache.data = {};
                     if (!localProductCache.data[category]) localProductCache.data[category] = [];
+                    
+                    // 카테고리별 상품 배열 초기화 (누적 방지)
+                    localProductCache.data[category] = [];
                     let totalRank = 1;
                     for (let page = 1; page <= 5; page++) {
                         console.log(`[DEBUG] ${category} ${page}페이지 진입, 현재 누적 상품: ${localProductCache.data[category].length}개`);
+                        console.log(`[DEBUG] ${category} ${page}페이지 시작 - totalRank: ${totalRank}`);
                         // 새로운 임시 프로필 생성
                         categoryTmpProfileDir = createTempChromeProfile();
                         // Chrome 옵션 설정 (크롤링용)
@@ -558,7 +559,7 @@ async function crawlAllCategories() {
                             localProductCache.allProducts.push(p);
                         }
                     }
-                    console.log(`${category} ✅ 크롤링 성공!(Selenium)`);
+                    console.log(`${category} ✅ 크롤링 성공!(Selenium) - 총 ${localProductCache.data[category].length}개 상품 수집`);
                     return true;
                 } catch (error) {
                     console.error(`${category} ❌ 크롤링 실패 (${attemptNumber}차 시도):`, error.message);
@@ -1034,7 +1035,6 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     await fs.promises.writeFile(filePath, sharpBuffer);
 }
 
-
 // ========================================
 // 🌐 API 라우트들
 // ========================================
@@ -1044,7 +1044,11 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
 
-
+// 날짜 포맷 통일 함수
+function normalizeDate(str) {
+    if (!str) return '';
+    return str.replace(/\./g, '-').replace(/\s/g, '').slice(0, 10);
+}
 
 // 랭킹 데이터 가져오기
 app.get('/api/ranking', async (req, res) => {
@@ -1068,9 +1072,12 @@ app.get('/api/ranking', async (req, res) => {
             if (!startDate && !endDate) return data;
             return data.filter(item => {
                 if (!item.date) return false;
-                if (startDate && !endDate) return item.date === startDate;
-                if (!startDate && endDate) return item.date === endDate;
-                return item.date >= startDate && item.date <= endDate;
+                const itemDate = normalizeDate(item.date);
+                const sDate = normalizeDate(startDate);
+                const eDate = normalizeDate(endDate);
+                if (sDate && !eDate) return itemDate === sDate;
+                if (!sDate && eDate) return itemDate === eDate;
+                return itemDate >= sDate && itemDate <= eDate;
             });
         };
         // 정렬
@@ -1103,8 +1110,6 @@ app.get('/api/ranking', async (req, res) => {
     }
 });
 
-
-
 app.get('/api/search', (req, res) => {
     try {
         const { keyword, startDate, endDate, category, yearMonth } = req.query;
@@ -1128,14 +1133,14 @@ app.get('/api/search', (req, res) => {
         const lowerKeyword = keyword.toLowerCase();
         // 날짜 필터
         const isInDateRange = (itemDate, startDate, endDate) => {
-            if (!startDate && !endDate) return true;
-            if (startDate && !endDate) return itemDate === startDate;
-            if (!startDate && endDate) return itemDate === endDate;
-            if (startDate && endDate) {
-                const d = new Date(itemDate);
-                const s = new Date(startDate);
-                const e = new Date(endDate);
-                return d >= s && d <= e;
+            const itemD = normalizeDate(itemDate);
+            const sDate = normalizeDate(startDate);
+            const eDate = normalizeDate(endDate);
+            if (!sDate && !eDate) return true;
+            if (sDate && !eDate) return itemD === sDate;
+            if (!sDate && eDate) return itemD === eDate;
+            if (sDate && eDate) {
+                return itemD >= sDate && itemD <= eDate;
             }
             return false;
         };
@@ -1188,9 +1193,6 @@ app.get('/api/search', (req, res) => {
         });
     }
 });
-
-
-
 
 // 마지막 크롤링 시간 API
 app.get('/api/last-crawl-time', (req, res) => {
@@ -1255,10 +1257,6 @@ app.get('/api/captures', async (req, res) => {
     });
 });
 
-
-
-
-
 // ========================================
 // 🛠️ 서버 설정 및 시작
 // ========================================
@@ -1303,8 +1301,6 @@ app.get('/health', async (req, res) => {
         });
     }
 });
-
-
 
 app.listen(port, async () => {
     console.log(`Server running at http://localhost:${port}`);
