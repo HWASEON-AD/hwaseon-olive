@@ -810,13 +810,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             isLoading = true;
             searchBtn.disabled = true;
-            document.getElementById('loadingOverlay').style.display = 'flex';
+
             // '조회 중..' 메시지 표시
             rankingTable.innerHTML = `
                 <tr>
-                    <td colspan="8" style="text-align: center; padding: 20px;">
-                        검색 중...
-                    </td>
+                    <td colspan="8" style="text-align: center; padding: 20px; color: #888; font-size: 18px;">조회 중..</td>
                 </tr>
             `;
 
