@@ -412,123 +412,184 @@ async function crawlAllCategoriesV2() {
         log.info(`카테고리: ${category}`);
         localProductCache.data[category] = [];
         let totalRank = 1;
-        for (let page = 1; page <= 13; page++) {
-            if (localProductCache.data[category].length >= 100) break;
-            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=${page}&rowsPerPage=8&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
-            let driver = null;
-            let tmpProfile = null;
-            try {
-                tmpProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-profile-'));
-                const options = new chrome.Options()
-                    .addArguments('--headless')
-                    .addArguments('--no-sandbox')
-                    .addArguments('--disable-dev-shm-usage')
-                    .addArguments('--window-size=1920,1500')
-                    .addArguments(`--user-data-dir=${tmpProfile}`)
-                    .addArguments(`--user-agent=${getRandomUserAgent()}`);
-                if (process.env.CHROME_BIN) {
-                    options.setChromeBinaryPath(process.env.CHROME_BIN);
-                }
-                driver = await new Builder().forBrowser('chrome').setChromeOptions(options).build();
-                await driver.get(url);
-                await driver.wait(until.elementLocated(By.css('body')), 15000);
-                await driver.sleep(2000);
-                // 상품 리스트 파싱 - thumb_flag.best 텍스트와 무관하게 순서대로 랭킹 부여
-                const products = await driver.findElements(By.css('li.flag'));
+                // 상품 리스트 파싱 - 가로(행) 순서, 중복 제거(날짜/시간/카테고리/순위/브랜드/제품명 모두 같을 때만), 100개 보장
                 let rankCounter = 1;
-                for (const product of products) {
-                    if (localProductCache.data[category].length >= 100) break;
+                const seen = new Set(); // 중복 체크용
+                let page = 1;
+                let noNewItemCount = 0;
+                const MAX_NO_NEW_ITEM_PAGE = 3; // 연속 3페이지에서 새로운 상품이 없으면 종료
+                while (localProductCache.data[category].length < 100 && page <= 30) {
+                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=${page}&rowsPerPage=8&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
+                    let driver = null;
+                    let tmpProfile = null;
+                    let newItemAdded = false;
                     try {
-                        const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
-                        let name = nameElement ? await nameElement.getText() : `상품${rankCounter}`;
-                        let brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
-                        let brand = brandElement ? await brandElement.getText() : '';
-                        if (!brand && name) {
-                            const lines = name.split('\n');
-                            if (lines.length > 1) {
-                                brand = lines[0].trim();
-                                name = lines.slice(1).join(' ').trim();
-                            } else {
-                                const match = name.match(/^([\w가-힣A-Za-z0-9]+)[\s\[]?(.*)$/);
-                                if (match) {
-                                    brand = match[1].trim();
-                                    name = match[2].trim();
+                        tmpProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-profile-'));
+                        const options = new chrome.Options()
+                            .addArguments('--headless')
+                            .addArguments('--no-sandbox')
+                            .addArguments('--disable-dev-shm-usage')
+                            .addArguments('--window-size=1920,1500')
+                            .addArguments(`--user-data-dir=${tmpProfile}`)
+                            .addArguments(`--user-agent=${getRandomUserAgent()}`);
+                        if (process.env.CHROME_BIN) {
+                            options.setChromeBinaryPath(process.env.CHROME_BIN);
+                        }
+                        driver = await new Builder().forBrowser('chrome').setChromeOptions(options).build();
+                        await driver.get(url);
+                        await driver.wait(until.elementLocated(By.css('body')), 15000);
+                        await driver.sleep(2000);
+                        const products = await driver.findElements(By.css('li.flag'));
+                        for (const product of products) {
+                            if (localProductCache.data[category].length >= 100) break;
+                            try {
+                                const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
+                                let name = nameElement ? await nameElement.getText() : `상품${rankCounter}`;
+                                let brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
+                                let brand = brandElement ? await brandElement.getText() : '';
+                                if (!brand && name) {
+                                    const lines = name.split('\n');
+                                    if (lines.length > 1) {
+                                        brand = lines[0].trim();
+                                        name = lines.slice(1).join(' ').trim();
+                                    } else {
+                                        const match = name.match(/^([\w가-힣A-Za-z0-9]+)[\s\[]?(.*)$/);
+                                        if (match) {
+                                            brand = match[1].trim();
+                                            name = match[2].trim();
+                                        }
+                                    }
                                 }
+                                if (brand && name && name.startsWith(brand)) {
+                                    name = name.slice(brand.length).trim();
+                                }
+                                // 중복 체크: 날짜, 시간, 카테고리, 순위, 브랜드, 제품명 모두 같을 때만
+                                const uniqueKey = [
+                                  today,
+                                  timeStr,
+                                  category,
+                                  rankCounter,
+                                  brand.trim(),
+                                  name.trim()
+                                ].join('|');
+                                if (seen.has(uniqueKey)) continue;
+                                seen.add(uniqueKey);
+                                let originalPrice = '';
+                                let salePrice = '';
+                                const orgPriceElement = await product.findElement(By.css('.prd_price .tx_org .tx_num')).catch(() => null);
+                                const curPriceElement = await product.findElement(By.css('.prd_price .tx_cur .tx_num')).catch(() => null);
+                                if (orgPriceElement) {
+                                    originalPrice = (await orgPriceElement.getText()).replace(/,/g, '');
+                                }
+                                if (curPriceElement) {
+                                    salePrice = (await curPriceElement.getText()).replace(/,/g, '');
+                                }
+                                if (!originalPrice || !salePrice) {
+                                    const priceElement = await product.findElement(By.css('.prd_price')).catch(() => null);
+                                    const priceText = priceElement ? await priceElement.getText() : '';
+                                    const priceMatch = priceText.match(/(\d{1,3}(?:,\d{3})*)/g);
+                                    if (!originalPrice) originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
+                                    if (!salePrice) salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
+                                }
+                                const promoElements = await product.findElements(By.css('.icon_flag')).catch(() => []);
+                                let promotion = '';
+                                if (promoElements && promoElements.length > 0) {
+                                    const promoTexts = [];
+                                    for (const el of promoElements) {
+                                        const txt = await el.getText();
+                                        if (txt) promoTexts.push(txt.trim());
+                                    }
+                                    promotion = promoTexts.join(', ');
+                                }
+                                const productData = {
+                                    date: today,
+                                    time: timeStr,
+                                    category,
+                                    rank: rankCounter, // thumb_flag.best 텍스트와 무관하게 순서대로 부여
+                                    brand: brand.trim(),
+                                    name: name.trim(),
+                                    originalPrice: originalPrice,
+                                    salePrice: salePrice,
+                                    promotion: promotion.trim()
+                                };
+                                localProductCache.data[category].push(productData);
+                                rankCounter++;
+                                newItemAdded = true;
+                            } catch (productError) {
+                                localProductCache.data[category].push({
+                                    date: today,
+                                    time: timeStr,
+                                    category,
+                                    rank: rankCounter,
+                                    brand: '',
+                                    name: `상품${rankCounter}`,
+                                    originalPrice: '',
+                                    salePrice: '',
+                                    promotion: ''
+                                });
+                                rankCounter++;
+                                newItemAdded = true;
                             }
                         }
-                        if (brand && name && name.startsWith(brand)) {
-                            name = name.slice(brand.length).trim();
-                        }
-                        let originalPrice = '';
-                        let salePrice = '';
-                        const orgPriceElement = await product.findElement(By.css('.prd_price .tx_org .tx_num')).catch(() => null);
-                        const curPriceElement = await product.findElement(By.css('.prd_price .tx_cur .tx_num')).catch(() => null);
-                        if (orgPriceElement) {
-                            originalPrice = (await orgPriceElement.getText()).replace(/,/g, '');
-                        }
-                        if (curPriceElement) {
-                            salePrice = (await curPriceElement.getText()).replace(/,/g, '');
-                        }
-                        if (!originalPrice || !salePrice) {
-                            const priceElement = await product.findElement(By.css('.prd_price')).catch(() => null);
-                            const priceText = priceElement ? await priceElement.getText() : '';
-                            const priceMatch = priceText.match(/(\d{1,3}(?:,\d{3})*)/g);
-                            if (!originalPrice) originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
-                            if (!salePrice) salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
-                        }
-                        const promoElements = await product.findElements(By.css('.icon_flag')).catch(() => []);
-                        let promotion = '';
-                        if (promoElements && promoElements.length > 0) {
-                            const promoTexts = [];
-                            for (const el of promoElements) {
-                                const txt = await el.getText();
-                                if (txt) promoTexts.push(txt.trim());
-                            }
-                            promotion = promoTexts.join(', ');
-                        }
-                        const productData = {
-                            date: today,
-                            time: timeStr,
-                            category,
-                            rank: rankCounter, // thumb_flag.best 텍스트와 무관하게 순서대로 부여
-                            brand: brand.trim(),
-                            name: name.trim(),
-                            originalPrice: originalPrice,
-                            salePrice: salePrice,
-                            promotion: promotion.trim()
-                        };
-                        localProductCache.data[category].push(productData);
-                        rankCounter++;
-                    } catch (productError) {
-                        localProductCache.data[category].push({
-                            date: today,
-                            time: timeStr,
-                            category,
-                            rank: rankCounter,
-                            brand: '',
-                            name: `상품${rankCounter}`,
-                            originalPrice: '',
-                            salePrice: '',
-                            promotion: ''
-                        });
-                        rankCounter++;
+                    } catch (e) {
+                        console.error(`[${category}] ${page}페이지 크롤링 실패:`, e.message);
+                    } finally {
+                        if (driver) await driver.quit();
+                        if (tmpProfile && fs.existsSync(tmpProfile)) fs.rmSync(tmpProfile, { recursive: true, force: true });
                     }
+                    if (!newItemAdded) {
+                        noNewItemCount++;
+                    } else {
+                        noNewItemCount = 0;
+                    }
+                    if (noNewItemCount >= MAX_NO_NEW_ITEM_PAGE) {
+                        log.warn(`[${category}] 연속 ${MAX_NO_NEW_ITEM_PAGE}페이지에서 새로운 상품이 없어 크롤링 종료`);
+                        break;
+                    }
+                    page++;
                 }
-            } catch (e) {
-                console.error(`[${category}] ${page}페이지 크롤링 실패:`, e.message);
-            } finally {
-                if (driver) await driver.quit();
-                if (tmpProfile && fs.existsSync(tmpProfile)) fs.rmSync(tmpProfile, { recursive: true, force: true });
-            }
-        }
         // 100개까지만 저장
         localProductCache.data[category] = localProductCache.data[category].slice(0, 100);
         log.success(`[${category}] 크롤링 완료: ${localProductCache.data[category].length}개`);
     }
-    // 전체 데이터 저장
-    localProductCache.timestamp = kstNow;
+    // 전체 데이터 저장 (기존 데이터와 병합, 중복 제거)
+    let mergedData = localProductCache;
+    if (fs.existsSync(RANKING_DATA_PATH)) {
+        try {
+            const prev = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
+            if (prev && typeof prev === 'object' && prev.data) {
+                // 카테고리별로 기존 데이터와 새 데이터 합치기
+                for (const cat of Object.keys(CATEGORY_CODES)) {
+                    const oldArr = Array.isArray(prev.data[cat]) ? prev.data[cat] : [];
+                    const newArr = Array.isArray(localProductCache.data[cat]) ? localProductCache.data[cat] : [];
+                    // 중복 제거: 날짜, 시간, 카테고리, 순위, 브랜드, 제품명 모두 같을 때만
+                    const seen = new Set();
+                    const mergedArr = [];
+                    for (const arr of [oldArr, newArr]) {
+                        for (const item of arr) {
+                            const uniqueKey = [
+                                item.date,
+                                item.time,
+                                item.category,
+                                item.rank,
+                                (item.brand||'').trim(),
+                                (item.name||'').trim()
+                            ].join('|');
+                            if (seen.has(uniqueKey)) continue;
+                            seen.add(uniqueKey);
+                            mergedArr.push(item);
+                        }
+                    }
+                    mergedData.data[cat] = mergedArr;
+                }
+            }
+        } catch (e) {
+            log.error('기존 월별 랭킹 데이터 병합 실패: ' + e);
+        }
+    }
+    mergedData.timestamp = kstNow;
     try {
-        fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(localProductCache, null, 2));
+        fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(mergedData, null, 2));
         log.success(`[랭킹 데이터 저장 완료] ${RANKING_DATA_PATH}`);
     } catch (e) {
         log.error('[랭킹 데이터 저장 실패] ' + RANKING_DATA_PATH + ' ' + e);
