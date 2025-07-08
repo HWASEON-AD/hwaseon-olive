@@ -438,7 +438,8 @@ async function crawlAllCategoriesV2(options = {}) {
                         await driver.get(url);
                         await driver.wait(until.elementLocated(By.css('body')), 15000);
                         await driver.sleep(2000);
-                        const products = await driver.findElements(By.css('li.flag'));
+                        // 모든 상품 li를 선택하도록 셀렉터 수정
+                        const products = await driver.findElements(By.css('ul.cate_prd_list > li'));
                         for (const product of products) {
                             if (localProductCache.data[category].length >= 100) break;
                             try {
