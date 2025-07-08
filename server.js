@@ -880,6 +880,13 @@ app.get('/api/ranking', async (req, res) => {
                 const itemDate = normalizeDate(item.date);
                 const sDate = normalizeDate(startDate);
                 const eDate = normalizeDate(endDate);
+                // 디버깅용 로그 추가
+                console.log('[filterByDate]', {
+                  'item.date': item.date,
+                  itemDate,
+                  sDate,
+                  eDate
+                });
                 if (sDate && !eDate) return itemDate === sDate;
                 if (!sDate && eDate) return itemDate === eDate;
                 return itemDate >= sDate && itemDate <= eDate;
@@ -1110,5 +1117,3 @@ app.get('/api/captures', async (req, res) => {
         total: 0
     });
 });
-
-// 스케줄링 관련 함수들은 현재 비활성화됨
