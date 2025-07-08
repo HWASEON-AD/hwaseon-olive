@@ -442,8 +442,36 @@ async function crawlAllCategoriesV2(options = {}) {
                         for (const product of products) {
                             if (localProductCache.data[category].length >= 100) break;
                             try {
+                                // data-attr에서 랭킹 정보 추출 (예: "랭킹^판매랭킹리스트_전체^상품명^3")
+                                const dataAttrElement = await product.findElement(By.css('a[data-attr]')).catch(() => null);
+                                let extractedRank = rankCounter;
+                                if (dataAttrElement) {
+                                    const dataAttr = await dataAttrElement.getAttribute('data-attr');
+                                    if (dataAttr) {
+                                        const parts = dataAttr.split('^');
+                                        if (parts.length >= 4) {
+                                            const rankFromAttr = parseInt(parts[3]);
+                                            if (!isNaN(rankFromAttr)) {
+                                                extractedRank = rankFromAttr;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // thumb_flag.best에서도 랭킹 정보 확인 (백업)
+                                if (extractedRank === rankCounter) {
+                                    const thumbFlagElement = await product.findElement(By.css('.thumb_flag.best')).catch(() => null);
+                                    if (thumbFlagElement) {
+                                        const thumbFlagText = await thumbFlagElement.getText();
+                                        const thumbRank = parseInt(thumbFlagText);
+                                        if (!isNaN(thumbRank)) {
+                                            extractedRank = thumbRank;
+                                        }
+                                    }
+                                }
+                                
                                 const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
-                                let name = nameElement ? await nameElement.getText() : `상품${rankCounter}`;
+                                let name = nameElement ? await nameElement.getText() : `상품${extractedRank}`;
                                 let brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
                                 let brand = brandElement ? await brandElement.getText() : '';
                                 if (!brand && name) {
@@ -467,7 +495,7 @@ async function crawlAllCategoriesV2(options = {}) {
                                   today,
                                   timeStr,
                                   category,
-                                  rankCounter,
+                                  extractedRank,
                                   brand.trim(),
                                   name.trim()
                                 ].join('|');
@@ -504,7 +532,7 @@ async function crawlAllCategoriesV2(options = {}) {
                                     date: today,
                                     time: timeStr,
                                     category,
-                                    rank: rankCounter, // thumb_flag.best 텍스트와 무관하게 순서대로 부여
+                                    rank: extractedRank, // data-attr에서 추출한 정확한 랭킹 사용
                                     brand: brand.trim(),
                                     name: name.trim(),
                                     originalPrice: originalPrice,
@@ -519,9 +547,9 @@ async function crawlAllCategoriesV2(options = {}) {
                                     date: today,
                                     time: timeStr,
                                     category,
-                                    rank: rankCounter,
+                                    rank: extractedRank || rankCounter,
                                     brand: '',
-                                    name: `상품${rankCounter}`,
+                                    name: `상품${extractedRank || rankCounter}`,
                                     originalPrice: '',
                                     salePrice: '',
                                     promotion: ''
@@ -547,9 +575,10 @@ async function crawlAllCategoriesV2(options = {}) {
                     }
                     page++;
                 }
-        // 100개까지만 저장
+        // 랭킹 순서대로 정렬 후 100개까지만 저장
+        localProductCache.data[category].sort((a, b) => a.rank - b.rank);
         localProductCache.data[category] = localProductCache.data[category].slice(0, 100);
-        log.success(`[${category}] 크롤링 완료: ${localProductCache.data[category].length}개`);
+        log.success(`[${category}] 크롤링 완료: ${localProductCache.data[category].length}개 (랭킹 순서 정렬됨)`);
     }
     // 전체 데이터 저장 (기존 데이터와 병합, 중복 제거)
     let mergedData = localProductCache;
@@ -579,6 +608,8 @@ async function crawlAllCategoriesV2(options = {}) {
                             mergedArr.push(item);
                         }
                     }
+                    // 병합된 데이터를 랭킹 순서대로 정렬
+                    mergedArr.sort((a, b) => a.rank - b.rank);
                     mergedData.data[cat] = mergedArr;
                 }
             }
