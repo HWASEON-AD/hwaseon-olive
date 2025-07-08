@@ -100,7 +100,16 @@ function deduplicate(arr) {
     return Array.from(map.values());
 }
 
-ㅋ
+// 날짜 정규화 함수
+function normalizeDate(dateString) {
+    if (!dateString) return null;
+    
+    // YYYY-MM-DD 형식으로 변환
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return null;
+    
+    return date.toISOString().split('T')[0];
+}
 // 안전한 드라이버 종료 함수
 async function safeQuitDriver(driver, category = 'unknown') {
     if (driver) {
