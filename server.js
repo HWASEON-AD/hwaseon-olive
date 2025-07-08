@@ -100,15 +100,6 @@ function getRandomUserAgent() {
     return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
-// 중복 제거 함수
-function deduplicate(arr) {
-    const map = new Map();
-    arr.forEach(item => {
-        const key = `${item.date}_${item.time}_${item.rank}_${item.name}`;
-        map.set(key, item);
-    });
-    return Array.from(map.values());
-}
 
 // 날짜 정규화 함수
 function normalizeDate(dateString) {
@@ -424,7 +415,7 @@ async function crawlAllCategoriesV2() {
                 let noNewItemCount = 0;
                 const MAX_NO_NEW_ITEM_PAGE = 3; // 연속 3페이지에서 새로운 상품이 없으면 종료
                 while (localProductCache.data[category].length < 100 && page <= 30) {
-                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=${page}&rowsPerPage=8&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
+                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=${page}&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
                     let driver = null;
                     let tmpProfile = null;
                     let newItemAdded = false;
