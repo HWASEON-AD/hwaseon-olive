@@ -831,6 +831,7 @@ app.get('/api/ranking', async (req, res) => {
         const { category = '스킨케어', page = 1, startDate, endDate, yearMonth } = req.query;
         const ym = yearMonth || new Date().toISOString().slice(0, 7); // 기본값: 현재 월
         const filePath = getRankingDataPath(ym);
+        
         if (!fs.existsSync(filePath)) {
             return res.json({
                 success: true,
@@ -840,18 +841,45 @@ app.get('/api/ranking', async (req, res) => {
                 message: `${ym} 데이터가 없습니다. 크롤링이 필요합니다.`
             });
         }
-        const fileData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+        // 메모리 효율적인 파일 읽기
+        const fileData = await new Promise((resolve, reject) => {
+            const chunks = [];
+            const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
+            
+            stream.on('data', (chunk) => {
+                chunks.push(chunk);
+            });
+            
+            stream.on('end', () => {
+                try {
+                    const content = chunks.join('');
+                    const data = JSON.parse(content);
+                    resolve(data);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+            
+            stream.on('error', reject);
+        });
+
         const categoryData = fileData.data && fileData.data[category] ? fileData.data[category] : [];
+        
         // 날짜 필터
         const filterByDate = (data) => {
             if (!startDate && !endDate) return data;
             return data.filter(item => {
                 if (!item.date) return false;
-                if (startDate && !endDate) return item.date === startDate;
-                if (!startDate && endDate) return item.date === endDate;
-                return item.date >= startDate && item.date <= endDate;
+                const itemDate = normalizeDate(item.date);
+                const sDate = normalizeDate(startDate);
+                const eDate = normalizeDate(endDate);
+                if (sDate && !eDate) return itemDate === sDate;
+                if (!sDate && eDate) return itemDate === eDate;
+                return itemDate >= sDate && itemDate <= eDate;
             });
         };
+        
         // 정렬
         const sortByDateAndTime = (data) => {
             return [...data].sort((a, b) => {
@@ -864,8 +892,15 @@ app.get('/api/ranking', async (req, res) => {
                 return a.rank - b.rank;
             });
         };
+        
         const filteredData = filterByDate(categoryData);
         const sortedData = sortByDateAndTime(filteredData);
+        
+        // 메모리 정리
+        if (global.gc) {
+            global.gc();
+        }
+        
         return res.json({
             success: true,
             data: sortedData,
@@ -882,7 +917,7 @@ app.get('/api/ranking', async (req, res) => {
     }
 });
 
-app.get('/api/search', (req, res) => {
+app.get('/api/search', async (req, res) => {
     try {
         const { keyword, startDate, endDate, category, yearMonth } = req.query;
         if (!keyword || !startDate) {
@@ -893,6 +928,7 @@ app.get('/api/search', (req, res) => {
         }
         const ym = yearMonth || new Date().toISOString().slice(0, 7);
         const filePath = getRankingDataPath(ym);
+        
         if (!fs.existsSync(filePath)) {
             return res.json({
                 success: true,
@@ -901,21 +937,45 @@ app.get('/api/search', (req, res) => {
                 message: `${ym} 데이터가 없습니다. 크롤링이 필요합니다.`
             });
         }
-        const fileData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+        // 메모리 효율적인 파일 읽기
+        const fileData = await new Promise((resolve, reject) => {
+            const chunks = [];
+            const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
+            
+            stream.on('data', (chunk) => {
+                chunks.push(chunk);
+            });
+            
+            stream.on('end', () => {
+                try {
+                    const content = chunks.join('');
+                    const data = JSON.parse(content);
+                    resolve(data);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+            
+            stream.on('error', reject);
+        });
+
         const lowerKeyword = keyword.toLowerCase();
+        
         // 날짜 필터
         const isInDateRange = (itemDate, startDate, endDate) => {
-            if (!startDate && !endDate) return true;
-            if (startDate && !endDate) return itemDate === startDate;
-            if (!startDate && endDate) return itemDate === endDate;
-            if (startDate && endDate) {
-                const d = new Date(itemDate);
-                const s = new Date(startDate);
-                const e = new Date(endDate);
-                return d >= s && d <= e;
+            const itemD = normalizeDate(itemDate);
+            const sDate = normalizeDate(startDate);
+            const eDate = normalizeDate(endDate);
+            if (!sDate && !eDate) return true;
+            if (sDate && !eDate) return itemD === sDate;
+            if (!sDate && eDate) return itemD === eDate;
+            if (sDate && eDate) {
+                return itemD >= sDate && itemD <= eDate;
             }
             return false;
         };
+        
         let matchingResults = [];
         if (category && fileData.data[category]) {
             const categoryItems = fileData.data[category];
@@ -939,6 +999,7 @@ app.get('/api/search', (req, res) => {
                 });
             });
         }
+        
         // 정렬: 날짜 내림차순, 시간 내림차순, 카테고리, 순위
         matchingResults.sort((a, b) => {
             const dateCompare = b.date.localeCompare(a.date);
@@ -952,6 +1013,12 @@ app.get('/api/search', (req, res) => {
             }
             return a.rank - b.rank;
         });
+        
+        // 메모리 정리
+        if (global.gc) {
+            global.gc();
+        }
+        
         return res.json({
             success: true,
             data: matchingResults,
@@ -1019,5 +1086,3 @@ app.get('/api/captures', async (req, res) => {
         total: 0
     });
 });
-
-// 스케줄링 관련 함수들은 현재 비활성화됨

@@ -1,34 +1,23 @@
 {
   "name": "oliveyoung-crawler",
   "version": "1.0.0",
-  "description": "Olive Young ranking crawler",
+  "description": "Oliveyoung ranking crawler and capture system",
   "main": "server.js",
-  "engines": {
-    "node": ">=20.0.0"
-  },
   "scripts": {
-    "start": "node server.js",
-    "build": "mkdir -p public/captures"
+    "start": "node --max-old-space-size=4096 server.js",
+    "dev": "node --max-old-space-size=4096 server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "archiver": "^7.0.1",
-    "chromedriver": "^137.0.4",
-    "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
     "express": "^4.18.2",
-    "node-cron": "^4.0.5",
-    "nodemailer": "^7.0.3",
-    "selenium-webdriver": "^4.18.1",
-    "sharp": "^0.34.1"
+    "cors": "^2.8.5",
+    "selenium-webdriver": "^4.15.0",
+    "sharp": "^0.32.6",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.7",
+    "archiver": "^6.0.1",
+    "dotenv": "^16.3.1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/hammin0808/hwaseon-olive.git"
-  },
-  "bugs": {
-    "url": "https://github.com/hammin0808/hwaseon-olive/issues"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
