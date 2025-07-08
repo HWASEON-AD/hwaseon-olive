@@ -907,6 +907,19 @@ app.get('/api/ranking', async (req, res) => {
         const filteredData = filterByDate(categoryData);
         const sortedData = sortByDateAndTime(filteredData);
         
+        // 필드 순서 재정렬 (원하는 순서대로)
+        const reorderedData = sortedData.map(item => ({
+            rank: item.rank,
+            brand: item.brand,
+            name: item.name,
+            originalPrice: item.originalPrice,
+            salePrice: item.salePrice,
+            promotion: item.promotion,
+            date: item.date,
+            time: item.time,
+            category: item.category
+        }));
+        
         // 메모리 정리
         if (global.gc) {
             global.gc();
@@ -914,8 +927,8 @@ app.get('/api/ranking', async (req, res) => {
         
         return res.json({
             success: true,
-            data: sortedData,
-            total: sortedData.length,
+            data: reorderedData,
+            total: reorderedData.length,
             category,
             fromCache: false
         });
