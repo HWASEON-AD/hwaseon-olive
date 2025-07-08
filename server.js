@@ -197,13 +197,9 @@ app.get('/health', async (req, res) => {
     }
 });
 
-app.listen(port, async () => {
+app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
     
-    // 서버 시작 시 크롤링+캡처 즉시 1회 실행
-    console.log('서버 시작 직후 즉시 크롤링 및 캡처 작업 실행!');
-    await crawlAllCategoriesV2();
-
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
         fs.readdir(capturesDir, (err, files) => {
@@ -890,15 +886,20 @@ app.get('/api/ranking', async (req, res) => {
             });
         };
         
-        // 정렬
+        // 정렬 - 최신 날짜, 최신 시간이 위로
         const sortByDateAndTime = (data) => {
             return [...data].sort((a, b) => {
+                // 1순위: 날짜 내림차순 (최신 날짜가 위로)
                 const dateCompare = b.date.localeCompare(a.date);
                 if (dateCompare !== 0) return dateCompare;
+                
+                // 2순위: 시간 내림차순 (최신 시간이 위로)
                 if (a.time && b.time) {
                     const timeCompare = b.time.localeCompare(a.time);
                     if (timeCompare !== 0) return timeCompare;
                 }
+                
+                // 3순위: 순위 오름차순 (1위, 2위, 3위...)
                 return a.rank - b.rank;
             });
         };
