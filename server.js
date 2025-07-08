@@ -207,12 +207,9 @@ app.get('/health', async (req, res) => {
     }
 });
 
-app.listen(port, async () => {
+// app.listen 내부에서 즉시 크롤링 및 캡처 실행 부분 제거
+app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
-    
-    // 서버 시작 시 즉시 크롤링 및 캡처 1회 실행
-    log.section('🚀 서버 시작 후 즉시 크롤링 및 캡처 실행');
-    await crawlAllCategoriesV2();
     
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
@@ -374,6 +371,24 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
 // 🕷️ 새로운 크롤링 함수 (카테고리별 1~100위)
 // ========================================
 
+// 다음 크롤링 예정 시각 및 남은 시간 로그 함수
+function logNextCrawlTime() {
+  const now = new Date();
+  // Asia/Seoul 기준으로 계산
+  const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  const next = new Date(kstNow);
+  next.setMinutes(15);
+  next.setSeconds(0);
+  next.setMilliseconds(0);
+  if (kstNow.getMinutes() >= 15) {
+    next.setHours(kstNow.getHours() + 1);
+  }
+  const diffMs = next - kstNow;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffSec = Math.floor((diffMs % 60000) / 1000);
+  log.info(`다음 크롤링 예정 시각: ${next.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (${diffMin}분 ${diffSec}초 남음)`);
+}
+
 async function crawlAllCategoriesV2() {
     log.section('🕷️ 크롤링 전체 시작');
     const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
@@ -418,14 +433,14 @@ async function crawlAllCategoriesV2() {
                 await driver.get(url);
                 await driver.wait(until.elementLocated(By.css('body')), 15000);
                 await driver.sleep(2000);
-                // 상품 리스트 파싱
+                // 상품 리스트 파싱 - thumb_flag.best 텍스트와 무관하게 순서대로 랭킹 부여
                 const products = await driver.findElements(By.css('li.flag'));
-                for (let i = 0; i < products.length; i++) {
+                let rankCounter = 1;
+                for (const product of products) {
                     if (localProductCache.data[category].length >= 100) break;
                     try {
-                        const product = products[i];
                         const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
-                        let name = nameElement ? await nameElement.getText() : `상품${totalRank}`;
+                        let name = nameElement ? await nameElement.getText() : `상품${rankCounter}`;
                         let brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
                         let brand = brandElement ? await brandElement.getText() : '';
                         if (!brand && name) {
@@ -475,7 +490,7 @@ async function crawlAllCategoriesV2() {
                             date: today,
                             time: timeStr,
                             category,
-                            rank: totalRank,
+                            rank: rankCounter, // thumb_flag.best 텍스트와 무관하게 순서대로 부여
                             brand: brand.trim(),
                             name: name.trim(),
                             originalPrice: originalPrice,
@@ -483,20 +498,20 @@ async function crawlAllCategoriesV2() {
                             promotion: promotion.trim()
                         };
                         localProductCache.data[category].push(productData);
-                        totalRank++;
+                        rankCounter++;
                     } catch (productError) {
                         localProductCache.data[category].push({
                             date: today,
                             time: timeStr,
                             category,
-                            rank: totalRank,
+                            rank: rankCounter,
                             brand: '',
-                            name: `상품${totalRank}`,
+                            name: `상품${rankCounter}`,
                             originalPrice: '',
                             salePrice: '',
                             promotion: ''
                         });
-                        totalRank++;
+                        rankCounter++;
                     }
                 }
             } catch (e) {
@@ -520,6 +535,8 @@ async function crawlAllCategoriesV2() {
     }
     // 크롤링 끝나면 캡처 함수 호출
     await captureOliveyoungMainRanking(timeStr);
+    // 크롤링/캡처 끝난 후 다음 크롤링 시각 로그
+    logNextCrawlTime();
 }
 
 // ========================================
