@@ -18,6 +18,16 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5001;
 
+// ========== 컬러 로그 유틸리티 ========== //
+const log = {
+  info: (msg) => console.log(`\x1b[36m[INFO]\x1b[0m ${msg}`),
+  success: (msg) => console.log(`\x1b[32m[SUCCESS]\x1b[0m ${msg}`),
+  warn: (msg) => console.log(`\x1b[33m[WARN]\x1b[0m ${msg}`),
+  error: (msg) => console.log(`\x1b[31m[ERROR]\x1b[0m ${msg}`),
+  section: (msg) => console.log(`\n\x1b[35m========== ${msg} ==========` + '\x1b[0m'),
+  line: () => console.log('\x1b[90m' + '-'.repeat(60) + '\x1b[0m'),
+};
+
 // ========================================
 // 📁 디렉토리 및 파일 경로 설정
 // ========================================
@@ -197,8 +207,12 @@ app.get('/health', async (req, res) => {
     }
 });
 
-app.listen(port, () => {
+app.listen(port, async () => {
     console.log(`Server running at http://localhost:${port}`);
+    
+    // 서버 시작 시 즉시 크롤링 및 캡처 1회 실행
+    log.section('🚀 서버 시작 후 즉시 크롤링 및 캡처 실행');
+    await crawlAllCategoriesV2();
     
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
@@ -274,6 +288,7 @@ const transporter = nodemailer.createTransport({
 
 // 캡처본 분할 zip 및 메일 전송 함수 (4개씩)
 async function organizeAndSendCapturesSplit(timeStr, dateStr) {
+    log.section('📧 이메일 전송 시작');
     const files = fs.readdirSync(capturesDir)
         .filter(file => file.endsWith('.jpeg') && file.includes(dateStr) && file.includes(timeStr));
     if (files.length === 0) return;
@@ -360,6 +375,7 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
 // ========================================
 
 async function crawlAllCategoriesV2() {
+    log.section('🕷️ 크롤링 전체 시작');
     const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const yearMonth = kstNow.toISOString().slice(0, 7); // '2025-07'
     const today = kstNow.toISOString().split('T')[0];
@@ -373,10 +389,12 @@ async function crawlAllCategoriesV2() {
                 localProductCache = prev;
             }
         } catch (e) {
-            console.error('기존 월별 랭킹 데이터 로드 실패:', e);
+            log.error('기존 월별 랭킹 데이터 로드 실패: ' + e);
         }
     }
     for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
+        log.line();
+        log.info(`카테고리: ${category}`);
         localProductCache.data[category] = [];
         let totalRank = 1;
         for (let page = 1; page <= 13; page++) {
@@ -490,15 +508,15 @@ async function crawlAllCategoriesV2() {
         }
         // 100개까지만 저장
         localProductCache.data[category] = localProductCache.data[category].slice(0, 100);
-        console.log(`[${category}] 크롤링 완료: ${localProductCache.data[category].length}개`);
+        log.success(`[${category}] 크롤링 완료: ${localProductCache.data[category].length}개`);
     }
     // 전체 데이터 저장
     localProductCache.timestamp = kstNow;
     try {
         fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(localProductCache, null, 2));
-        console.log(`[랭킹 데이터 저장 완료] ${RANKING_DATA_PATH}`);
+        log.success(`[랭킹 데이터 저장 완료] ${RANKING_DATA_PATH}`);
     } catch (e) {
-        console.error('[랭킹 데이터 저장 실패]', RANKING_DATA_PATH, e);
+        log.error('[랭킹 데이터 저장 실패] ' + RANKING_DATA_PATH + ' ' + e);
     }
     // 크롤링 끝나면 캡처 함수 호출
     await captureOliveyoungMainRanking(timeStr);
@@ -509,8 +527,7 @@ async function crawlAllCategoriesV2() {
 // ========================================
 
 async function captureOliveyoungMainRanking(timeStr) {
-    console.log('='.repeat(50));
-    console.log('올리브영 랭킹 페이지 캡처 시작...');
+    log.section('📸 캡처 전체 시작');
     console.log('총 21개 카테고리 캡처 예정');
     console.log('='.repeat(50));
     
@@ -834,11 +851,14 @@ app.get('/', (req, res) => {
 // 랭킹 데이터 가져오기
 app.get('/api/ranking', async (req, res) => {
     try {
+        log.section('📊 랭킹 데이터 조회');
+        log.info(`카테고리: ${req.query.category}, 날짜: ${req.query.startDate} ~ ${req.query.endDate}, yearMonth: ${req.query.yearMonth}`);
         const { category = '스킨케어', page = 1, startDate, endDate, yearMonth } = req.query;
         const ym = yearMonth || new Date().toISOString().slice(0, 7); // 기본값: 현재 월
         const filePath = getRankingDataPath(ym);
         
         if (!fs.existsSync(filePath)) {
+            log.warn(`[파일없음] ${filePath}`);
             return res.json({
                 success: true,
                 data: [],
@@ -880,13 +900,8 @@ app.get('/api/ranking', async (req, res) => {
                 const itemDate = normalizeDate(item.date);
                 const sDate = normalizeDate(startDate);
                 const eDate = normalizeDate(endDate);
-                // 디버깅용 로그 추가
-                console.log('[filterByDate]', {
-                  'item.date': item.date,
-                  itemDate,
-                  sDate,
-                  eDate
-                });
+                // 디버깅 로그 제거
+                // console.log('[filterByDate]', { 'item.date': item.date, itemDate, sDate, eDate });
                 if (sDate && !eDate) return itemDate === sDate;
                 if (!sDate && eDate) return itemDate === eDate;
                 return itemDate >= sDate && itemDate <= eDate;
@@ -932,6 +947,7 @@ app.get('/api/ranking', async (req, res) => {
             global.gc();
         }
         
+        log.success(`[응답] ${category} ${sortedData.length}건 반환`);
         return res.json({
             success: true,
             data: reorderedData,
@@ -940,7 +956,7 @@ app.get('/api/ranking', async (req, res) => {
             fromCache: false
         });
     } catch (error) {
-        console.error('랭킹 데이터 조회 오류:', error);
+        log.error('랭킹 데이터 조회 오류: ' + error);
         return res.status(500).json({
             success: false,
             error: '서버 오류가 발생했습니다.'
@@ -950,6 +966,8 @@ app.get('/api/ranking', async (req, res) => {
 
 app.get('/api/search', async (req, res) => {
     try {
+        log.section('🔍 제품명 데이터 검색');
+        log.info(`키워드: ${req.query.keyword}, 카테고리: ${req.query.category}, 날짜: ${req.query.startDate} ~ ${req.query.endDate}, yearMonth: ${req.query.yearMonth}`);
         const { keyword, startDate, endDate, category, yearMonth } = req.query;
         if (!keyword || !startDate) {
             return res.status(400).json({
@@ -961,6 +979,7 @@ app.get('/api/search', async (req, res) => {
         const filePath = getRankingDataPath(ym);
         
         if (!fs.existsSync(filePath)) {
+            log.warn(`[파일없음] ${filePath}`);
             return res.json({
                 success: true,
                 data: [],
@@ -1050,13 +1069,14 @@ app.get('/api/search', async (req, res) => {
             global.gc();
         }
         
+        log.success(`[응답] 검색결과 ${matchingResults.length}건 반환`);
         return res.json({
             success: true,
             data: matchingResults,
             total: matchingResults.length
         });
     } catch (error) {
-        console.error('검색 오류:', error);
+        log.error('검색 오류: ' + error);
         return res.status(500).json({
             success: false,
             error: '서버 오류가 발생했습니다.'
@@ -1116,4 +1136,14 @@ app.get('/api/captures', async (req, res) => {
         data: [],
         total: 0
     });
+});
+
+
+// 1시간마다 15분에 크롤링 실행 (매일 00:15 ~ 23:15, 1년 내내)
+cron.schedule('15 * * * *', async () => {
+  console.log('[CRON] 크롤링 시작:', new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
+  await crawlAllCategoriesV2();
+  console.log('[CRON] 크롤링 완료:', new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }));
+}, {
+  timezone: 'Asia/Seoul'
 });

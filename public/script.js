@@ -812,6 +812,13 @@ document.addEventListener('DOMContentLoaded', () => {
             searchBtn.disabled = true;
             searchBtn.textContent = '로딩 중...';
 
+            // '조회 중..' 메시지 표시
+            rankingTable.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 20px; color: #888; font-size: 18px;">조회 중..</td>
+                </tr>
+            `;
+
             const category = categorySelect.value;
             // 선택된 날짜 값 가져오기 (선택하지 않았다면 빈 문자열)
             const startDate = startDateInput.value || '';
