@@ -210,7 +210,12 @@ app.get('/health', async (req, res) => {
 // app.listen 내부에서 즉시 크롤링 및 캡처 실행 부분 제거
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
-    
+    // 서버 시작 시 즉시 크롤링 1회 실행
+    crawlAllCategoriesV2().then(() => {
+        log.success('서버 시작 후 즉시 크롤링 1회 완료');
+    }).catch(e => {
+        log.error('서버 시작 즉시 크롤링 실패: ' + e);
+    });
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
         fs.readdir(capturesDir, (err, files) => {
