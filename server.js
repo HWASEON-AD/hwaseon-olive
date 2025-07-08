@@ -70,7 +70,7 @@ const USER_AGENTS = [
 // 🔧 유틸리티 함수들
 // ========================================
 
-// 월별 랭킹 데이터 경로 생성 함수
+// 월별 랭킹 데이터 경로 생성 함수 (persistent disk 경로)
 function getRankingDataPath(yearMonth) {
     return `/data/ranking_${yearMonth}.json`;
 }
@@ -150,9 +150,70 @@ let productCache = {
     allProducts: []
 };
 
-// 크롤링 스케줄링 관련 변수
-let scheduledCrawlTimer;
+// ========================================
+// 🛠️ 서버 설정 및 시작
+// ========================================
 
+
+// Health check endpoint
+app.get('/health', async (req, res) => {
+    try {
+        const chromePath = await findChrome();
+        const driver = await new Builder()
+            .forBrowser('chrome')
+            .setChromeOptions(new chrome.Options()
+                .addArguments('--headless')
+                .addArguments('--no-sandbox')
+                .addArguments('--disable-dev-shm-usage')
+                .addArguments('--window-size=1920,1080')
+            )
+            .build();
+        await driver.close();
+        res.json({
+            status: 'healthy',
+            chrome_path: chromePath,
+            timestamp: new Date().toLocaleString('ko-KR', {
+                timeZone: 'Asia/Seoul'
+            })
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toLocaleString('ko-KR', {
+                timeZone: 'Asia/Seoul'
+            })
+        });
+    }
+});
+
+app.listen(port, async () => {
+    console.log(`Server running at http://localhost:${port}`);
+    
+    // 서버 시작 시 크롤링+캡처 즉시 1회 실행
+    console.log('서버 시작 직후 즉시 크롤링 및 캡처 작업 실행!');
+    await crawlAllCategoriesV2();
+
+    // 매일 00:00에 당일 캡처본 삭제
+    cron.schedule('0 0 * * *', () => {
+        fs.readdir(capturesDir, (err, files) => {
+            if (err) return console.error('캡처 디렉토리 읽기 오류:', err);
+            files.forEach(file => {
+                // 파일명에서 날짜 추출 (예: ranking_카테고리_YYYY-MM-DD_HH-MM.jpeg)
+                const match = file.match(/_(\d{4}-\d{2}-\d{2})_/);
+                if (match) {
+                    const filePath = path.join(capturesDir, file);
+                    fs.unlink(filePath, err => {
+                        if (err) console.error('캡처 파일 삭제 오류:', filePath, err);
+                        else console.log('캡처본 삭제:', filePath);
+                    });
+                }
+            });
+        });
+    }, {
+        timezone: 'Asia/Seoul'
+    });
+});
 
 
 // ========================================
@@ -288,432 +349,153 @@ async function organizeAndSendCapturesSplit(timeStr, dateStr) {
     console.log('='.repeat(50));
 }
 
-
 // ========================================
-// 🕷️ 크롤링 관련 함수들
+// 🕷️ 새로운 크롤링 함수 (카테고리별 1~100위)
 // ========================================
 
-// 모든 카테고리 크롤링 함수 (Selenium 기반)
-async function crawlAllCategories() {
-    try {
-        const kstNow = getKSTTime();
-        const yearMonth = kstNow.toISOString().slice(0, 7); // '2025-07'
-        const RANKING_DATA_PATH = getRankingDataPath(yearMonth);
-        // 월별 파일 누적 로드
-        let localProductCache = { data: {}, allProducts: [], timestamp: null };
-        if (fs.existsSync(RANKING_DATA_PATH)) {
-            try {
-                const prev = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
-                if (prev && typeof prev === 'object') {
-                    localProductCache = prev;
-                }
-            } catch (e) {
-                console.error('기존 월별 랭킹 데이터 로드 실패:', e);
-            }
-        }
-        console.log(`[${kstNow.toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        })}] 1시간 정기 크롤링 시작 (Selenium)`);
-        const today = kstNow.toISOString().split('T')[0];
-        const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
+async function crawlAllCategoriesV2() {
+    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const yearMonth = kstNow.toISOString().slice(0, 7); // '2025-07'
+    const today = kstNow.toISOString().split('T')[0];
+    const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
+    const RANKING_DATA_PATH = getRankingDataPath(yearMonth); // 수정: 일관된 경로 사용
+    let localProductCache = { data: {}, allProducts: [], timestamp: null };
+    if (fs.existsSync(RANKING_DATA_PATH)) {
         try {
-            // 이전 캡처 파일 모두 삭제
-            if (fs.existsSync(capturesDir)) {
-                const files = fs.readdirSync(capturesDir);
-                for (const file of files) {
-                    if (/^ranking_.*\.jpeg$/.test(file)) {
-                        fs.unlinkSync(path.join(capturesDir, file));
-                        console.log('이전 캡처 파일 삭제:', file);
-                    }
-                }
+            const prev = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
+            if (prev && typeof prev === 'object') {
+                localProductCache = prev;
             }
-            // ========================================
-            // 1단계: 크롤링만 실행 (21개 카테고리)
-            // ========================================
-            console.log('='.repeat(50));
-            console.log('1단계: 크롤링 시작 (21개 카테고리)');
-            console.log('='.repeat(50));
-            
-            // 카테고리별 크롤링 시도 함수
-            async function tryCrawlCategory(category, categoryInfo, attemptNumber) {
-                let categoryDriver = null;
-                let categoryTmpProfileDir = null;
-                try {
-                    console.log(`${category} 랭킹 페이지 크롤링 시도... (${attemptNumber}차 시도)`);
-                    if (!localProductCache.data) localProductCache.data = {};
-                    if (!localProductCache.data[category]) localProductCache.data[category] = [];
-                    let totalRank = 1;
-                    for (let page = 1; page <= 5; page++) {
-                        console.log(`[DEBUG] ${category} ${page}페이지 진입, 현재 누적 상품: ${localProductCache.data[category].length}개`);
-                        // 새로운 임시 프로필 생성
-                        categoryTmpProfileDir = createTempChromeProfile();
-                        // Chrome 옵션 설정 (크롤링용)
-                        const categoryOptions = new chrome.Options()
-                            .addArguments('--headless')
-                            .addArguments('--no-sandbox')
-                            .addArguments('--disable-dev-shm-usage')
-                            .addArguments('--start-maximized')
-                            .addArguments('--window-size=1920,1500')
-                            .addArguments('--hide-scrollbars')
-                            .addArguments('--force-device-scale-factor=1')
-                            .addArguments('--disable-gpu')
-                            .addArguments('--disable-extensions')
-                            .addArguments('--disable-notifications')
-                            .addArguments('--disable-web-security')
-                            .addArguments('--disable-features=VizDisplayCompositor')
-                            .addArguments('--disable-background-timer-throttling')
-                            .addArguments('--disable-backgrounding-occluded-windows')
-                            .addArguments('--disable-renderer-backgrounding')
-                            .addArguments('--disable-field-trial-config')
-                            .addArguments('--disable-ipc-flooding-protection')
-                            .addArguments('--disable-hang-monitor')
-                            .addArguments('--disable-prompt-on-repost')
-                            .addArguments('--disable-client-side-phishing-detection')
-                            .addArguments('--disable-component-update')
-                            .addArguments('--disable-default-apps')
-                            .addArguments('--disable-sync')
-                            .addArguments('--metrics-recording-only')
-                            .addArguments('--no-first-run')
-                            .addArguments('--safebrowsing-disable-auto-update')
-                            .addArguments('--disable-translate')
-                            .addArguments('--disable-plugins-discovery')
-                            .addArguments('--disable-plugins')
-                            .addArguments('--enable-javascript')
-                            .addArguments('--enable-dom-storage')
-                            .addArguments('--enable-local-storage')
-                            .addArguments('--enable-session-storage')
-                            .addArguments('--enable-cookies')
-                            .addArguments('--enable-images')
-                            .addArguments('--enable-scripts')
-                            .addArguments(`--user-data-dir=${categoryTmpProfileDir}`)
-                            .addArguments(`--user-agent=${getRandomUserAgent()}`);
-                        if (process.env.CHROME_BIN) {
-                            categoryOptions.setChromeBinaryPath(process.env.CHROME_BIN);
-                        }
-                        categoryDriver = await new Builder()
-                            .forBrowser('chrome')
-                            .setChromeOptions(categoryOptions)
-                            .build();
-                        const categoryName = category.replace('_', ' ');
-                        const encodedCategory = encodeURIComponent(categoryName);
-                        const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=${page}&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodedCategory}`;
-                        await categoryDriver.get(url);
-                        await categoryDriver.wait(until.elementLocated(By.css('body')), 20000);
-                        await categoryDriver.sleep(3000);
-                        await categoryDriver.wait(async () => {
-                            const readyState = await categoryDriver.executeScript('return document.readyState');
-                            return readyState === 'complete';
-                        }, 15000, '페이지 로딩 시간 초과');
-                        await categoryDriver.sleep(3000);
-                        let pageElementFound = false;
-                        const pageSelectors = [
-                            '.TabsConts', '.prd_info', '.best_list', '.product_list', '.best_item', '.item', '.product_item', '.ranking_list', '.list_item'
-                        ];
-                        for (const selector of pageSelectors) {
-                            try {
-                                const elements = await categoryDriver.findElements(By.css(selector));
-                                if (elements.length > 0) {
-                                    console.log(`요소 발견: ${selector} (${elements.length}개)`);
-                                    pageElementFound = true;
-                                    break;
-                                }
-                            } catch (e) {
-                                console.log(`요소 없음: ${selector}`);
-                            }
-                        }
-                        if (!pageElementFound) {
-                            const pageSource = await categoryDriver.getPageSource();
-                            console.log('페이지 소스 일부:', pageSource.substring(0, 1000));
-                            const currentUrl = await categoryDriver.getCurrentUrl();
-                            console.log('현재 URL:', currentUrl);
-                            const pageTitle = await categoryDriver.getTitle();
-                            console.log('페이지 제목:', pageTitle);
-                            const jsErrors = await categoryDriver.executeScript(`
-                                return window.performance.getEntries().filter(entry => 
-                                    entry.entryType === 'resource' && entry.name.includes('error')
-                                ).length;
-                            `).catch(() => 0);
-                            console.log('JavaScript 오류 수:', jsErrors);
-                            throw new Error('페이지 로딩 실패 - 필수 요소를 찾을 수 없습니다');
-                        }
-                        await categoryDriver.sleep(2000);
-                        await categoryDriver.wait(async () => {
-                            const selectors = [
-                                '.TabsConts .prd_info', '.prd_info', '.best_list .item', '.best_item', '.item', '.product_item', '.ranking_list .item', '.list_item'
-                            ];
-                            for (const selector of selectors) {
-                                try {
-                                    const products = await categoryDriver.findElements(By.css(selector));
-                                    if (products.length > 0) {
-                                        console.log(`상품 요소 발견: ${selector} (${products.length}개)`);
-                                        return true;
-                                    }
-                                } catch (e) {}
-                            }
-                            return false;
-                        }, 20000, '상품 목록 로딩 시간 초과');
-                        let products = await categoryDriver.findElements(By.css('li.flag'));
-                        console.log(`[DEBUG] ${category} ${page}페이지 상품 개수: ${products.length}개, 누적 상품: ${localProductCache.data[category].length}개`);
-                        for (let i = 0; i < products.length; i++) {
-                            if (localProductCache.data[category].length >= 100) {
-                                console.log(`[DEBUG] ${category} break: 누적 상품 100개 도달, i=${i}, page=${page}`);
-                                break;
-                            }
-                            try {
-                                const product = products[i];
-                                const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
-                                let name = nameElement ? await nameElement.getText() : `상품${totalRank}`;
-                                let brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
-                                let brand = brandElement ? await brandElement.getText() : '';
-                                // 브랜드가 비어 있으면 제품명에서 추출
-                                if (!brand && name) {
-                                    const lines = name.split('\n');
-                                    if (lines.length > 1) {
-                                        brand = lines[0].trim();
-                                        name = lines.slice(1).join(' ').trim();
-                                    } else {
-                                        const match = name.match(/^([\w가-힣A-Za-z0-9]+)[\s\[]?(.*)$/);
-                                        if (match) {
-                                            brand = match[1].trim();
-                                            name = match[2].trim();
-                                        }
-                                    }
-                                }
-                                if (brand && name && name.startsWith(brand)) {
-                                    name = name.slice(brand.length).trim();
-                                }
-                                let originalPrice = '';
-                                let salePrice = '';
-                                const orgPriceElement = await product.findElement(By.css('.prd_price .tx_org .tx_num')).catch(() => null);
-                                const curPriceElement = await product.findElement(By.css('.prd_price .tx_cur .tx_num')).catch(() => null);
-                                if (orgPriceElement) {
-                                    originalPrice = (await orgPriceElement.getText()).replace(/,/g, '');
-                                }
-                                if (curPriceElement) {
-                                    salePrice = (await curPriceElement.getText()).replace(/,/g, '');
-                                }
-                                if (!originalPrice || !salePrice) {
-                                    const priceElement = await product.findElement(By.css('.prd_price')).catch(() => null);
-                                    const priceText = priceElement ? await priceElement.getText() : '';
-                                    const priceMatch = priceText.match(/(\d{1,3}(?:,\d{3})*)/g);
-                                    if (!originalPrice) originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
-                                    if (!salePrice) salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
-                                }
-                                const promoElements = await product.findElements(By.css('.icon_flag')).catch(() => []);
-                                let promotion = '';
-                                if (promoElements && promoElements.length > 0) {
-                                    const promoTexts = [];
-                                    for (const el of promoElements) {
-                                        const txt = await el.getText();
-                                        if (txt) promoTexts.push(txt.trim());
-                                    }
-                                    promotion = promoTexts.join(', ');
-                                }
-                                const productData = {
-                                    rank: totalRank,
-                                    brand: brand.trim(),
-                                    name: name.trim(),
-                                    originalPrice: originalPrice,
-                                    salePrice: salePrice,
-                                    promotion: promotion.trim(),
-                                    date: today,
-                                    time: timeStr,
-                                    category
-                                };
-                                localProductCache.data[category].push(productData);
-                                totalRank++;
-                            } catch (productError) {
-                                console.error(`[ERROR] ${category} ${totalRank}번 상품 데이터 추출 에러:`, productError);
-                                localProductCache.data[category].push({
-                                    rank: totalRank,
-                                    brand: '',
-                                    name: `상품${totalRank}`,
-                                    originalPrice: '',
-                                    salePrice: '',
-                                    promotion: '',
-                                    date: today,
-                                    time: timeStr,
-                                    category
-                                });
-                                totalRank++;
-                            }
-                        }
-                        console.log(`[DEBUG] ${category} ${page}페이지 끝, 누적 상품: ${localProductCache.data[category].length}개`);
-                        if (localProductCache.data[category].length >= 100) {
-                            console.log(`[DEBUG] ${category} break: for-page, 누적 상품 100개 도달, page=${page}`);
-                            break;
-                        }
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                    }
-                    // 중복 제거 및 정렬
-                    localProductCache.data[category] = deduplicate(localProductCache.data[category]);
-                    localProductCache.data[category].sort((a, b) => a.rank - b.rank);
-                    for (const p of localProductCache.data[category]) {
-                        if (!localProductCache.allProducts.some(ap => ap.name === p.name && ap.category === p.category && ap.time === p.time)) {
-                            localProductCache.allProducts.push(p);
-                        }
-                    }
-                    console.log(`${category} ✅ 크롤링 성공!(Selenium)`);
-                    return true;
-                } catch (error) {
-                    console.error(`${category} ❌ 크롤링 실패 (${attemptNumber}차 시도):`, error.message);
-                    return false;
-                } finally {
-                    await safeQuitDriver(categoryDriver, category);
-                    safeRemoveTempProfile(categoryTmpProfileDir, category);
-                }
-            }
-            
-            // 1차 크롤링 시도: 전체 카테고리 순회
-            console.log('=== 1차 크롤링 시도 시작 ===');
-            const allCategories = Object.keys(CATEGORY_CODES);
-            let crawlSuccessSet = new Set(); // 크롤링 성공한 카테고리
-            let crawlFailSet = new Set(); // 크롤링 실패한 카테고리
-            
-            for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
-                const success = await tryCrawlCategory(category, categoryInfo, 1);
-                if (success) {
-                    crawlSuccessSet.add(category); 
-                } else {
-                    crawlFailSet.add(category);
-                    if (!localProductCache.failedCategories) localProductCache.failedCategories = [];
-                    localProductCache.failedCategories.push({
-                        category,
-                        timestamp: new Date().toISOString(),
-                        error: `${category} 1차 크롤링 시도 실패`,
-                        status: 'unknown'
-                    });
-                }
-                // 카테고리 간 대기 시간
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            
-            console.log(`1차 크롤링 시도 결과: 성공 ${crawlSuccessSet.size}개, 실패 ${crawlFailSet.size}개`);
-            
-            // 2차 크롤링 시도: 실패한 카테고리만 재시도
-            if (crawlFailSet.size > 0) {
-                console.log('=== 2차 크롤링 시도 시작 (실패한 카테고리만) ===');
-                const retryCategories = Array.from(crawlFailSet);
-                crawlFailSet.clear(); // 2차 시도용으로 초기화
-                
-                for (const category of retryCategories) {
-                    const success = await tryCrawlCategory(category, CATEGORY_CODES[category], 2);
-                    if (success) {
-                        crawlSuccessSet.add(category);
-                    } else {
-                        crawlFailSet.add(category);
-                        if (!localProductCache.failedCategories) localProductCache.failedCategories = [];
-                        localProductCache.failedCategories.push({
-                            category,
-                            timestamp: new Date().toISOString(),
-                            error: `${category} 2차 크롤링 시도 실패`,
-                            status: 'unknown'
-                        });
-                    }
-                    // 카테고리 간 대기 시간
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-                
-                console.log(`2차 크롤링 시도 결과: 성공 ${crawlSuccessSet.size}개, 실패 ${crawlFailSet.size}개`);
-            }
-            
-            console.log('='.repeat(50));
-            console.log('1단계: 크롤링 완료');
-            console.log(`최종 크롤링 결과: 성공 ${crawlSuccessSet.size}/${allCategories.length} 카테고리`);
-            console.log('='.repeat(50));
-            
-            // ========================================
-            // 크롤링 완료 직후 데이터 저장
-            // ========================================
-            console.log('크롤링 데이터 저장 시작...');
-            
-            const crawlTimestampStr = `${today}T${timeStr.replace('-', ':')}:00+09:00`;
-            const crawlTimestamp = new Date(crawlTimestampStr);
-            localProductCache.timestamp = crawlTimestamp;
-            productCache.timestamp = crawlTimestamp;
-            try {
-                fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(localProductCache, null, 2));
-                console.log(`[랭킹 데이터 저장 완료] ${RANKING_DATA_PATH} (${Object.keys(localProductCache.data).length}개 카테고리)`);
-            } catch (e) {
-                console.error('[랭킹 데이터 저장 실패]', RANKING_DATA_PATH, e);
-            }
-
-            console.log('크롤링 데이터 저장 완료');
-            console.log('='.repeat(50));
-            
-            // ========================================
-            // 2단계: 캡처 실행 (21개 카테고리)
-            // ========================================
-            console.log('='.repeat(50));
-            console.log('2단계: 캡처 시작 (21개 카테고리)');
-            
-            const captureResult = await captureOliveyoungMainRanking(timeStr);
-            
-            console.log('='.repeat(50));
-            console.log('2단계: 캡처 완료');
-            console.log(`캡처 결과: 성공 ${captureResult.capturedCount}/${captureResult.totalCategories} 카테고리`);
-            console.log('='.repeat(50));
-            
-            // 최종 결과에 따른 메일 발송 처리
-            const successCategories = Object.keys(localProductCache.data || {});
-            const failedCategories = localProductCache.failedCategories ? localProductCache.failedCategories.map(f => f.category) : [];
-            const allSuccess = successCategories.length === Object.keys(CATEGORY_CODES).length;
-            
-            if (!allSuccess) {
-                console.error('일부 카테고리 크롤링 실패');
-                console.log('성공한 카테고리:', successCategories);
-                console.log('실패한 카테고리:', failedCategories);
-                
-                try {
-                    const now = new Date();
-                    await transporter.sendMail({
-                        from: process.env.EMAIL_USER,
-                        to: process.env.EMAIL_USER,
-                        subject: `[올리브영 크롤링 오류] 일부 카테고리 실패 (${successCategories.length}/${Object.keys(CATEGORY_CODES).length})`,
-                        text: `오류 발생 시각: ${now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n\n` +
-                              `크롤링 결과: ${successCategories.length}/${Object.keys(CATEGORY_CODES).length} 성공\n\n` +
-                              `성공한 카테고리:\n${successCategories.join(', ')}\n\n` +
-                              `실패한 카테고리:\n${failedCategories.join(', ')}\n\n` +
-                              `상세 오류 정보:\n${JSON.stringify(localProductCache.failedCategories, null, 2)}`
-                    });
-                    console.log('크롤링 오류 메일 발송 완료');
-                } catch (mailErr) {
-                    console.error('크롤링 오류 메일 발송 실패:', mailErr);
-                }
-            }
-            
-            console.log(`[${new Date().toLocaleString('ko-KR', {
-                year: 'numeric',
-                month: 'numeric',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-                timeZone: 'Asia/Seoul'
-            })}] 1시간 정기 크롤링 및 캡처 완료 (Selenium)`);
-            
-            // 다음 크롤링 스케줄 설정
-            console.log('다음 크롤링 스케줄 설정 중...');
-            scheduleNextCrawl();
-            
-        } catch (error) {
-            console.error('크롤링 프로세스 오류:', error.message);
-            // 오류 발생 시에도 다음 스케줄 설정
-            console.log('오류 발생으로 인한 다음 크롤링 스케줄 설정 중...');
-            scheduleNextCrawl();
+        } catch (e) {
+            console.error('기존 월별 랭킹 데이터 로드 실패:', e);
         }
-    } catch (err) {
-        console.error('crawlAllCategories 전체 에러:', err);
-        // 전체 오류 발생 시에도 다음 스케줄 설정
-        console.log('전체 오류 발생으로 인한 다음 크롤링 스케줄 설정 중...');
-        scheduleNextCrawl();
     }
+    for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
+        localProductCache.data[category] = [];
+        let totalRank = 1;
+        for (let page = 1; page <= 13; page++) {
+            if (localProductCache.data[category].length >= 100) break;
+            const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=${page}&rowsPerPage=8&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
+            let driver = null;
+            let tmpProfile = null;
+            try {
+                tmpProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-profile-'));
+                const options = new chrome.Options()
+                    .addArguments('--headless')
+                    .addArguments('--no-sandbox')
+                    .addArguments('--disable-dev-shm-usage')
+                    .addArguments('--window-size=1920,1500')
+                    .addArguments(`--user-data-dir=${tmpProfile}`)
+                    .addArguments(`--user-agent=${getRandomUserAgent()}`);
+                if (process.env.CHROME_BIN) {
+                    options.setChromeBinaryPath(process.env.CHROME_BIN);
+                }
+                driver = await new Builder().forBrowser('chrome').setChromeOptions(options).build();
+                await driver.get(url);
+                await driver.wait(until.elementLocated(By.css('body')), 15000);
+                await driver.sleep(2000);
+                // 상품 리스트 파싱
+                const products = await driver.findElements(By.css('li.flag'));
+                for (let i = 0; i < products.length; i++) {
+                    if (localProductCache.data[category].length >= 100) break;
+                    try {
+                        const product = products[i];
+                        const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
+                        let name = nameElement ? await nameElement.getText() : `상품${totalRank}`;
+                        let brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
+                        let brand = brandElement ? await brandElement.getText() : '';
+                        if (!brand && name) {
+                            const lines = name.split('\n');
+                            if (lines.length > 1) {
+                                brand = lines[0].trim();
+                                name = lines.slice(1).join(' ').trim();
+                            } else {
+                                const match = name.match(/^([\w가-힣A-Za-z0-9]+)[\s\[]?(.*)$/);
+                                if (match) {
+                                    brand = match[1].trim();
+                                    name = match[2].trim();
+                                }
+                            }
+                        }
+                        if (brand && name && name.startsWith(brand)) {
+                            name = name.slice(brand.length).trim();
+                        }
+                        let originalPrice = '';
+                        let salePrice = '';
+                        const orgPriceElement = await product.findElement(By.css('.prd_price .tx_org .tx_num')).catch(() => null);
+                        const curPriceElement = await product.findElement(By.css('.prd_price .tx_cur .tx_num')).catch(() => null);
+                        if (orgPriceElement) {
+                            originalPrice = (await orgPriceElement.getText()).replace(/,/g, '');
+                        }
+                        if (curPriceElement) {
+                            salePrice = (await curPriceElement.getText()).replace(/,/g, '');
+                        }
+                        if (!originalPrice || !salePrice) {
+                            const priceElement = await product.findElement(By.css('.prd_price')).catch(() => null);
+                            const priceText = priceElement ? await priceElement.getText() : '';
+                            const priceMatch = priceText.match(/(\d{1,3}(?:,\d{3})*)/g);
+                            if (!originalPrice) originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
+                            if (!salePrice) salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
+                        }
+                        const promoElements = await product.findElements(By.css('.icon_flag')).catch(() => []);
+                        let promotion = '';
+                        if (promoElements && promoElements.length > 0) {
+                            const promoTexts = [];
+                            for (const el of promoElements) {
+                                const txt = await el.getText();
+                                if (txt) promoTexts.push(txt.trim());
+                            }
+                            promotion = promoTexts.join(', ');
+                        }
+                        const productData = {
+                            date: today,
+                            time: timeStr,
+                            category,
+                            rank: totalRank,
+                            brand: brand.trim(),
+                            name: name.trim(),
+                            originalPrice: originalPrice,
+                            salePrice: salePrice,
+                            promotion: promotion.trim()
+                        };
+                        localProductCache.data[category].push(productData);
+                        totalRank++;
+                    } catch (productError) {
+                        localProductCache.data[category].push({
+                            date: today,
+                            time: timeStr,
+                            category,
+                            rank: totalRank,
+                            brand: '',
+                            name: `상품${totalRank}`,
+                            originalPrice: '',
+                            salePrice: '',
+                            promotion: ''
+                        });
+                        totalRank++;
+                    }
+                }
+            } catch (e) {
+                console.error(`[${category}] ${page}페이지 크롤링 실패:`, e.message);
+            } finally {
+                if (driver) await driver.quit();
+                if (tmpProfile && fs.existsSync(tmpProfile)) fs.rmSync(tmpProfile, { recursive: true, force: true });
+            }
+        }
+        // 100개까지만 저장
+        localProductCache.data[category] = localProductCache.data[category].slice(0, 100);
+        console.log(`[${category}] 크롤링 완료: ${localProductCache.data[category].length}개`);
+    }
+    // 전체 데이터 저장
+    localProductCache.timestamp = kstNow;
+    try {
+        fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(localProductCache, null, 2));
+        console.log(`[랭킹 데이터 저장 완료] ${RANKING_DATA_PATH}`);
+    } catch (e) {
+        console.error('[랭킹 데이터 저장 실패]', RANKING_DATA_PATH, e);
+    }
+    // 크롤링 끝나면 캡처 함수 호출
+    await captureOliveyoungMainRanking(timeStr);
 }
 
 // ========================================
@@ -1034,7 +816,6 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
     await fs.promises.writeFile(filePath, sharpBuffer);
 }
 
-
 // ========================================
 // 🌐 API 라우트들
 // ========================================
@@ -1043,8 +824,6 @@ async function captureFullPageWithSelenium(driver, filePath, category, dateForma
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
-
-
 
 // 랭킹 데이터 가져오기
 app.get('/api/ranking', async (req, res) => {
@@ -1102,8 +881,6 @@ app.get('/api/ranking', async (req, res) => {
         });
     }
 });
-
-
 
 app.get('/api/search', (req, res) => {
     try {
@@ -1189,9 +966,6 @@ app.get('/api/search', (req, res) => {
     }
 });
 
-
-
-
 // 마지막 크롤링 시간 API
 app.get('/api/last-crawl-time', (req, res) => {
     try {
@@ -1215,26 +989,16 @@ app.get('/api/last-crawl-time', (req, res) => {
             hour12: false
         });
         
-        const nextCrawlTime = getNextCrawlTime();
-        const nextTime = nextCrawlTime.toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        }).replace(/\./g, '').replace(/\s+/g, ' ');
+        // 스케줄링이 비활성화되어 있으므로 다음 크롤링 시간은 표시하지 않음
         
         // 디버그용 로그
         console.log('현재 서버 시간:', new Date().toLocaleString());
         console.log('현재 KST 시간:', getKSTTime().toLocaleString());
         console.log('마지막 크롤링 시간 (KST):', formattedTime);
-        console.log('다음 크롤링 예정 시간:', nextTime);
         
         return res.json({
             success: true,
-            lastCrawlTime: formattedTime,
-            nextCrawlTime: nextTime
+            lastCrawlTime: formattedTime
         });
     } catch (error) {
         console.error('마지막 크롤링 시간 조회 오류:', error);
@@ -1246,6 +1010,7 @@ app.get('/api/last-crawl-time', (req, res) => {
     }
 });
 
+
 // 캡처 목록 조회 API
 app.get('/api/captures', async (req, res) => {
     res.json({
@@ -1255,194 +1020,4 @@ app.get('/api/captures', async (req, res) => {
     });
 });
 
-
-
-
-
-// ========================================
-// 🛠️ 서버 설정 및 시작
-// ========================================
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error('Error:', err);
-    res.status(500).json({ 
-        error: 'Internal server error', 
-        message: err.message 
-    });
-});
-
-// Health check endpoint
-app.get('/health', async (req, res) => {
-    try {
-        const chromePath = await findChrome();
-        const driver = await new Builder()
-            .forBrowser('chrome')
-            .setChromeOptions(new chrome.Options()
-                .addArguments('--headless')
-                .addArguments('--no-sandbox')
-                .addArguments('--disable-dev-shm-usage')
-                .addArguments('--window-size=1920,1080')
-            )
-            .build();
-        await driver.close();
-        res.json({
-            status: 'healthy',
-            chrome_path: chromePath,
-            timestamp: new Date().toLocaleString('ko-KR', {
-                timeZone: 'Asia/Seoul'
-            })
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: 'unhealthy',
-            error: error.message,
-            timestamp: new Date().toLocaleString('ko-KR', {
-                timeZone: 'Asia/Seoul'
-            })
-        });
-    }
-});
-
-
-
-app.listen(port, async () => {
-    console.log(`Server running at http://localhost:${port}`);
-    // 서버 시작 시 자동 크롤링 스케줄링 활성화
-    console.log('1시간 단위 자동 크롤링 스케줄링을 시작합니다...');
-    
-    // 다음 크롤링 시간 정보 표시
-    const nextCrawlTime = getNextCrawlTime();
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
-    const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
-    const hoursUntilNext = Math.floor(minutesUntilNext/60);
-    const remainingMinutes = minutesUntilNext % 60;
-    
-    console.log('='.repeat(50));
-    console.log(`다음 크롤링 예정 시간: ${nextCrawlTime.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    })}`);
-    console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
-    console.log('예정된 작업:');
-    console.log('- 전체 카테고리 크롤링');
-    console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
-    console.log('='.repeat(50));
-
-    // 서버 시작 시 크롤링+캡처 즉시 1회 실행
-    console.log('서버 시작 직후 즉시 크롤링 및 캡처 작업 실행!');
-    await crawlAllCategories();
-
-    // 크롤링은 예약 스케줄에만 동작
-    initializeServer();
-
-    // 매일 00:00에 당일 캡처본 삭제
-    cron.schedule('0 0 * * *', () => {
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-        fs.readdir(capturesDir, (err, files) => {
-            if (err) return console.error('캡처 디렉토리 읽기 오류:', err);
-            files.forEach(file => {
-                // 파일명에서 날짜 추출 (예: ranking_카테고리_YYYY-MM-DD_HH-MM.jpeg)
-                const match = file.match(/_(\d{4}-\d{2}-\d{2})_/);
-                if (match) {
-                    const filePath = path.join(capturesDir, file);
-                    fs.unlink(filePath, err => {
-                        if (err) console.error('캡처 파일 삭제 오류:', filePath, err);
-                        else console.log('캡처본 삭제:', filePath);
-                    });
-                }
-            });
-        });
-    }, {
-        timezone: 'Asia/Seoul'
-    });
-});
-
-// ========================================
-// ⏰ 스케줄링 관련 함수들
-// ========================================
-
-// 다음 크롤링 시간 계산 함수
-function getNextCrawlTime() {
-    // 현재 KST 시간 가져오기
-    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    const scheduledMinutes = 15; // 매 시간 15분에 실행
-    
-    // 현재 시간
-    const currentHour = kstNow.getHours();
-    const currentMinute = kstNow.getMinutes();
-
-    // 다음 크롤링 시간 계산
-    let nextCrawlTime = new Date(kstNow);
-    
-    // 현재 시간이 15분을 지났다면 다음 시간으로 설정
-    if (currentMinute >= scheduledMinutes) {
-        nextCrawlTime.setHours(currentHour + 1, scheduledMinutes, 0, 0);
-    } else {
-        // 현재 시간의 15분으로 설정
-        nextCrawlTime.setHours(currentHour, scheduledMinutes, 0, 0);
-    }
-    
-    // 다음 날로 넘어가는 경우 처리
-    if (nextCrawlTime <= kstNow) {
-        nextCrawlTime.setHours(nextCrawlTime.getHours() + 1);
-    }
-
-    return nextCrawlTime;
-}
-
-// 다음 크롤링 스케줄링 함수
-function scheduleNextCrawl() {
-    // 기존 타이머 제거
-    if (scheduledCrawlTimer) {
-        clearTimeout(scheduledCrawlTimer);
-    }
-    
-    const nextCrawlTime = getNextCrawlTime();
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    
-    // 시간 차이 계산 (밀리초)
-    const timeUntilNextCrawl = nextCrawlTime.getTime() - now.getTime();
-    
-    const minutesUntilNext = Math.floor(timeUntilNextCrawl/1000/60);
-    const hoursUntilNext = Math.floor(minutesUntilNext/60);
-    const remainingMinutes = minutesUntilNext % 60;
-    
-    console.log('='.repeat(50));
-    console.log(`다음 크롤링 예정 시간: ${nextCrawlTime.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    })}`);
-    console.log(`남은 시간: ${hoursUntilNext}시간 ${remainingMinutes}분`);
-    console.log('예정된 작업:');
-    console.log('- 전체 카테고리 크롤링');
-    console.log('- 전체 및 개별 카테고리 랭킹 페이지 캡처 (총 21개)');
-    console.log('='.repeat(50));
-    
-    // 다음 크롤링 스케줄링
-    scheduledCrawlTimer = setTimeout(() => {
-        console.log('스케줄된 크롤링 시작...');
-        crawlAllCategories();
-    }, timeUntilNextCrawl);
-}
-
-// 서버 시작 시 실행되는 초기화 함수
-async function initializeServer() {
-    try {
-        // 다음 크롤링과 캡처 시간 설정
-        scheduleNextCrawl();
-    } catch (error) {
-        console.error('서버 초기화 중 오류 발생:', error);
-        // 오류 발생 시에도 다음 크롤링 스케줄링
-        scheduleNextCrawl();
-    }
-}
+// 스케줄링 관련 함수들은 현재 비활성화됨
