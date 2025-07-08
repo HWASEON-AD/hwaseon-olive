@@ -201,11 +201,11 @@ app.get('/health', async (req, res) => {
 // app.listen 내부에서 즉시 크롤링 및 캡처 실행 부분 제거
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
-    // 서버 시작 시 즉시 크롤링 1회 실행
-    crawlAllCategoriesV2().then(() => {
-        log.success('서버 시작 후 즉시 크롤링 1회 완료');
+    // 서버 시작 시 즉시 크롤링 1회 실행 (전체 카테고리만)
+    crawlAllCategoriesV2({ onlyCategory: '전체' }).then(() => {
+        log.success('서버 시작 후 전체 카테고리만 즉시 크롤링 1회 완료');
     }).catch(e => {
-        log.error('서버 시작 즉시 크롤링 실패: ' + e);
+        log.error('서버 시작 즉시 전체 카테고리 크롤링 실패: ' + e);
     });
     // 매일 00:00에 당일 캡처본 삭제
     cron.schedule('0 0 * * *', () => {
@@ -385,7 +385,7 @@ function logNextCrawlTime() {
   log.info(`다음 크롤링 예정 시각: ${next.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (${diffMin}분 ${diffSec}초 남음)`);
 }
 
-async function crawlAllCategoriesV2() {
+async function crawlAllCategoriesV2(options = {}) {
     log.section('🕷️ 크롤링 전체 시작');
     const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const yearMonth = kstNow.toISOString().slice(0, 7); // '2025-07'
@@ -403,7 +403,10 @@ async function crawlAllCategoriesV2() {
             log.error('기존 월별 랭킹 데이터 로드 실패: ' + e);
         }
     }
-    for (const [category, categoryInfo] of Object.entries(CATEGORY_CODES)) {
+
+    const targetCategories = options.onlyCategory ? [options.onlyCategory] : Object.keys(CATEGORY_CODES);
+
+    for (const category of targetCategories) {
         log.line();
         log.info(`카테고리: ${category}`);
         localProductCache.data[category] = [];
@@ -415,7 +418,7 @@ async function crawlAllCategoriesV2() {
                 let noNewItemCount = 0;
                 const MAX_NO_NEW_ITEM_PAGE = 3; // 연속 3페이지에서 새로운 상품이 없으면 종료
                 while (localProductCache.data[category].length < 100 && page <= 30) {
-                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${categoryInfo.fltDispCatNo}&pageIdx=${page}&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
+                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${CATEGORY_CODES[category].fltDispCatNo}&pageIdx=${page}&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
                     let driver = null;
                     let tmpProfile = null;
                     let newItemAdded = false;
