@@ -100,6 +100,7 @@ function deduplicate(arr) {
     return Array.from(map.values());
 }
 
+ㅋ
 // 안전한 드라이버 종료 함수
 async function safeQuitDriver(driver, category = 'unknown') {
     if (driver) {
@@ -1086,3 +1087,5 @@ app.get('/api/captures', async (req, res) => {
         total: 0
     });
 });
+
+// 스케줄링 관련 함수들은 현재 비활성화됨
