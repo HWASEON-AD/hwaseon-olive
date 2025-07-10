@@ -1188,43 +1188,63 @@ app.get('/api/search', async (req, res) => {
 });
 
 // 마지막 크롤링 시간 API
-app.get('/api/last-crawl-time', (req, res) => {
+app.get('/api/last-crawl-time', async (req, res) => {
     try {
-        // 실제 저장된 랭킹 데이터에서 최신 timestamp 확인
+        // 실제 저장된 랭킹 데이터에서 최신 date+time 확인
         const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
         const yearMonth = kstNow.toISOString().slice(0, 7);
         const RANKING_DATA_PATH = getRankingDataPath(yearMonth);
         
-        let lastCrawlTime = null;
-        
-        // 현재 월 데이터 파일에서 timestamp 확인
+        let latestDate = null;
+        let latestTime = null;
+        let found = false;
+
+        // 현재 월 데이터 파일에서 최신 date+time 찾기
         if (fs.existsSync(RANKING_DATA_PATH)) {
             try {
                 const fileData = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
-                if (fileData && fileData.timestamp) {
-                    lastCrawlTime = new Date(fileData.timestamp);
+                if (fileData && fileData.data) {
+                    // 모든 카테고리 데이터에서 최신 date+time 찾기
+                    Object.values(fileData.data).forEach(categoryArr => {
+                        categoryArr.forEach(item => {
+                            if (item.date && item.time) {
+                                const dtStr = `${item.date} ${item.time}`;
+                                if (!latestDate || dtStr > `${latestDate} ${latestTime}`) {
+                                    latestDate = item.date;
+                                    latestTime = item.time;
+                                    found = true;
+                                }
+                            }
+                        });
+                    });
                 }
             } catch (e) {
                 console.error('랭킹 데이터 파일 읽기 오류:', e.message);
             }
         }
-        
         // 이전 월 데이터에서도 확인 (최근 3개월)
-        if (!lastCrawlTime) {
+        if (!found) {
             for (let i = 1; i <= 3; i++) {
                 const prevDate = new Date(kstNow);
                 prevDate.setMonth(prevDate.getMonth() - i);
                 const prevYearMonth = prevDate.toISOString().slice(0, 7);
                 const prevFilePath = getRankingDataPath(prevYearMonth);
-                
                 if (fs.existsSync(prevFilePath)) {
                     try {
                         const prevFileData = JSON.parse(fs.readFileSync(prevFilePath, 'utf-8'));
-                        if (prevFileData && prevFileData.timestamp) {
-                            const prevTimestamp = new Date(prevFileData.timestamp);
-                            if (!lastCrawlTime || prevTimestamp > lastCrawlTime) {
-                                lastCrawlTime = prevTimestamp;
-                            }
+                        if (prevFileData && prevFileData.data) {
+                            Object.values(prevFileData.data).forEach(categoryArr => {
+                                categoryArr.forEach(item => {
+                                    if (item.date && item.time) {
+                                        const dtStr = `${item.date} ${item.time}`;
+                                        if (!latestDate || dtStr > `${latestDate} ${latestTime}`) {
+                                            latestDate = item.date;
+                                            latestTime = item.time;
+                                            found = true;
+                                        }
+                                    }
+                                });
+                            });
                         }
                     } catch (e) {
                         console.error(`이전 월 데이터 파일 읽기 오류 (${prevYearMonth}):`, e.message);
@@ -1232,32 +1252,25 @@ app.get('/api/last-crawl-time', (req, res) => {
                 }
             }
         }
-        
-        if (!lastCrawlTime) {
+        if (!found) {
             return res.json({
                 success: true,
                 lastCrawlTime: "서버 시작 후 크롤링 대기 중",
                 message: '서버가 시작되었지만 아직 첫 크롤링이 실행되지 않았습니다.'
             });
         }
-        
-        // KST 시간으로 변환하여 표시
-        const kstTimestamp = new Date(lastCrawlTime.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-        const formattedTime = kstTimestamp.toLocaleString('ko-KR', {
+        // date+time을 KST로 포맷팅
+        const dt = new Date(`${latestDate}T${latestTime.replace('-', ':')}:00+09:00`); // 08-15 -> 08:15:00
+        const formattedTime = dt.toLocaleString('ko-KR', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false
+            hour12: false,
+            timeZone: 'Asia/Seoul'
         });
-        
-        // 디버그용 로그
-        console.log('현재 서버 시간:', new Date().toLocaleString());
-        console.log('현재 KST 시간:', getKSTTime().toLocaleString());
-        console.log('마지막 크롤링 시간 (KST):', formattedTime);
-        
         return res.json({
             success: true,
             lastCrawlTime: formattedTime
