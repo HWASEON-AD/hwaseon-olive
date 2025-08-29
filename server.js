@@ -14,6 +14,12 @@ const archiver = require('archiver');
 const os = require('os');
 require('dotenv').config();
 
+const { chain } = require('stream-chain');
+const { parser } = require('stream-json');
+const { streamValues } = require('stream-json/streamers/StreamValues');
+
+
+
 // Express 앱 및 포트 설정
 const app = express();
 const port = process.env.PORT || 5001;
@@ -84,6 +90,33 @@ const USER_AGENTS = [
 function getRankingDataPath(yearMonth) {
     return `/data/ranking_${yearMonth}.json`;
 }
+
+// === 주간 파일 유틸 ===
+function getWeeklyDir(yearMonth) {
+    // 예: /data/weekly_2025-08
+    return `/data/weekly_${yearMonth}`;
+  }
+  
+  function listWeeklyFiles(yearMonth) {
+    const dir = getWeeklyDir(yearMonth);
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir)
+      .filter(f => f.endsWith('.json'))
+      .map(f => path.join(dir, f))
+      .sort(); // w1, w2, w3... 순으로 정렬 가정
+  }
+  
+  // 날짜 범위 체크(YYYY-MM-DD 기준)
+  function inDateRange(itemDate, startDate, endDate) {
+    const d = normalizeDate(itemDate);
+    const s = startDate ? normalizeDate(startDate) : null;
+    const e = endDate ? normalizeDate(endDate) : s;
+    if (!s && !e) return true;
+    if (s && !e) return d === s;
+    if (!s && e) return d === e;
+    return d >= s && d <= e;
+  }
+  
 
 // KST 시간 가져오기
 function getKSTTime() {
@@ -1173,7 +1206,103 @@ app.get('/api/search', async (req, res) => {
     }
 });
 
+// 마지막 크롤링 시간 API
+app.get('/api/last-crawl-time', async (req, res) => {
+    try {
+        // 실제 저장된 랭킹 데이터에서 최신 date+time 확인
+        const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+        const yearMonth = kstNow.toISOString().slice(0, 7);
+        const RANKING_DATA_PATH = getRankingDataPath(yearMonth);
+        
+        let latestDate = null;
+        let latestTime = null;
+        let found = false;
 
+        // 현재 월 데이터 파일에서 최신 date+time 찾기
+        if (fs.existsSync(RANKING_DATA_PATH)) {
+            try {
+                const fileData = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
+                if (fileData && fileData.data) {
+                    // 모든 카테고리 데이터에서 최신 date+time 찾기
+                    Object.values(fileData.data).forEach(categoryArr => {
+                        categoryArr.forEach(item => {
+                            if (item.date && item.time) {
+                                const dtStr = `${item.date} ${item.time}`;
+                                if (!latestDate || dtStr > `${latestDate} ${latestTime}`) {
+                                    latestDate = item.date;
+                                    latestTime = item.time;
+                                    found = true;
+                                }
+                            }
+                        });
+                    });
+                }
+            } catch (e) {
+                console.error('랭킹 데이터 파일 읽기 오류:', e.message);
+            }
+        }
+        // 이전 월 데이터에서도 확인 (최근 3개월)
+        if (!found) {
+            for (let i = 1; i <= 3; i++) {
+                const prevDate = new Date(kstNow);
+                prevDate.setMonth(prevDate.getMonth() - i);
+                const prevYearMonth = prevDate.toISOString().slice(0, 7);
+                const prevFilePath = getRankingDataPath(prevYearMonth);
+                if (fs.existsSync(prevFilePath)) {
+                    try {
+                        const prevFileData = JSON.parse(fs.readFileSync(prevFilePath, 'utf-8'));
+                        if (prevFileData && prevFileData.data) {
+                            Object.values(prevFileData.data).forEach(categoryArr => {
+                                categoryArr.forEach(item => {
+                                    if (item.date && item.time) {
+                                        const dtStr = `${item.date} ${item.time}`;
+                                        if (!latestDate || dtStr > `${latestDate} ${latestTime}`) {
+                                            latestDate = item.date;
+                                            latestTime = item.time;
+                                            found = true;
+                                        }
+                                    }
+                                });
+                            });
+                        }
+                    } catch (e) {
+                        console.error(`이전 월 데이터 파일 읽기 오류 (${prevYearMonth}):`, e.message);
+                    }
+                }
+            }
+        }
+        if (!found) {
+            return res.json({
+                success: true,
+                lastCrawlTime: "서버 시작 후 크롤링 대기 중",
+                message: '서버가 시작되었지만 아직 첫 크롤링이 실행되지 않았습니다.'
+            });
+        }
+        // date+time을 KST로 포맷팅
+        const dt = new Date(`${latestDate}T${latestTime.replace('-', ':')}:00+09:00`); // 08-15 -> 08:15:00
+        const formattedTime = dt.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Seoul'
+        });
+        return res.json({
+            success: true,
+            lastCrawlTime: formattedTime
+        });
+    } catch (error) {
+        console.error('마지막 크롤링 시간 조회 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: '마지막 크롤링 시간 조회 중 오류가 발생했습니다.',
+            details: error.message
+        });
+    }
+});
 
 
 // 캡처 목록 조회 API
