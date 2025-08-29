@@ -4,9 +4,10 @@
   "description": "Oliveyoung ranking crawler and capture system",
   "main": "server.js",
   "scripts": {
-    "start": "node --max-old-space-size=4096 server.js",
-    "dev": "node --max-old-space-size=4096 server.js"
+  "start": "node --max-old-space-size=1536 --expose-gc server.js",
+  "dev": "node --max-old-space-size=1536 --expose-gc server.js"
   },
+
   "dependencies": {
     "archiver": "^6.0.1",
     "cors": "^2.8.5",
