@@ -984,108 +984,138 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'olive.html'));
 });
 
-// /api/ranking 내부, weeklyFiles.length > 0 분기 전체 교체
-if (weeklyFiles.length > 0) {
-    const rows = [];
-    for (const f of weeklyFiles) {
-      try {
-        // 1) 주간 파일 통째로 파싱 (월간과 동일 스키마 가정: { data: { 카테고리: [...] } })
-        const j = JSON.parse(fs.readFileSync(f, 'utf8'));
-        if (j && j.data && typeof j.data === 'object') {
-          if (category && Array.isArray(j.data[category])) {
-            // 선택 카테고리만
-            for (const item of j.data[category]) {
-              if ((startDate || endDate) && !inDateRange(item.date, startDate, endDate)) continue;
-              rows.push({
-                rank: item.rank,
-                brand: item.brand,
-                name: item.name,
-                originalPrice: item.originalPrice,
-                salePrice: item.salePrice,
-                promotion: item.promotion,
-                date: item.date,
-                time: item.time,
-                category: item.category || category
+app.get('/api/ranking', async (req, res) => {
+    try {
+      log.section('📊 랭킹 데이터 조회');
+      const { category = '스킨케어', startDate, endDate, yearMonth } = req.query;
+  
+      const ym = yearMonth || new Date().toISOString().slice(0, 7);
+      const weeklyFiles = listWeeklyFiles(ym);
+  
+      const pushRow = (rows, item, fallbackCategory) => {
+        if (!item) return;
+        const cat = item.category || fallbackCategory || '';
+        if (category && cat !== category) return;
+        if ((startDate || endDate) && !inDateRange(item.date, startDate, endDate)) return;
+  
+        rows.push({
+          rank: item.rank,
+          brand: item.brand,
+          name: item.name,
+          originalPrice: item.originalPrice,
+          salePrice: item.salePrice,
+          promotion: item.promotion,
+          date: item.date,
+          time: item.time,
+          category: cat
+        });
+      };
+  
+      const sortRows = (rows) => {
+        rows.sort((a, b) => {
+          const dc = String(b.date || '').localeCompare(String(a.date || ''));
+          if (dc !== 0) return dc;
+          if (a.time && b.time) {
+            const tc = String(b.time).localeCompare(String(a.time));
+            if (tc !== 0) return tc;
+          }
+          return (a.rank ?? 999999) - (b.rank ?? 999999);
+        });
+        return rows;
+      };
+  
+      // ============== 주간 파일 우선 ==============
+      if (weeklyFiles.length > 0) {
+        const rows = [];
+  
+        // await를 사용하므로 이 핸들러(이미 async)에서 그대로 루프
+        for (const f of weeklyFiles) {
+          try {
+            // 1) 먼저 통으로 파싱 시도: { data: { "카테고리": [...] } } 스키마 가정
+            let parsed = null;
+            try {
+              const raw = fs.readFileSync(f, 'utf8');
+              parsed = JSON.parse(raw);
+            } catch (_) {
+              parsed = null;
+            }
+  
+            if (parsed && parsed.data && typeof parsed.data === 'object') {
+              if (category && Array.isArray(parsed.data[category])) {
+                for (const item of parsed.data[category]) pushRow(rows, item, category);
+              } else {
+                for (const [catKey, arr] of Object.entries(parsed.data)) {
+                  if (!Array.isArray(arr)) continue;
+                  if (category && catKey !== category) continue;
+                  for (const item of arr) pushRow(rows, item, catKey);
+                }
+              }
+            } else {
+              // 2) 통 파싱이 실패/다른 스키마면 스트리밍 폴백
+              await new Promise((resolve) => {
+                const source = fs.createReadStream(f, { encoding: 'utf8', highWaterMark: 1 << 20 });
+                const pipeline = chain([source, parser(), streamValues()]);
+  
+                pipeline.on('data', ({ value, path }) => {
+                  // 월간 스키마와 동일한 경우: path === ['data','카테고리', idx]
+                  if (Array.isArray(path) && path.length === 3 && path[0] === 'data') {
+                    const itemCat = String(path[1] || '');
+                    if (category && itemCat !== category) return;
+                    pushRow(rows, value, itemCat);
+                    return;
+                  }
+                  // 그 외 느슨히 수집 (최상위 배열/객체 등)
+                  if (value && typeof value === 'object') {
+                    pushRow(rows, value, value.category || '');
+                  }
+                });
+  
+                pipeline.once('end', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+                pipeline.once('error', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
               });
             }
-          } else {
-            // 전체 or 존재하는 모든 카테고리 순회
-            for (const [catKey, arr] of Object.entries(j.data)) {
-              if (!Array.isArray(arr)) continue;
-              if (category && catKey !== category) continue;
-              for (const item of arr) {
-                if ((startDate || endDate) && !inDateRange(item.date, startDate, endDate)) continue;
-                rows.push({
-                  rank: item.rank,
-                  brand: item.brand,
-                  name: item.name,
-                  originalPrice: item.originalPrice,
-                  salePrice: item.salePrice,
-                  promotion: item.promotion,
-                  date: item.date,
-                  time: item.time,
-                  category: item.category || catKey
-                });
-              }
-            }
+  
+            log.info(`[weekly read] OK: ${path.basename(f)}`);
+          } catch (e) {
+            log.warn(`[weekly read fail] ${path.basename(f)}: ${e.message}`);
           }
-        } else {
-          // 2) 혹시 스키마가 다르면 스트리밍으로 관대 파싱 (폴백)
-          await new Promise((resolve) => {
-            const source = fs.createReadStream(f, { encoding: 'utf8', highWaterMark: 1 << 20 });
-            const pipeline = chain([source, parser(), streamValues()]);
-            pipeline.on('data', ({ value, path }) => {
-              // 월간 스키마 형태면 잡기
-              if (Array.isArray(path) && path.length === 3 && path[0] === 'data') {
-                const itemCat = String(path[1] || '');
-                if (category && itemCat !== category) return;
-                const it = value || {};
-                if ((startDate || endDate) && !inDateRange(it.date, startDate, endDate)) return;
-                rows.push({
-                  rank: it.rank, brand: it.brand, name: it.name,
-                  originalPrice: it.originalPrice, salePrice: it.salePrice,
-                  promotion: it.promotion, date: it.date, time: it.time,
-                  category: it.category || itemCat
-                });
-                return;
-              }
-              // 그 외 스키마일 때도 최대한 수집
-              if (value && typeof value === 'object') {
-                const itemCat = value.category || '';
-                if (category && itemCat !== category) return;
-                if ((startDate || endDate) && !inDateRange(value.date, startDate, endDate)) return;
-                rows.push({
-                  rank: value.rank, brand: value.brand, name: value.name,
-                  originalPrice: value.originalPrice, salePrice: value.salePrice,
-                  promotion: value.promotion, date: value.date, time: value.time,
-                  category: itemCat
-                });
-              }
-            });
-            pipeline.once('end', () => { try{pipeline.destroy();}catch{} try{source.destroy();}catch{} resolve(); });
-            pipeline.once('error', () => { try{pipeline.destroy();}catch{} try{source.destroy();}catch{} resolve(); });
-          });
         }
-        log.info(`[weekly read] OK: ${path.basename(f)} (누적 ${rows.length}건)`);
-      } catch (e) {
-        log.warn(`[weekly read fail] ${path.basename(f)}: ${e.message}`);
+  
+        sortRows(rows);
+        log.success(`[응답] (weekly) ${category} ${rows.length}건 반환 (date=${startDate || 'ALL'}~${endDate || startDate || 'ALL'})`);
+        return res.json({ success: true, data: rows, total: rows.length, category, weekly: true });
       }
+  
+      // ============== 월간 폴백 ==============
+      const monthlyPath = getRankingDataPath(ym);
+      if (!fs.existsSync(monthlyPath)) {
+        log.warn(`[파일없음] ${monthlyPath}`);
+        return res.json({ success: true, data: [], total: 0, category, message: `${ym} 데이터가 없습니다.` });
+      }
+  
+      const rows = [];
+      await new Promise((resolve) => {
+        const source = fs.createReadStream(monthlyPath, { encoding: 'utf8', highWaterMark: 1 << 20 });
+        const pipeline = chain([source, parser(), streamValues()]);
+        pipeline.on('data', ({ value, path }) => {
+          if (!Array.isArray(path) || path.length !== 3 || path[0] !== 'data') return;
+          const itemCategory = String(path[1] || '');
+          if (category && itemCategory !== category) return;
+          pushRow(rows, value, itemCategory);
+        });
+        pipeline.once('end', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+        pipeline.once('error', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+      });
+  
+      sortRows(rows);
+      log.success(`[응답] (monthly) ${category} ${rows.length}건 반환 (date=${startDate || 'ALL'}~${endDate || startDate || 'ALL'})`);
+      return res.json({ success: true, data: rows, total: rows.length, category, weekly: false });
+  
+    } catch (error) {
+      log.error('랭킹 데이터 조회 오류: ' + (error?.message || error));
+      return res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
     }
-  
-    // 정렬
-    rows.sort((a, b) => {
-      const dc = b.date.localeCompare(a.date);
-      if (dc !== 0) return dc;
-      if (a.time && b.time) {
-        const tc = b.time.localeCompare(a.time);
-        if (tc !== 0) return tc;
-      }
-      return a.rank - b.rank;
-    });
-  
-    log.success(`[응답] (weekly) ${category} ${rows.length}건 반환 (date=${startDate || 'ALL'}~${endDate || startDate || 'ALL'})`);
-    return res.json({ success: true, data: rows, total: rows.length, category, weekly: true });
-  }
+  });
   
   
 
