@@ -14,22 +14,6 @@ const archiver = require('archiver');
 const os = require('os');
 require('dotenv').config();
 
-// 추가
-const { chain } = require('stream-chain');
-const { parser } = require('stream-json');
-const { streamValues } = require('stream-json/streamers/StreamValues');
-
-// 서버 보호용 상한
-const SEARCH_LIMIT_DEFAULT = 300;
-const SEARCH_LIMIT_MAX = 2000;
-
-// 병합 시 이전 파일 최대 허용 크기(넘으면 병합 skip)
-const MERGE_MAX_BYTES = 80 * 1024 * 1024; // 80MB
-// 저장 시 프리티프린트 여부(메모리/용량 절약 위해 false 권장)
-const PRETTY_JSON = false;
-// (선택) 카테고리별 보존 상한. 0이면 무제한 보존
-const MAX_KEEP_PER_CATEGORY = 0;
-
 // Express 앱 및 포트 설정
 const app = express();
 const port = process.env.PORT || 5001;
@@ -398,251 +382,248 @@ function logNextCrawlTime() {
 async function crawlAllCategoriesV2(options = {}) {
     log.section('🕷️ 크롤링 전체 시작');
     const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    const yearMonth = kstNow.toISOString().slice(0, 7); // 'YYYY-MM'
+    const yearMonth = kstNow.toISOString().slice(0, 7); // '2025-07'
     const today = kstNow.toISOString().split('T')[0];
     const timeStr = `${String(kstNow.getHours()).padStart(2, '0')}-${String(kstNow.getMinutes()).padStart(2, '0')}`;
-    const RANKING_DATA_PATH = getRankingDataPath(yearMonth);
-  
-    // ✅ 기존 월 파일 통째 로드 금지 (OOM 유발). 새로 수집한 것만 담는다.
-    const localProductCache = { data: {}, allProducts: [], timestamp: null };
-  
-    const targetCategories = options.onlyCategory ? [options.onlyCategory] : Object.keys(CATEGORY_CODES);
-  
-    for (const category of targetCategories) {
-      log.line();
-      log.info(`카테고리: ${category}`);
-      localProductCache.data[category] = [];
-  
-      let rankCounter = 1;
-      const seen = new Set(); // 중복 체크용
-      let page = 1;
-      let noNewItemCount = 0;
-      const MAX_NO_NEW_ITEM_PAGE = 3;
-  
-      while (localProductCache.data[category].length < 100 && page <= 30) {
-        const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${CATEGORY_CODES[category].fltDispCatNo}&pageIdx=${page}&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
-        let driver = null;
-        let tmpProfile = null;
-        let newItemAdded = false;
-  
-        try {
-          tmpProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-profile-'));
-          const chromeOptions = new chrome.Options()
-            .addArguments('--headless')
-            .addArguments('--no-sandbox')
-            .addArguments('--disable-dev-shm-usage')
-            .addArguments('--window-size=1920,1500')
-            .addArguments(`--user-data-dir=${tmpProfile}`)
-            .addArguments(`--user-agent=${getRandomUserAgent()}`);
-          if (process.env.CHROME_BIN) {
-            chromeOptions.setChromeBinaryPath(process.env.CHROME_BIN);
-          }
-  
-          driver = await new Builder().forBrowser('chrome').setChromeOptions(chromeOptions).build();
-          await driver.get(url);
-          await driver.wait(until.elementLocated(By.css('body')), 15000);
-          await driver.sleep(2000);
-  
-          const products = await driver.findElements(By.css('ul.cate_prd_list > li'));
-          for (const product of products) {
-            if (localProductCache.data[category].length >= 100) break;
-  
-            // 🔧 try 밖에 기본값을 둬서 예외 시에도 안전
-            let extractedRankCurrent = rankCounter;
-  
-            try {
-              // data-attr에서 랭킹 우선 추출
-              const dataAttrElement = await product.findElement(By.css('a[data-attr]')).catch(() => null);
-              if (dataAttrElement) {
-                const dataAttr = await dataAttrElement.getAttribute('data-attr');
-                if (dataAttr) {
-                  const parts = dataAttr.split('^');
-                  if (parts.length >= 4) {
-                    const rankFromAttr = parseInt(parts[3]);
-                    if (!isNaN(rankFromAttr)) extractedRankCurrent = rankFromAttr;
-                  }
-                }
-              }
-              // thumb_flag.best 백업 추출
-              if (extractedRankCurrent === rankCounter) {
-                const thumbFlagElement = await product.findElement(By.css('.thumb_flag.best')).catch(() => null);
-                if (thumbFlagElement) {
-                  const thumbFlagText = await thumbFlagElement.getText();
-                  const thumbRank = parseInt(thumbFlagText);
-                  if (!isNaN(thumbRank)) extractedRankCurrent = thumbRank;
-                }
-              }
-  
-              const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
-              let name = nameElement ? await nameElement.getText() : `상품${extractedRankCurrent}`;
-  
-              const brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
-              let brand = brandElement ? await brandElement.getText() : '';
-  
-              // 브랜드/이름 정리
-              if (!brand && name) {
-                const lines = name.split('\n');
-                if (lines.length > 1) {
-                  brand = lines[0].trim();
-                  name = lines.slice(1).join(' ').trim();
-                } else {
-                  const match = name.match(/^([\w가-힣A-Za-z0-9]+)[\s\[]?(.*)$/);
-                  if (match) {
-                    brand = match[1].trim();
-                    name = match[2].trim();
-                  }
-                }
-              }
-              if (brand && name && name.startsWith(brand)) {
-                name = name.slice(brand.length).trim();
-              }
-  
-              // 중복 키
-              const uniqueKey = [today, timeStr, category, extractedRankCurrent, (brand || '').trim(), (name || '').trim()].join('|');
-              if (seen.has(uniqueKey)) continue;
-              seen.add(uniqueKey);
-  
-              // 가격
-              let originalPrice = '';
-              let salePrice = '';
-              const orgPriceElement = await product.findElement(By.css('.prd_price .tx_org .tx_num')).catch(() => null);
-              const curPriceElement = await product.findElement(By.css('.prd_price .tx_cur .tx_num')).catch(() => null);
-              if (orgPriceElement) originalPrice = (await orgPriceElement.getText()).replace(/,/g, '');
-              if (curPriceElement) salePrice = (await curPriceElement.getText()).replace(/,/g, '');
-              if (!originalPrice || !salePrice) {
-                const priceElement = await product.findElement(By.css('.prd_price')).catch(() => null);
-                const priceText = priceElement ? await priceElement.getText() : '';
-                const priceMatch = priceText.match(/(\d{1,3}(?:,\d{3})*)/g);
-                if (!originalPrice) originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
-                if (!salePrice) salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
-              }
-  
-              // 프로모션
-              const promoElements = await product.findElements(By.css('.icon_flag')).catch(() => []);
-              let promotion = '';
-              if (promoElements && promoElements.length > 0) {
-                const promoTexts = [];
-                for (const el of promoElements) {
-                  const txt = await el.getText();
-                  if (txt) promoTexts.push(txt.trim());
-                }
-                promotion = promoTexts.join(', ');
-              }
-  
-              // push
-              localProductCache.data[category].push({
-                date: today,
-                time: timeStr,
-                category,
-                rank: extractedRankCurrent,
-                brand: (brand || '').trim(),
-                name: (name || '').trim(),
-                originalPrice,
-                salePrice,
-                promotion: (promotion || '').trim()
-              });
-  
-              rankCounter++;
-              newItemAdded = true;
-            } catch (productError) {
-              // 실패해도 자리 채우기
-              localProductCache.data[category].push({
-                date: today,
-                time: timeStr,
-                category,
-                rank: extractedRankCurrent || rankCounter,
-                brand: '',
-                name: `상품${extractedRankCurrent || rankCounter}`,
-                originalPrice: '',
-                salePrice: '',
-                promotion: ''
-              });
-              rankCounter++;
-              newItemAdded = true;
-            }
-          }
-        } catch (e) {
-          console.error(`[${category}] ${page}페이지 크롤링 실패:`, e.message);
-        } finally {
-          if (driver) await driver.quit();
-          if (tmpProfile && fs.existsSync(tmpProfile)) fs.rmSync(tmpProfile, { recursive: true, force: true });
-        }
-  
-        if (!newItemAdded) noNewItemCount++;
-        else noNewItemCount = 0;
-  
-        if (noNewItemCount >= MAX_NO_NEW_ITEM_PAGE) {
-          log.warn(`[${category}] 연속 ${MAX_NO_NEW_ITEM_PAGE}페이지에서 새로운 상품이 없어 크롤링 종료`);
-          break;
-        }
-        page++;
-      }
-  
-      // 랭킹 정렬 후 100개 제한
-      localProductCache.data[category].sort((a, b) => a.rank - b.rank);
-      localProductCache.data[category] = localProductCache.data[category].slice(0, 100);
-      log.success(`[${category}] 크롤링 완료: ${localProductCache.data[category].length}개 (랭킹 순서 정렬됨)`);
-    }
-  
-    // ✅ 전체 데이터 저장 (이전 파일과 병합하되, OOM 가드 적용)
-    const mergedData = { data: {}, allProducts: [], timestamp: kstNow };
-  
-    let prev = null;
+    const RANKING_DATA_PATH = getRankingDataPath(yearMonth); // 수정: 일관된 경로 사용
+    let localProductCache = { data: {}, allProducts: [], timestamp: null };
     if (fs.existsSync(RANKING_DATA_PATH)) {
-      try {
-        const st = fs.statSync(RANKING_DATA_PATH);
-        if (st.size <= MERGE_MAX_BYTES) {
-          prev = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
-        } else {
-          log.warn(`[병합 건너뜀] ${RANKING_DATA_PATH} size=${(st.size/1e6).toFixed(1)}MB > ${(MERGE_MAX_BYTES/1e6)|0}MB`);
+        try {
+            const prev = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
+            if (prev && typeof prev === 'object') {
+                localProductCache = prev;
+            }
+        } catch (e) {
+            log.error('기존 월별 랭킹 데이터 로드 실패: ' + e);
         }
-      } catch (e) {
-        log.warn('이전 데이터 파싱 실패(스킵): ' + e.message);
-      }
     }
-  
-    for (const cat of Object.keys(CATEGORY_CODES)) {
-      const oldArr = Array.isArray(prev?.data?.[cat]) ? prev.data[cat] : [];
-      const newArr = Array.isArray(localProductCache.data[cat]) ? localProductCache.data[cat] : [];
-  
-      const seenMerge = new Set();
-      const mergedArr = [];
-  
-      for (const src of [oldArr, newArr]) {
-        for (const item of src) {
-          const key = [
-            item.date, item.time, item.category, item.rank,
-            (item.brand || '').trim(), (item.name || '').trim()
-          ].join('|');
-          if (seenMerge.has(key)) continue;
-          seenMerge.add(key);
-          mergedArr.push(item);
+
+    const targetCategories = options.onlyCategory ? [options.onlyCategory] : Object.keys(CATEGORY_CODES);
+
+    for (const category of targetCategories) {
+        log.line();
+        log.info(`카테고리: ${category}`);
+        localProductCache.data[category] = [];
+        let totalRank = 1;
+                // 상품 리스트 파싱 - 가로(행) 순서, 중복 제거(날짜/시간/카테고리/순위/브랜드/제품명 모두 같을 때만), 100개 보장
+                let rankCounter = 1;
+                const seen = new Set(); // 중복 체크용
+                let page = 1;
+                let noNewItemCount = 0;
+                const MAX_NO_NEW_ITEM_PAGE = 3; // 연속 3페이지에서 새로운 상품이 없으면 종료
+                while (localProductCache.data[category].length < 100 && page <= 30) {
+                    const url = `https://www.oliveyoung.co.kr/store/main/getBestList.do?dispCatNo=900000100100001&fltDispCatNo=${CATEGORY_CODES[category].fltDispCatNo}&pageIdx=${page}&rowsPerPage=24&t_page=%EB%9E%AD%ED%82%B9&t_click=%ED%8C%90%EB%A7%A4%EB%9E%AD%ED%82%B9_${encodeURIComponent(category.replace('_', ' '))}`;
+                    let driver = null;
+                    let tmpProfile = null;
+                    let newItemAdded = false;
+                    try {
+                        tmpProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-profile-'));
+                        const options = new chrome.Options()
+                            .addArguments('--headless')
+                            .addArguments('--no-sandbox')
+                            .addArguments('--disable-dev-shm-usage')
+                            .addArguments('--window-size=1920,1500')
+                            .addArguments(`--user-data-dir=${tmpProfile}`)
+                            .addArguments(`--user-agent=${getRandomUserAgent()}`);
+                        if (process.env.CHROME_BIN) {
+                            options.setChromeBinaryPath(process.env.CHROME_BIN);
+                        }
+                        driver = await new Builder().forBrowser('chrome').setChromeOptions(options).build();
+                        await driver.get(url);
+                        await driver.wait(until.elementLocated(By.css('body')), 15000);
+                        await driver.sleep(2000);
+                        // 모든 상품 li를 선택하도록 셀렉터 수정
+                        const products = await driver.findElements(By.css('ul.cate_prd_list > li'));
+                        for (const product of products) {
+                            if (localProductCache.data[category].length >= 100) break;
+                            try {
+                                // data-attr에서 랭킹 정보 추출 (예: "랭킹^판매랭킹리스트_전체^상품명^3")
+                                const dataAttrElement = await product.findElement(By.css('a[data-attr]')).catch(() => null);
+                                let extractedRank = rankCounter;
+                                if (dataAttrElement) {
+                                    const dataAttr = await dataAttrElement.getAttribute('data-attr');
+                                    if (dataAttr) {
+                                        const parts = dataAttr.split('^');
+                                        if (parts.length >= 4) {
+                                            const rankFromAttr = parseInt(parts[3]);
+                                            if (!isNaN(rankFromAttr)) {
+                                                extractedRank = rankFromAttr;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // thumb_flag.best에서도 랭킹 정보 확인 (백업)
+                                if (extractedRank === rankCounter) {
+                                    const thumbFlagElement = await product.findElement(By.css('.thumb_flag.best')).catch(() => null);
+                                    if (thumbFlagElement) {
+                                        const thumbFlagText = await thumbFlagElement.getText();
+                                        const thumbRank = parseInt(thumbFlagText);
+                                        if (!isNaN(thumbRank)) {
+                                            extractedRank = thumbRank;
+                                        }
+                                    }
+                                }
+                                
+                                const nameElement = await product.findElement(By.css('.prd_name, .tx_name')).catch(() => null);
+                                let name = nameElement ? await nameElement.getText() : `상품${extractedRank}`;
+                                let brandElement = await product.findElement(By.css('.prd_brand, .tx_brand')).catch(() => null);
+                                let brand = brandElement ? await brandElement.getText() : '';
+                                if (!brand && name) {
+                                    const lines = name.split('\n');
+                                    if (lines.length > 1) {
+                                        brand = lines[0].trim();
+                                        name = lines.slice(1).join(' ').trim();
+                                    } else {
+                                        const match = name.match(/^([\w가-힣A-Za-z0-9]+)[\s\[]?(.*)$/);
+                                        if (match) {
+                                            brand = match[1].trim();
+                                            name = match[2].trim();
+                                        }
+                                    }
+                                }
+                                if (brand && name && name.startsWith(brand)) {
+                                    name = name.slice(brand.length).trim();
+                                }
+                                // 중복 체크: 날짜, 시간, 카테고리, 순위, 브랜드, 제품명 모두 같을 때만
+                                const uniqueKey = [
+                                  today,
+                                  timeStr,
+                                  category,
+                                  extractedRank,
+                                  brand.trim(),
+                                  name.trim()
+                                ].join('|');
+                                if (seen.has(uniqueKey)) continue;
+                                seen.add(uniqueKey);
+                                let originalPrice = '';
+                                let salePrice = '';
+                                const orgPriceElement = await product.findElement(By.css('.prd_price .tx_org .tx_num')).catch(() => null);
+                                const curPriceElement = await product.findElement(By.css('.prd_price .tx_cur .tx_num')).catch(() => null);
+                                if (orgPriceElement) {
+                                    originalPrice = (await orgPriceElement.getText()).replace(/,/g, '');
+                                }
+                                if (curPriceElement) {
+                                    salePrice = (await curPriceElement.getText()).replace(/,/g, '');
+                                }
+                                if (!originalPrice || !salePrice) {
+                                    const priceElement = await product.findElement(By.css('.prd_price')).catch(() => null);
+                                    const priceText = priceElement ? await priceElement.getText() : '';
+                                    const priceMatch = priceText.match(/(\d{1,3}(?:,\d{3})*)/g);
+                                    if (!originalPrice) originalPrice = priceMatch && priceMatch[0] ? priceMatch[0].replace(/,/g, '') : '';
+                                    if (!salePrice) salePrice = priceMatch && priceMatch[1] ? priceMatch[1].replace(/,/g, '') : originalPrice;
+                                }
+                                const promoElements = await product.findElements(By.css('.icon_flag')).catch(() => []);
+                                let promotion = '';
+                                if (promoElements && promoElements.length > 0) {
+                                    const promoTexts = [];
+                                    for (const el of promoElements) {
+                                        const txt = await el.getText();
+                                        if (txt) promoTexts.push(txt.trim());
+                                    }
+                                    promotion = promoTexts.join(', ');
+                                }
+                                const productData = {
+                                    date: today,
+                                    time: timeStr,
+                                    category,
+                                    rank: extractedRank, // data-attr에서 추출한 정확한 랭킹 사용
+                                    brand: brand.trim(),
+                                    name: name.trim(),
+                                    originalPrice: originalPrice,
+                                    salePrice: salePrice,
+                                    promotion: promotion.trim()
+                                };
+                                localProductCache.data[category].push(productData);
+                                rankCounter++;
+                                newItemAdded = true;
+                            } catch (productError) {
+                                localProductCache.data[category].push({
+                                    date: today,
+                                    time: timeStr,
+                                    category,
+                                    rank: extractedRank || rankCounter,
+                                    brand: '',
+                                    name: `상품${extractedRank || rankCounter}`,
+                                    originalPrice: '',
+                                    salePrice: '',
+                                    promotion: ''
+                                });
+                                rankCounter++;
+                                newItemAdded = true;
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`[${category}] ${page}페이지 크롤링 실패:`, e.message);
+                    } finally {
+                        if (driver) await driver.quit();
+                        if (tmpProfile && fs.existsSync(tmpProfile)) fs.rmSync(tmpProfile, { recursive: true, force: true });
+                    }
+                    if (!newItemAdded) {
+                        noNewItemCount++;
+                    } else {
+                        noNewItemCount = 0;
+                    }
+                    if (noNewItemCount >= MAX_NO_NEW_ITEM_PAGE) {
+                        log.warn(`[${category}] 연속 ${MAX_NO_NEW_ITEM_PAGE}페이지에서 새로운 상품이 없어 크롤링 종료`);
+                        break;
+                    }
+                    page++;
+                }
+        // 랭킹 순서대로 정렬 후 100개까지만 저장
+        localProductCache.data[category].sort((a, b) => a.rank - b.rank);
+        localProductCache.data[category] = localProductCache.data[category].slice(0, 100);
+        log.success(`[${category}] 크롤링 완료: ${localProductCache.data[category].length}개 (랭킹 순서 정렬됨)`);
+    }
+    // 전체 데이터 저장 (기존 데이터와 병합, 중복 제거)
+    let mergedData = localProductCache;
+    if (fs.existsSync(RANKING_DATA_PATH)) {
+        try {
+            const prev = JSON.parse(fs.readFileSync(RANKING_DATA_PATH, 'utf-8'));
+            if (prev && typeof prev === 'object' && prev.data) {
+                // 카테고리별로 기존 데이터와 새 데이터 합치기
+                for (const cat of Object.keys(CATEGORY_CODES)) {
+                    const oldArr = Array.isArray(prev.data[cat]) ? prev.data[cat] : [];
+                    const newArr = Array.isArray(localProductCache.data[cat]) ? localProductCache.data[cat] : [];
+                    // 중복 제거: 날짜, 시간, 카테고리, 순위, 브랜드, 제품명 모두 같을 때만
+                    const seen = new Set();
+                    const mergedArr = [];
+                    for (const arr of [oldArr, newArr]) {
+                        for (const item of arr) {
+                            const uniqueKey = [
+                                item.date,
+                                item.time,
+                                item.category,
+                                item.rank,
+                                (item.brand||'').trim(),
+                                (item.name||'').trim()
+                            ].join('|');
+                            if (seen.has(uniqueKey)) continue;
+                            seen.add(uniqueKey);
+                            mergedArr.push(item);
+                        }
+                    }
+                    // 병합된 데이터를 랭킹 순서대로 정렬
+                    mergedArr.sort((a, b) => a.rank - b.rank);
+                    mergedData.data[cat] = mergedArr;
+                }
+            }
+        } catch (e) {
+            log.error('기존 월별 랭킹 데이터 병합 실패: ' + e);
         }
-      }
-  
-      // 랭킹 오름차순
-      mergedArr.sort((a, b) => a.rank - b.rank);
-  
-      // (선택) 보존 상한
-      mergedData.data[cat] = (MAX_KEEP_PER_CATEGORY > 0 && mergedArr.length > MAX_KEEP_PER_CATEGORY)
-        ? mergedArr.slice(0, MAX_KEEP_PER_CATEGORY)
-        : mergedArr;
     }
-  
-    // 저장 (프리티프린트 비활성으로 메모리/용량 절약)
+    mergedData.timestamp = kstNow;
     try {
-      const payload = PRETTY_JSON ? JSON.stringify(mergedData, null, 2) : JSON.stringify(mergedData);
-      fs.writeFileSync(RANKING_DATA_PATH, payload);
-      log.success(`[랭킹 데이터 저장 완료] ${RANKING_DATA_PATH}`);
+        fs.writeFileSync(RANKING_DATA_PATH, JSON.stringify(mergedData, null, 2));
+        log.success(`[랭킹 데이터 저장 완료] ${RANKING_DATA_PATH}`);
     } catch (e) {
-      log.error('[랭킹 데이터 저장 실패] ' + RANKING_DATA_PATH + ' ' + e.message);
+        log.error('[랭킹 데이터 저장 실패] ' + RANKING_DATA_PATH + ' ' + e);
     }
-  
-    // 캡처 + 다음 크롤링 안내
+    // 크롤링 끝나면 캡처 함수 호출
     await captureOliveyoungMainRanking(timeStr);
+    // 크롤링/캡처 끝난 후 다음 크롤링 시각 로그
     logNextCrawlTime();
-  }
-  
+}
 
 // ========================================
 // 📸 캡처 관련 함수들
@@ -973,274 +954,226 @@ app.get('/', (req, res) => {
 app.get('/api/ranking', async (req, res) => {
     try {
       log.section('📊 랭킹 데이터 조회');
-      const { category = '스킨케어', startDate, endDate, yearMonth, limit } = req.query;
+      const { category = '스킨케어', startDate, endDate, yearMonth } = req.query;
   
       const ym = yearMonth || new Date().toISOString().slice(0, 7);
-      const filePath = resolveMonthlyFilePath(ym);
-      if (!filePath) {
-        log.warn(`[파일없음] ${ym}: /data/ranking_${ym}.json`);
+      const weeklyFiles = listWeeklyFiles(ym);
+  
+      // 공통 정렬자
+      const sortRows = (rows) => rows.sort((a, b) => {
+        const dc = b.date.localeCompare(a.date);
+        if (dc !== 0) return dc;
+        if (a.time && b.time) {
+          const tc = b.time.localeCompare(a.time);
+          if (tc !== 0) return tc;
+        }
+        return a.rank - b.rank;
+      });
+  
+      // 주간 파일이 있으면: 주간만 스트리밍
+      if (weeklyFiles.length > 0) {
+        const rows = [];
+        // 주간 파일들 순차 스트리밍
+        for (const f of weeklyFiles) {
+          await new Promise((resolve) => {
+            const source = fs.createReadStream(f, { encoding: 'utf8', highWaterMark: 1 << 20 });
+            const pipeline = chain([source, parser(), streamValues()]);
+            pipeline.on('data', ({ value, path }) => {
+              if (!Array.isArray(path) || path.length !== 3 || path[0] !== 'data') return;
+              const itemCategory = String(path[1] || '');
+              if (itemCategory !== category) return;
+  
+              const item = value || {};
+              if ((startDate || endDate) && !inDateRange(item.date, startDate, endDate)) return;
+  
+              rows.push({
+                rank: item.rank,
+                brand: item.brand,
+                name: item.name,
+                originalPrice: item.originalPrice,
+                salePrice: item.salePrice,
+                promotion: item.promotion,
+                date: item.date,
+                time: item.time,
+                category: item.category || itemCategory
+              });
+            });
+            pipeline.once('end', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+            pipeline.once('error', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+          });
+        }
+        sortRows(rows);
+        log.success(`[응답] (weekly) ${category} ${rows.length}건 반환`);
+        return res.json({ success: true, data: rows, total: rows.length, category, weekly: true });
+      }
+  
+      // 폴백: 월 파일 스트리밍
+      const monthlyPath = getRankingDataPath(ym);
+      if (!fs.existsSync(monthlyPath)) {
+        log.warn(`[파일없음] ${monthlyPath}`);
         return res.json({ success: true, data: [], total: 0, category, message: `${ym} 데이터가 없습니다.` });
       }
   
-      const HARD_LIMIT = Math.min(parseInt(limit || 1000, 10) || 1000, 5000);
       const rows = [];
-      let responded = false;
+      await new Promise((resolve) => {
+        const source = fs.createReadStream(monthlyPath, { encoding: 'utf8', highWaterMark: 1 << 20 });
+        const pipeline = chain([source, parser(), streamValues()]);
+        pipeline.on('data', ({ value, path }) => {
+          if (!Array.isArray(path) || path.length !== 3 || path[0] !== 'data') return;
+          const itemCategory = String(path[1] || '');
+          if (itemCategory !== category) return;
   
-      const source = fs.createReadStream(filePath, { encoding: 'utf8', highWaterMark: 1 << 20 });
-      const pipeline = chain([source, parser(), streamValues()]);
+          const item = value || {};
+          if ((startDate || endDate) && !inDateRange(item.date, startDate, endDate)) return;
   
-      const safeClose = (payload) => {
-        if (responded) return;
-        responded = true;
-        try { pipeline.destroy(); } catch {}
-        try { source.destroy(); } catch {}
-        res.json(payload);
-      };
-  
-      pipeline.on('data', ({ value, path }) => {
-        if (!Array.isArray(path) || path.length !== 3 || path[0] !== 'data') return;
-        const itemCategory = String(path[1] || '');
-        if (itemCategory !== category) return;
-  
-        const item = value || {};
-        if (startDate || endDate) {
-          if (!item.date || !inDateRange(item.date, startDate, endDate || startDate)) return;
-        }
-  
-        rows.push({
-          rank: item.rank,
-          brand: item.brand,
-          name: item.name,
-          originalPrice: item.originalPrice,
-          salePrice: item.salePrice,
-          promotion: item.promotion,
-          date: item.date,
-          time: item.time,
-          category: item.category || itemCategory
+          rows.push({
+            rank: item.rank,
+            brand: item.brand,
+            name: item.name,
+            originalPrice: item.originalPrice,
+            salePrice: item.salePrice,
+            promotion: item.promotion,
+            date: item.date,
+            time: item.time,
+            category: item.category || itemCategory
+          });
         });
+        pipeline.once('end', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+        pipeline.once('error', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+      });
   
-        if (rows.length >= HARD_LIMIT) {
-          rows.sort((a, b) => {
-            const dc = b.date.localeCompare(a.date);
-            if (dc !== 0) return dc;
+      sortRows(rows);
+      log.success(`[응답] (monthly) ${category} ${rows.length}건 반환`);
+      return res.json({ success: true, data: rows, total: rows.length, category, weekly: false });
+  
+    } catch (error) {
+      log.error('랭킹 데이터 조회 오류: ' + error?.message);
+      return res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
+    }
+  });
+  
+
+app.get('/api/search', async (req, res) => {
+    try {
+        log.section('🔍 제품명 데이터 검색');
+        log.info(`키워드: ${req.query.keyword}, 카테고리: ${req.query.category}, 날짜: ${req.query.startDate} ~ ${req.query.endDate}, yearMonth: ${req.query.yearMonth}`);
+        const { keyword, startDate, endDate, category, yearMonth } = req.query;
+        if (!keyword || !startDate) {
+            return res.status(400).json({
+                success: false,
+                error: '검색어와 시작 날짜를 입력해주세요.'
+            });
+        }
+        const ym = yearMonth || new Date().toISOString().slice(0, 7);
+        const filePath = getRankingDataPath(ym);
+        
+        if (!fs.existsSync(filePath)) {
+            log.warn(`[파일없음] ${filePath}`);
+            return res.json({
+                success: true,
+                data: [],
+                total: 0,
+                message: `${ym} 데이터가 없습니다. 크롤링이 필요합니다.`
+            });
+        }
+
+        // 메모리 효율적인 파일 읽기
+        const fileData = await new Promise((resolve, reject) => {
+            const chunks = [];
+            const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
+            
+            stream.on('data', (chunk) => {
+                chunks.push(chunk);
+            });
+            
+            stream.on('end', () => {
+                try {
+                    const content = chunks.join('');
+                    const data = JSON.parse(content);
+                    resolve(data);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+            
+            stream.on('error', reject);
+        });
+
+        const lowerKeyword = keyword.toLowerCase();
+        
+        // 날짜 필터
+        const isInDateRange = (itemDate, startDate, endDate) => {
+            const itemD = normalizeDate(itemDate);
+            const sDate = normalizeDate(startDate);
+            const eDate = normalizeDate(endDate);
+            if (!sDate && !eDate) return true;
+            if (sDate && !eDate) return itemD === sDate;
+            if (!sDate && eDate) return itemD === eDate;
+            if (sDate && eDate) {
+                return itemD >= sDate && itemD <= eDate;
+            }
+            return false;
+        };
+        
+        let matchingResults = [];
+        if (category && fileData.data[category]) {
+            const categoryItems = fileData.data[category];
+            categoryItems.forEach(item => {
+                if (!item.date) return;
+                if (!isInDateRange(item.date, startDate, endDate)) return;
+                const text = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
+                if (text.includes(lowerKeyword)) {
+                    matchingResults.push(item);
+                }
+            });
+        } else {
+            Object.values(fileData.data).forEach(categoryItems => {
+                categoryItems.forEach(item => {
+                    if (!item.date) return;
+                    if (!isInDateRange(item.date, startDate, endDate)) return;
+                    const text = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
+                    if (text.includes(lowerKeyword)) {
+                        matchingResults.push(item);
+                    }
+                });
+            });
+        }
+        
+        // 정렬: 날짜 내림차순, 시간 내림차순, 카테고리, 순위
+        matchingResults.sort((a, b) => {
+            const dateCompare = b.date.localeCompare(a.date);
+            if (dateCompare !== 0) return dateCompare;
             if (a.time && b.time) {
-              const tc = b.time.localeCompare(a.time);
-              if (tc !== 0) return tc;
+                const timeCompare = b.time.localeCompare(a.time);
+                if (timeCompare !== 0) return timeCompare;
+            }
+            if (a.category !== b.category) {
+                return a.category.localeCompare(b.category);
             }
             return a.rank - b.rank;
-          });
-          return safeClose({ success: true, data: rows, total: rows.length, truncated: true, category });
-        }
-      });
-  
-      pipeline.once('end', () => {
-        rows.sort((a, b) => {
-          const dc = b.date.localeCompare(a.date);
-          if (dc !== 0) return dc;
-          if (a.time && b.time) {
-            const tc = b.time.localeCompare(a.time);
-            if (tc !== 0) return tc;
-          }
-          return a.rank - b.rank;
         });
-        safeClose({ success: true, data: rows, total: rows.length, category });
-      });
-  
-      pipeline.once('error', (err) => {
-        log.error(`[${ym}] 랭킹 스트림 오류: ${err?.message}`);
-        safeClose({ success: false, error: '랭킹 조회 중 스트림 오류가 발생했습니다.' });
-      });
+        
+        // 메모리 정리
+        if (global.gc) {
+            global.gc();
+        }
+        
+        log.success(`[응답] 검색결과 ${matchingResults.length}건 반환`);
+        return res.json({
+            success: true,
+            data: matchingResults,
+            total: matchingResults.length
+        });
     } catch (error) {
-      log.error('랭킹 핸들러 오류: ' + error?.message);
-      return res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
+        log.error('검색 오류: ' + error);
+        return res.status(500).json({
+            success: false,
+            error: '서버 오류가 발생했습니다.'
+        });
     }
-  });
-  
+});
 
-  app.get('/api/search', async (req, res) => {
-    try {
-      log.section('🔍 제품명 데이터 검색');
-      const { keyword, startDate, endDate, category, yearMonth, limit } = req.query;
-      if (!keyword || !startDate) {
-        return res.status(400).json({ success: false, error: '검색어와 시작 날짜를 입력해주세요.' });
-      }
-  
-      const HARD_LIMIT = Math.min(parseInt(limit || SEARCH_LIMIT_DEFAULT, 10) || SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX);
-      const kwLower = String(keyword).toLowerCase();
-  
-      // 조회 대상 월 결정
-      let months = [];
-      if (yearMonth) {
-        months = [yearMonth];
-      } else {
-        months = monthSpan(startDate, endDate || startDate);
-        if (!months.length) {
-          const ym = toYM(startDate);
-          if (!ym) return res.status(400).json({ success: false, error: '날짜 형식이 올바르지 않습니다.' });
-          months = [ym];
-        }
-      }
-  
-      const results = [];
-      let responded = false;
-  
-      const sortResults = () => {
-        results.sort((a, b) => {
-          const dc = b.date.localeCompare(a.date);
-          if (dc !== 0) return dc;
-          if (a.time && b.time) {
-            const tc = b.time.localeCompare(a.time);
-            if (tc !== 0) return tc;
-          }
-          if (a.category !== b.category) return a.category.localeCompare(b.category);
-          return a.rank - b.rank;
-        });
-      };
-  
-      // 🔴 여기: 각 월을 순차 처리(완료까지 대기)
-      for (const ym of months) {
-        if (responded) break;
-  
-        const filePath = resolveMonthlyFilePath(ym);
-        if (!filePath) {
-          log.warn(`[파일없음] ${ym}: /data/ranking_${ym}.json`);
-          continue;
-        }
-  
-        await new Promise((resolve) => {
-          const source = fs.createReadStream(filePath, { encoding: 'utf8', highWaterMark: 1 << 20 });
-          const pipeline = chain([source, parser(), streamValues()]);
-  
-          const safeClose = (payload) => {
-            if (responded) return;
-            responded = true;
-            try { pipeline.destroy(); } catch {}
-            try { source.destroy(); } catch {}
-            sortResults();
-            res.json(payload);
-            resolve(); // 중요: 응답했어도 루프 탈출 위해 resolve
-          };
-  
-          pipeline.on('data', ({ value, path }) => {
-            // path === ['data','카테고리', index] 인 지점에서 value가 레코드
-            if (!Array.isArray(path) || path.length !== 3 || path[0] !== 'data') return;
-  
-            const itemCategory = String(path[1] || '');
-            if (category && itemCategory !== category) return;
-  
-            const item = value || {};
-            if (!item || !item.date) return;
-            if (!inDateRange(item.date, startDate, endDate || startDate)) return;
-  
-            const hay = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
-            if (!hay.includes(kwLower)) return;
-  
-            results.push({
-              date: item.date,
-              time: item.time,
-              category: item.category || itemCategory,
-              rank: item.rank,
-              brand: item.brand,
-              name: item.name,
-              originalPrice: item.originalPrice,
-              salePrice: item.salePrice,
-              promotion: item.promotion
-            });
-  
-            if (results.length >= HARD_LIMIT) {
-              return safeClose({ success: true, data: results, total: results.length, truncated: true });
-            }
-          });
-  
-          pipeline.once('end', () => {
-            try { pipeline.destroy(); } catch {}
-            try { source.destroy(); } catch {}
-            resolve(); // 이 달 처리 완료 → 다음 달로
-          });
-  
-          pipeline.once('error', (err) => {
-            log.error(`[${ym}] 검색 스트림 오류: ${err?.message}`);
-            try { pipeline.destroy(); } catch {}
-            try { source.destroy(); } catch {}
-            resolve(); // 에러 나도 다음 달 진행
-          });
-        });
-      }
-  
-      if (!responded) {
-        sortResults();
-        return res.json({ success: true, data: results, total: results.length });
-      }
-    } catch (error) {
-      log.error('검색 핸들러 오류: ' + error?.message);
-      return res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
-    }
-  });
-  
-  
 
-  app.get('/api/last-crawl-time', async (req, res) => {
-    try {
-      const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-      const tryMonths = [];
-      // 1순위: 이번 달
-      tryMonths.push(kstNow.toISOString().slice(0, 7));
-      // 2~4순위: 파일 없을 때만 이전 달들
-      for (let off = 1; off <= 3; off++) {
-        const d = new Date(kstNow); d.setMonth(d.getMonth() - off);
-        tryMonths.push(d.toISOString().slice(0, 7));
-      }
-  
-      let latestDate = null, latestTime = null;
-      for (const ym of tryMonths) {
-        const filePath = resolveMonthlyFilePath(ym);
-        if (!filePath) continue;
-  
-        // 이번 달 파일을 스캔해서 뭔가 하나라도 나오면 바로 종료
-        let foundInThisFile = false;
-        await new Promise((resolve) => {
-          const source = fs.createReadStream(filePath, { encoding: 'utf8', highWaterMark: 1 << 20 });
-          const pipeline = chain([source, parser(), streamValues()]);
-  
-          pipeline.on('data', ({ value, path }) => {
-            if (!Array.isArray(path) || path.length !== 3 || path[0] !== 'data') return;
-            const item = value || {};
-            if (!item.date || !item.time) return;
-            const cur = `${item.date} ${item.time}`;
-            const best = latestDate ? `${latestDate} ${latestTime}` : null;
-            if (!best || cur > best) {
-              latestDate = item.date;
-              latestTime = item.time;
-            }
-            foundInThisFile = true;
-          });
-  
-          const cleanup = () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); };
-          pipeline.once('end', cleanup);
-          pipeline.once('error', cleanup);
-        });
-  
-        if (foundInThisFile) break; // 이번 달에서 찾았으면 과거 달은 볼 필요 없음
-      }
-  
-      if (!latestDate || !latestTime) {
-        return res.json({ success: true, lastCrawlTime: '서버 시작 후 크롤링 대기 중', message: '아직 첫 크롤링 기록이 없습니다.' });
-      }
-  
-      const dt = new Date(`${latestDate}T${latestTime.replace('-', ':')}:00+09:00`);
-      const formattedTime = dt.toLocaleString('ko-KR', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-        hour12: false, timeZone: 'Asia/Seoul'
-      });
-      return res.json({ success: true, lastCrawlTime: formattedTime });
-    } catch (error) {
-      log.error('마지막 크롤링 시간 조회 오류: ' + error.message);
-      return res.status(500).json({ success: false, error: '마지막 크롤링 시간 조회 중 오류' });
-    }
-  });
-  
-  
 
 
 // 캡처 목록 조회 API
@@ -1261,41 +1194,3 @@ cron.schedule('15 * * * *', async () => {
 }, {
   timezone: 'Asia/Seoul'
 });
-
-
-
-function toYM(isoDate) {
-    if (!isoDate) return null;
-    const d = new Date(`${isoDate}T00:00:00+09:00`);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString().slice(0, 7);
-  }
-  function monthSpan(startDate, endDate) {
-    const start = new Date(`${startDate}T00:00:00+09:00`);
-    const end = new Date(`${endDate || startDate}T00:00:00+09:00`);
-    if (Number.isNaN(start) || Number.isNaN(end)) return [];
-    const list = [];
-    const cur = new Date(start);
-    cur.setDate(1);
-    const GUARD = 36;
-    let i = 0;
-    while (cur <= end && i++ < GUARD) {
-      list.push(cur.toISOString().slice(0, 7));
-      cur.setMonth(cur.getMonth() + 1);
-    }
-    return list;
-  }
-  function resolveMonthlyFilePath(ym) {
-    const p = `/data/ranking_${ym}.json`;
-    return fs.existsSync(p) ? p : null;
-  }
-  function inDateRange(itemDate, startDate, endDate) {
-    const d = normalizeDate(itemDate);
-    const s = normalizeDate(startDate);
-    const e = normalizeDate(endDate);
-    if (!s && !e) return true;
-    if (s && !e) return d === s;
-    if (!s && e) return d === e;
-    return d >= s && d <= e;
-  }
-  
