@@ -9,6 +9,54 @@ let rankingData = []; // 전체 랭킹 데이터 저장
 let searchResultData = []; // 검색 결과 데이터 저장
 let capturesList = []; // 캡처 목록 저장
 
+
+// ===== 날짜 선택 금지(브라우저 기본 달력 유지) =====
+(function enforceDateRules() {
+    const $start = document.getElementById('startDate');
+    const $end   = document.getElementById('endDate');
+  
+    // 금지 구간: 2025-07-01 ~ 2025-07-07
+    const BLOCK_FROM = '2025-07-01';
+    const BLOCK_TO   = '2025-07-07';
+  
+    // 헬퍼
+    const inBlocked = (iso) => iso && iso >= BLOCK_FROM && iso <= BLOCK_TO;
+  
+    function validateStart() {
+      const v = $start.value;
+      if (!v) return;
+      if (v < '2025-05-21') {
+        alert('2025-05-21 이후만 조회 가능합니다.');
+        $start.value = '2025-05-21';
+      } else if (inBlocked(v)) {
+        alert('2025-07-01 ~ 2025-07-07 데이터는 조회할 수 없습니다.');
+        $start.value = ''; // 선택 취소
+      }
+      // start가 바뀌면 end의 최소값 조정
+      if ($end.value && $end.value < $start.value) $end.value = $start.value;
+      $end.min = $start.value || '2025-05-21';
+    }
+  
+    function validateEnd() {
+      const v = $end.value;
+      if (!v) return;
+      if ($start.value && v < $start.value) {
+        alert('종료일은 시작일 이후여야 합니다.');
+        $end.value = $start.value;
+        return;
+      }
+      if (inBlocked(v)) {
+        alert('2025-07-01 ~ 2025-07-07 데이터는 조회할 수 없습니다.');
+        $end.value = ''; // 선택 취소
+      }
+    }
+  
+    $start.addEventListener('change', validateStart);
+    $end.addEventListener('change', validateEnd);
+  })();
+
+  
+
 // 전역 이벤트 차단기 - 새로고침 및 폼 제출 방지 (다운로드 버튼 예외 처리)
 document.addEventListener('click', function(e) {
     // 엑셀 다운로드 버튼은 예외 처리
