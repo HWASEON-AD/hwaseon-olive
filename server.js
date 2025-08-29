@@ -1086,125 +1086,153 @@ app.get('/api/ranking', async (req, res) => {
   });
   
 
+// 검색 API (주간 우선, 월간 폴백 / 스키마 유연 파싱)
 app.get('/api/search', async (req, res) => {
     try {
-        log.section('🔍 제품명 데이터 검색');
-        log.info(`키워드: ${req.query.keyword}, 카테고리: ${req.query.category}, 날짜: ${req.query.startDate} ~ ${req.query.endDate}, yearMonth: ${req.query.yearMonth}`);
-        const { keyword, startDate, endDate, category, yearMonth } = req.query;
-        if (!keyword || !startDate) {
-            return res.status(400).json({
-                success: false,
-                error: '검색어와 시작 날짜를 입력해주세요.'
-            });
-        }
-        const ym = yearMonth || new Date().toISOString().slice(0, 7);
-        const filePath = getRankingDataPath(ym);
-        
-        if (!fs.existsSync(filePath)) {
-            log.warn(`[파일없음] ${filePath}`);
-            return res.json({
-                success: true,
-                data: [],
-                total: 0,
-                message: `${ym} 데이터가 없습니다. 크롤링이 필요합니다.`
-            });
-        }
-
-        // 메모리 효율적인 파일 읽기
-        const fileData = await new Promise((resolve, reject) => {
-            const chunks = [];
-            const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
-            
-            stream.on('data', (chunk) => {
-                chunks.push(chunk);
-            });
-            
-            stream.on('end', () => {
-                try {
-                    const content = chunks.join('');
-                    const data = JSON.parse(content);
-                    resolve(data);
-                } catch (error) {
-                    reject(error);
-                }
-            });
-            
-            stream.on('error', reject);
-        });
-
-        const lowerKeyword = keyword.toLowerCase();
-        
+      log.section('🔍 제품명 데이터 검색 (weekly 우선)');
+      const { keyword, startDate, endDate, category, yearMonth } = req.query;
+  
+      if (!keyword || !startDate) {
+        return res.status(400).json({ success: false, error: '검색어와 시작 날짜를 입력해주세요.' });
+      }
+  
+      const kwLower = String(keyword).toLowerCase();
+      const ym = yearMonth || (normalizeDate(startDate)?.slice(0, 7) || new Date().toISOString().slice(0, 7));
+      const weeklyFiles = listWeeklyFiles(ym);
+      const HARD_LIMIT = 2000; // 안전가드 (너무 많은 결과 방지)
+      const results = [];
+  
+      const pushIfMatch = (item, fallbackCategory) => {
+        if (!item || !item.date) return;
+        // 카테고리 필터
+        const itemCat = item.category || fallbackCategory || '';
+        if (category && itemCat !== category) return;
         // 날짜 필터
-        const isInDateRange = (itemDate, startDate, endDate) => {
-            const itemD = normalizeDate(itemDate);
-            const sDate = normalizeDate(startDate);
-            const eDate = normalizeDate(endDate);
-            if (!sDate && !eDate) return true;
-            if (sDate && !eDate) return itemD === sDate;
-            if (!sDate && eDate) return itemD === eDate;
-            if (sDate && eDate) {
-                return itemD >= sDate && itemD <= eDate;
-            }
-            return false;
-        };
-        
-        let matchingResults = [];
-        if (category && fileData.data[category]) {
-            const categoryItems = fileData.data[category];
-            categoryItems.forEach(item => {
-                if (!item.date) return;
-                if (!isInDateRange(item.date, startDate, endDate)) return;
-                const text = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
-                if (text.includes(lowerKeyword)) {
-                    matchingResults.push(item);
-                }
-            });
-        } else {
-            Object.values(fileData.data).forEach(categoryItems => {
-                categoryItems.forEach(item => {
-                    if (!item.date) return;
-                    if (!isInDateRange(item.date, startDate, endDate)) return;
-                    const text = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
-                    if (text.includes(lowerKeyword)) {
-                        matchingResults.push(item);
+        if (!inDateRange(item.date, startDate, endDate || startDate)) return;
+        // 키워드 필터
+        const hay = `${item.brand || ''} ${item.name || ''}`.toLowerCase();
+        if (!hay.includes(kwLower)) return;
+        results.push({
+          date: item.date,
+          time: item.time,
+          category: itemCat,
+          rank: item.rank,
+          brand: item.brand,
+          name: item.name,
+          originalPrice: item.originalPrice,
+          salePrice: item.salePrice,
+          promotion: item.promotion
+        });
+      };
+  
+      const sortResults = () => {
+        results.sort((a, b) => {
+          const dc = b.date.localeCompare(a.date);
+          if (dc !== 0) return dc;
+          if (a.time && b.time) {
+            const tc = b.time.localeCompare(a.time);
+            if (tc !== 0) return tc;
+          }
+          if (a.category !== b.category) return a.category.localeCompare(b.category);
+          return a.rank - b.rank;
+        });
+      };
+  
+      // ---------- 1) 주간 파일 우선 ----------
+      if (weeklyFiles.length > 0) {
+        for (const f of weeklyFiles) {
+          if (results.length >= HARD_LIMIT) break;
+  
+          try {
+            // 작은 파일일 가능성이 높으므로 한 번 파싱을 우선 시도 (data 유무 스키마 감지)
+            const raw = fs.readFileSync(f, 'utf8').trim();
+  
+            // (A) 월간과 동일 스키마: { data: { "카테고리": [...] }, ... }
+            if (raw.startsWith('{')) {
+              const j = JSON.parse(raw);
+              if (j && j.data && typeof j.data === 'object') {
+                if (category && Array.isArray(j.data[category])) {
+                  for (const it of j.data[category]) {
+                    pushIfMatch(it, category);
+                    if (results.length >= HARD_LIMIT) break;
+                  }
+                } else {
+                  for (const [catKey, arr] of Object.entries(j.data)) {
+                    if (!Array.isArray(arr)) continue;
+                    for (const it of arr) {
+                      pushIfMatch(it, catKey);
+                      if (results.length >= HARD_LIMIT) break;
                     }
-                });
+                    if (results.length >= HARD_LIMIT) break;
+                  }
+                }
+                continue; // 이 파일 처리 끝
+              }
+            }
+  
+            // (B) 스키마가 달라질 경우 스트리밍 관대 파서
+            await new Promise((resolve) => {
+              const source = fs.createReadStream(f, { encoding: 'utf8', highWaterMark: 1 << 20 });
+              const pipeline = chain([source, parser(), streamValues()]);
+              pipeline.on('data', ({ value, path }) => {
+                if (results.length >= HARD_LIMIT) return;
+                // 월간 스키마와 동일한 경우: path === ['data','카테고리', idx]
+                if (Array.isArray(path) && path.length === 3 && path[0] === 'data') {
+                  const itemCat = String(path[1] || '');
+                  if (category && itemCat !== category) return;
+                  pushIfMatch(value, itemCat);
+                  return;
+                }
+                // 그 외(최상위 배열/객체 등): item.category 기반으로 수집
+                if (value && typeof value === 'object') {
+                  const itemCat = value.category || '';
+                  if (category && itemCat !== category) return;
+                  pushIfMatch(value, itemCat);
+                }
+              });
+              pipeline.once('end', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+              pipeline.once('error', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
             });
+          } catch (e) {
+            log.warn(`[weekly search read] ${f}: ${e.message}`);
+          }
         }
-        
-        // 정렬: 날짜 내림차순, 시간 내림차순, 카테고리, 순위
-        matchingResults.sort((a, b) => {
-            const dateCompare = b.date.localeCompare(a.date);
-            if (dateCompare !== 0) return dateCompare;
-            if (a.time && b.time) {
-                const timeCompare = b.time.localeCompare(a.time);
-                if (timeCompare !== 0) return timeCompare;
-            }
-            if (a.category !== b.category) {
-                return a.category.localeCompare(b.category);
-            }
-            return a.rank - b.rank;
+  
+        sortResults();
+        log.success(`[응답] (weekly) ${results.length}건 반환`);
+        return res.json({ success: true, data: results, total: results.length, weekly: true });
+      }
+  
+      // ---------- 2) 폴백: 월간 파일 스트리밍 ----------
+      const monthlyPath = getRankingDataPath(ym);
+      if (!fs.existsSync(monthlyPath)) {
+        log.warn(`[파일없음] ${monthlyPath}`);
+        return res.json({ success: true, data: [], total: 0, message: `${ym} 데이터가 없습니다.` });
+      }
+  
+      await new Promise((resolve) => {
+        const source = fs.createReadStream(monthlyPath, { encoding: 'utf8', highWaterMark: 1 << 20 });
+        const pipeline = chain([source, parser(), streamValues()]);
+        pipeline.on('data', ({ value, path }) => {
+          if (results.length >= HARD_LIMIT) return;
+          if (!Array.isArray(path) || path.length !== 3 || path[0] !== 'data') return;
+          const itemCategory = String(path[1] || '');
+          if (category && itemCategory !== category) return;
+          pushIfMatch(value, itemCategory);
         });
-        
-        // 메모리 정리
-        if (global.gc) {
-            global.gc();
-        }
-        
-        log.success(`[응답] 검색결과 ${matchingResults.length}건 반환`);
-        return res.json({
-            success: true,
-            data: matchingResults,
-            total: matchingResults.length
-        });
+        pipeline.once('end', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+        pipeline.once('error', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+      });
+  
+      sortResults();
+      log.success(`[응답] (monthly) ${results.length}건 반환`);
+      return res.json({ success: true, data: results, total: results.length, weekly: false });
     } catch (error) {
-        log.error('검색 오류: ' + error);
-        return res.status(500).json({
-            success: false,
-            error: '서버 오류가 발생했습니다.'
-        });
+      log.error('검색 오류: ' + error?.message);
+      return res.status(500).json({ success: false, error: '서버 오류가 발생했습니다.' });
     }
-});
+  });
+  
 
 // 마지막 크롤링 시간 API
 app.get('/api/last-crawl-time', async (req, res) => {
