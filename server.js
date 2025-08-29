@@ -1179,31 +1179,30 @@ app.get('/api/ranking', async (req, res) => {
   
   
 
-// 마지막 크롤링 시간 API (스트리밍 버전)
-app.get('/api/last-crawl-time', async (req, res) => {
+  app.get('/api/last-crawl-time', async (req, res) => {
     try {
       const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-      const months = [0,1,2,3]  // 현재월 + 최근 3개월
-        .map(off => {
-          const d = new Date(kstNow);
-          d.setMonth(d.getMonth() - off);
-          return d.toISOString().slice(0, 7);
-        });
+      const tryMonths = [];
+      // 1순위: 이번 달
+      tryMonths.push(kstNow.toISOString().slice(0, 7));
+      // 2~4순위: 파일 없을 때만 이전 달들
+      for (let off = 1; off <= 3; off++) {
+        const d = new Date(kstNow); d.setMonth(d.getMonth() - off);
+        tryMonths.push(d.toISOString().slice(0, 7));
+      }
   
-      let latestDate = null;
-      let latestTime = null;
-  
-      // 월 파일들을 순차 스트리밍
-      for (const ym of months) {
+      let latestDate = null, latestTime = null;
+      for (const ym of tryMonths) {
         const filePath = resolveMonthlyFilePath(ym);
         if (!filePath) continue;
   
+        // 이번 달 파일을 스캔해서 뭔가 하나라도 나오면 바로 종료
+        let foundInThisFile = false;
         await new Promise((resolve) => {
           const source = fs.createReadStream(filePath, { encoding: 'utf8', highWaterMark: 1 << 20 });
           const pipeline = chain([source, parser(), streamValues()]);
   
           pipeline.on('data', ({ value, path }) => {
-            // data[카테고리][i] 위치에서 value가 한 레코드
             if (!Array.isArray(path) || path.length !== 3 || path[0] !== 'data') return;
             const item = value || {};
             if (!item.date || !item.time) return;
@@ -1213,19 +1212,19 @@ app.get('/api/last-crawl-time', async (req, res) => {
               latestDate = item.date;
               latestTime = item.time;
             }
+            foundInThisFile = true;
           });
   
-          pipeline.once('end', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
-          pipeline.once('error', () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); });
+          const cleanup = () => { try { pipeline.destroy(); } catch {} try { source.destroy(); } catch {} resolve(); };
+          pipeline.once('end', cleanup);
+          pipeline.once('error', cleanup);
         });
+  
+        if (foundInThisFile) break; // 이번 달에서 찾았으면 과거 달은 볼 필요 없음
       }
   
       if (!latestDate || !latestTime) {
-        return res.json({
-          success: true,
-          lastCrawlTime: '서버 시작 후 크롤링 대기 중',
-          message: '아직 첫 크롤링 기록이 없습니다.'
-        });
+        return res.json({ success: true, lastCrawlTime: '서버 시작 후 크롤링 대기 중', message: '아직 첫 크롤링 기록이 없습니다.' });
       }
   
       const dt = new Date(`${latestDate}T${latestTime.replace('-', ':')}:00+09:00`);
@@ -1240,6 +1239,7 @@ app.get('/api/last-crawl-time', async (req, res) => {
       return res.status(500).json({ success: false, error: '마지막 크롤링 시간 조회 중 오류' });
     }
   });
+  
   
 
 
