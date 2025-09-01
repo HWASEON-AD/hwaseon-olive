@@ -1,1076 +1,486 @@
-// API 기본 URL 설정
-const BASE_URL = window.location.hostname === 'localhost' 
-    ? 'http://localhost:5001' 
+/* ============================================================
+ *  HWASEON – OliveYoung Front UI Script (정리/주석 보강판)
+ *  - 기능 유지, 구조만 개선
+ *  - 섹션: 상수/유틸 → 날짜 제한 → 전역 가드 → API → 렌더러 → 엑셀 → 바인딩
+ * ============================================================ */
+
+/* ───────────── 1) 상수 & 전역 상태 ───────────── */
+const BASE_URL =
+  window.location.hostname === 'localhost'
+    ? 'http://localhost:5001'
     : window.location.origin;
 
-// 전역 변수 선언
-let isLoading = false;
-let rankingData = []; // 전체 랭킹 데이터 저장
-let searchResultData = []; // 검색 결과 데이터 저장
-let capturesList = []; // 캡처 목록 저장
+let isLoading        = false;
+let rankingData      = []; // 랭킹 조회 결과
+let searchResultData = []; // 제품명 검색 결과
+let capturesList     = []; // (옵션) 캡처 목록
 
+/* ───────────── 2) 공통 유틸 ───────────── */
+/** YYYY-MM-DD HH:mm:ss (KST) 또는 서버 문자열 그대로 */
+function formatDateTime(dateTimeStr) {
+  try {
+    if (typeof dateTimeStr === 'string' && dateTimeStr.includes('서버')) return dateTimeStr;
+    const d = new Date(dateTimeStr);
+    if (isNaN(d.getTime())) return dateTimeStr;
+    return d.toLocaleString('ko-KR', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false, timeZone: 'Asia/Seoul',
+    });
+  } catch {
+    return dateTimeStr;
+  }
+}
 
-// ===== 날짜 선택 금지(브라우저 기본 달력 유지) =====
+/** 가격: 숫자일 때만 1,000 단위 + '원' */
+function formatPrice(price) {
+  if (!price || price === '없음') return '-';
+  if (typeof price === 'string' && price.includes('원')) return price;
+  const num = Number(String(price).replace(/[^0-9]/g, ''));
+  return isNaN(num) || num === 0 ? price : num.toLocaleString() + '원';
+}
+
+/** KST 오늘 날짜(YYYY-MM-DD) */
+function todayKST() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/* ───────────── 3) 날짜 선택 제한(IIFE) ─────────────
+   - 브라우저 기본 달력 유지, 특정 구간 금지
+----------------------------------------------------- */
 (function enforceDateRules() {
-    const $start = document.getElementById('startDate');
-    const $end   = document.getElementById('endDate');
-  
-    // 금지 구간: 2025-07-01 ~ 2025-07-07
-    const BLOCK_FROM = '2025-07-01';
-    const BLOCK_TO   = '2025-07-07';
-  
-    // 헬퍼
-    const inBlocked = (iso) => iso && iso >= BLOCK_FROM && iso <= BLOCK_TO;
-  
-    function validateStart() {
-      const v = $start.value;
-      if (!v) return;
-      if (v < '2025-05-21') {
-        alert('2025-05-21 이후만 조회 가능합니다.');
-        $start.value = '2025-05-21';
-      } else if (inBlocked(v)) {
-        alert('2025-07-01 ~ 2025-07-07 데이터는 조회할 수 없습니다.');
-        $start.value = ''; // 선택 취소
-      }
-      // start가 바뀌면 end의 최소값 조정
-      if ($end.value && $end.value < $start.value) $end.value = $start.value;
-      $end.min = $start.value || '2025-05-21';
-    }
-  
-    function validateEnd() {
-      const v = $end.value;
-      if (!v) return;
-      if ($start.value && v < $start.value) {
-        alert('종료일은 시작일 이후여야 합니다.');
-        $end.value = $start.value;
-        return;
-      }
-      if (inBlocked(v)) {
-        alert('2025-07-01 ~ 2025-07-07 데이터는 조회할 수 없습니다.');
-        $end.value = ''; // 선택 취소
-      }
-    }
-  
-    $start.addEventListener('change', validateStart);
-    $end.addEventListener('change', validateEnd);
-  })();
+  const $start = document.getElementById('startDate');
+  const $end   = document.getElementById('endDate');
 
-  
+  const MIN_DATE   = '2025-05-21';
+  const BLOCK_FROM = '2025-07-01';
+  const BLOCK_TO   = '2025-07-07';
 
-// 전역 이벤트 차단기 - 새로고침 및 폼 제출 방지 (다운로드 버튼 예외 처리)
-document.addEventListener('click', function(e) {
-    // 엑셀 다운로드 버튼은 예외 처리
-    if (e.target.id === 'productSearchDownloadBtn' || e.target.id === 'downloadExcelBtn' || 
-        e.target.id === 'showCapturesBtn') {
-        // 다운로드 버튼은 이벤트 차단하지 않음
-        return true;
-    }
-    
-    // 다른 버튼이나 링크의 기본 동작은 방지
-    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') {
-        e.preventDefault();
-        return false;
-    }
-}, true);
+  const inBlocked = (iso) => iso && iso >= BLOCK_FROM && iso <= BLOCK_TO;
 
-document.addEventListener('submit', function(e) {
+  function validateStart() {
+    const v = $start.value;
+    if (!v) return;
+    if (v < MIN_DATE) {
+      alert(`${MIN_DATE} 이후만 조회 가능합니다.`);
+      $start.value = MIN_DATE;
+    } else if (inBlocked(v)) {
+      alert('2025-07-01 ~ 2025-07-07 데이터는 조회할 수 없습니다.');
+      $start.value = '';
+    }
+    if ($end.value && $end.value < $start.value) $end.value = $start.value;
+    $end.min = $start.value || MIN_DATE;
+  }
+
+  function validateEnd() {
+    const v = $end.value;
+    if (!v) return;
+    if ($start.value && v < $start.value) {
+      alert('종료일은 시작일 이후여야 합니다.');
+      $end.value = $start.value;
+      return;
+    }
+    if (inBlocked(v)) {
+      alert('2025-07-01 ~ 2025-07-07 데이터는 조회할 수 없습니다.');
+      $end.value = '';
+    }
+  }
+
+  $start?.addEventListener('change', validateStart);
+  $end?.addEventListener('change', validateEnd);
+})();
+
+/* ───────────── 4) 전역 가드(새로고침/폼 제출) ─────────────
+   - 다운로드/보기 트리거는 예외
+---------------------------------------------------------- */
+document.addEventListener('click', (e) => {
+  const id = e.target.id;
+  if (id === 'productSearchDownloadBtn' || id === 'downloadExcelBtn' || id === 'showCapturesBtn') return;
+  if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') {
     e.preventDefault();
     return false;
+  }
 }, true);
 
-// 백스페이스 키 방지 (새로고침 관련)
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Backspace' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
-        e.preventDefault();
-    }
+document.addEventListener('submit', (e) => {
+  e.preventDefault();
+  return false;
+}, true);
+
+/** 입력 밖에서 Backspace로 뒤로가기 방지 */
+document.addEventListener('keydown', (e) => {
+  const t = document.activeElement?.tagName;
+  if (e.key === 'Backspace' && !['INPUT', 'TEXTAREA'].includes(t)) e.preventDefault();
 });
 
-// 시간 표시 업데이트 함수
+/* ───────────── 5) API 래퍼 ───────────── */
+/** 최근 크롤링 시각 가져와 표시 */
+async function fetchLastCrawlTime() {
+  try {
+    const res  = await fetch(`${BASE_URL}/api/last-crawl-time`);
+    if (!res.ok) throw new Error('Server response was not ok');
+    const data = await res.json();
+    updateTimeDisplay(data.success ? (data.lastCrawlTime || '정보 없음') : '서버 응답 오류');
+  } catch (e) {
+    console.error('마지막 크롤링 시간 실패:', e);
+    updateTimeDisplay('서버 연결 오류');
+  }
+}
+
+/** 랭킹 조회 */
+async function apiFetchRanking({ category, startDate, endDate }) {
+  let url = `${BASE_URL}/api/ranking?category=${encodeURIComponent(category)}`;
+  if (startDate) url += `&startDate=${startDate}&yearMonth=${startDate.slice(0, 7)}`;
+  if (endDate)   url += `&endDate=${endDate}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' } });
+  if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || '데이터 로드 실패');
+  return json.data || [];
+}
+
+/** 제품명 검색 */
+async function apiSearchProduct({ keyword, category, startDate, endDate }) {
+  let url = `${BASE_URL}/api/search?keyword=${encodeURIComponent(keyword)}&startDate=${startDate}&endDate=${endDate}&category=${encodeURIComponent(category)}`;
+  if (startDate) url += `&yearMonth=${startDate.slice(0, 7)}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' } });
+  if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || '검색 실패');
+  return json.data || [];
+}
+
+/* ───────────── 6) 렌더러 ───────────── */
+/** 상단 “최근 업데이트” 표시 */
 function updateTimeDisplay(crawlTime) {
-    if (!crawlTime) {
-        fetchLastCrawlTime();
-        return;
+  const text = `최근 업데이트: ${formatDateTime(crawlTime)}`;
+  const $1 = document.getElementById('updateTime');
+  const $2 = document.getElementById('rankingUpdateTime');
+  if ($1) $1.innerHTML = text;
+  if ($2) $2.innerHTML = text;
+}
+
+/** 제품명 검색 결과 렌더 (제품명 전체 표시, 최신 우선) */
+function renderSearchResults(data, elements) {
+  const { tbody, keywordInput } = elements;
+  tbody.innerHTML = '';
+
+  if (!data?.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;">검색 결과가 없습니다.</td></tr>`;
+    return;
+  }
+
+  const sorted = [...data].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.time || '').localeCompare(a.time || ''));
+
+  const term = keywordInput.value.trim();
+  const hi = (name) => {
+    if (!term || !name) return name || '';
+    return name.replace(new RegExp(term, 'gi'), (m) => `<span style="color:#0066CC;font-weight:bold;">${m}</span>`);
+  };
+
+  sorted.forEach((p, idx) => {
+    // 행사 뱃지
+    let badges = '';
+    if (p.promotion && p.promotion !== '없음' && p.promotion !== '-') {
+      const tokens = p.promotion.toLowerCase().split(',').map(s => s.trim());
+      const push = (label, bg) => { badges += `<span style="display:inline-block;background:${bg};color:#fff;padding:4px 12px;border-radius:20px;margin-right:5px;font-size:12px;font-weight:bold;">${label}</span>`; };
+      tokens.forEach(t => {
+        if (t.includes('쿠폰')) push('쿠폰', '#96D165');
+        if (t.includes('증정')) push('증정', '#82CAFA');
+        if (t.includes('오늘드림') || t.includes('드림')) push('오늘드림', '#F574B8');
+        if (t.includes('세일')) push('세일', '#FF6B6B');
+      });
+      if (!badges && p.promotion.trim()) push(p.promotion, '#ADB5BD');
+    } else {
+      badges = `<span style="color:#999;font-size:12px;">-</span>`;
     }
-    
-    // 날짜 형식 변환
-    const timeText = `최근 업데이트: ${formatDateTime(crawlTime)}`;
-    
-    const updateTime = document.getElementById('updateTime');
-    const rankingUpdateTime = document.getElementById('rankingUpdateTime');
-    
-    if (updateTime) updateTime.innerHTML = timeText;
-    if (rankingUpdateTime) rankingUpdateTime.innerHTML = timeText;
+
+    const date = p.date || todayKST();
+    const dt   = p.time ? `${date} ${p.time}` : date;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="width:140px;text-align:center;font-weight:bold;color:#333;">${dt}</td>
+      <td style="width:120px;text-align:center;"><span style="background:#12B886;color:#fff;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold;">${p.category || '전체'}</span></td>
+      <td style="width:60px;text-align:center;">${p.rank || (idx + 1)}</td>
+      <td style="width:120px;text-align:left;font-weight:bold;color:#333;">${p.brand || ''}</td>
+      <td style="min-width:400px;text-align:left;white-space:normal;word-break:break-word;">${hi(p.name || '')}</td>
+      <td style="width:85px;text-align:left;padding-left:15px;">${formatPrice(p.originalPrice)}</td>
+      <td style="width:85px;text-align:left;padding-left:15px;font-weight:bold;color:#333;font-size:.85rem;">${formatPrice(p.salePrice || p.price)}</td>
+      <td style="width:180px;text-align:left;">${badges}</td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
-// 날짜/시간 포맷 함수
-function formatDateTime(dateTimeStr) {
-    try {
-        if (typeof dateTimeStr === 'string' && dateTimeStr.includes('서버')) {
-            return dateTimeStr;
-        }
-        
-        const date = new Date(dateTimeStr);
-        if (isNaN(date.getTime())) {
-            return dateTimeStr;
-        }
-        
-        return date.toLocaleString('ko-KR', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-            timeZone: 'Asia/Seoul'
-        });
-    } catch (error) {
-        console.error('Date formatting error:', error);
-        return dateTimeStr;
+/** 랭킹 테이블 렌더(최신 우선) */
+function renderRanking(data, elements) {
+  const { tbody } = elements;
+  tbody.innerHTML = '';
+
+  if (!data?.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;">데이터가 없습니다.</td></tr>`;
+    return;
+  }
+
+  const sorted = [...data].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.time || '').localeCompare(a.time || ''));
+
+  sorted.forEach((p, idx) => {
+    let badges = '';
+    if (p.promotion && p.promotion !== '없음' && p.promotion !== '-') {
+      const tokens = p.promotion.toLowerCase().split(',').map(s => s.trim());
+      const push = (label, bg) => { badges += `<span style="display:inline-block;background:${bg};color:#fff;padding:4px 12px;border-radius:20px;margin-right:5px;font-size:12px;font-weight:bold;">${label}</span>`; };
+      tokens.forEach(t => {
+        if (t.includes('쿠폰')) push('쿠폰', '#96D165');
+        if (t.includes('증정')) push('증정', '#82CAFA');
+        if (t.includes('오늘드림') || t.includes('드림')) push('오늘드림', '#F574B8');
+        if (t.includes('세일')) push('세일', '#FF6B6B');
+      });
+      if (!badges && p.promotion.trim()) push(p.promotion, '#ADB5BD');
+    } else {
+      badges = `<span style="color:#999;font-size:12px;">-</span>`;
     }
+
+    const dt = p.time ? `${p.date}<br>${p.time}` : p.date;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="width:140px;text-align:center;font-weight:bold;color:#333;white-space:pre-line;">${dt}</td>
+      <td style="width:120px;text-align:center;"><span style="background:#12B886;color:#fff;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold;">${p.category || '전체'}</span></td>
+      <td style="width:60px;text-align:center;">${p.rank || (idx + 1)}</td>
+      <td style="width:120px;text-align:left;font-weight:bold;color:#333;">${p.brand || ''}</td>
+      <td style="min-width:400px;text-align:left;white-space:normal;word-break:break-word;">${p.name || ''}</td>
+      <td style="width:85px;text-align:left;padding-left:15px;">${formatPrice(p.originalPrice)}</td>
+      <td style="width:85px;text-align:left;padding-left:15px;font-weight:bold;color:#333;font-size:.85rem;">${formatPrice(p.salePrice || p.price)}</td>
+      <td style="width:180px;text-align:left;">${badges}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // 헤더 정돈(선택적으로 동일 스타일)
+  const headRow = document.querySelector('#rankingTable thead tr') || document.querySelector('#productSearchTable thead tr');
+  if (headRow) {
+    headRow.innerHTML = `
+      <th style="width:140px;text-align:center;">날짜/시간</th>
+      <th style="width:120px;text-align:center;">카테고리</th>
+      <th style="width:60px;text-align:left;">순위</th>
+      <th style="width:120px;text-align:left;">브랜드</th>
+      <th style="min-width:400px;text-align:left;">제품명</th>
+      <th style="width:85px;text-align:left;">소비자가</th>
+      <th style="width:85px;text-align:left;">판매가</th>
+      <th style="width:180px;text-align:left;">행사</th>
+    `;
+  }
 }
 
-// 가격 포맷 함수: 이미 '원'이 붙어 있으면 그대로, 아니면 숫자만 있을 때만 '원' 붙이기
-function formatPrice(price) {
-    if (!price || price === '없음') return '-';
-    if (typeof price === 'string' && price.includes('원')) return price;
-    // 숫자만 있을 때만 '원' 붙이기
-    const num = Number(price.toString().replace(/[^0-9]/g, ''));
-    if (isNaN(num) || num === 0) return price;
-    return num.toLocaleString() + '원';
+/** 랭킹 에러 메시지 */
+function renderRankingError(tbody, message) {
+  tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:red;padding:20px;">${message}</td></tr>`;
 }
 
+/* ───────────── 7) 엑셀 다운로드 ───────────── */
+async function downloadExcel(data, fileNameBase) {
+  try {
+    if (typeof ExcelJS === 'undefined') return alert('엑셀 라이브러리가 로드되지 않았습니다. 새로고침 후 다시 시도해주세요.');
+    if (typeof saveAs  === 'undefined') return alert('파일 저장 라이브러리가 로드되지 않았습니다. 새로고침 후 다시 시도해주세요.');
+
+    // 최신 우선 정렬(날짜/시간)
+    const rows = [...data].sort((a,b) => (b.date || '').localeCompare(a.date || '') || (b.time || '').localeCompare(a.time || ''));
+
+    // 워크북/시트
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Sheet1');
+
+    ws.columns = [
+      { header: '날짜', key: 'date', width: 12 },
+      { header: '시간', key: 'time', width: 8 },
+      { header: '카테고리', key: 'category', width: 15 },
+      { header: '순위', key: 'rank', width: 8, style: { numFmt: '0', alignment: { horizontal: 'center' } } },
+      { header: '브랜드', key: 'brand', width: 20 },
+      { header: '제품명', key: 'name', width: 50 },
+      { header: '소비자가', key: 'originalPrice', width: 12, style: { numFmt: '#,##0"원"', alignment: { horizontal: 'right' } } },
+      { header: '판매가', key: 'salePrice', width: 12, style: { numFmt: '#,##0"원"', alignment: { horizontal: 'right' } } },
+      { header: '행사', key: 'promotion', width: 25 },
+    ];
+
+    ws.getRow(1).eachCell((c) => {
+      c.font = { bold: true };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+      c.border = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} };
+      c.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    const num = (v) => {
+      if (!v || v === '없음') return null;
+      const n = parseInt(String(v).replace(/[^0-9]/g,''), 10);
+      return isNaN(n) ? null : n;
+    };
+
+    rows.forEach((it) => {
+      const row = ws.addRow({
+        date: it.date || '',
+        time: it.time || '',
+        category: it.category || '',
+        rank: parseInt(it.rank, 10) || null,
+        brand: it.brand || '',
+        name: it.name || '',
+        originalPrice: num(it.originalPrice) ?? '없음',
+        salePrice: num(it.salePrice) ?? '없음',
+        promotion: (() => {
+          if (!it.promotion || it.promotion === '없음' || it.promotion === '-') return '-';
+          const p = it.promotion.toLowerCase();
+          const tags = [];
+          if (p.includes('쿠폰')) tags.push('쿠폰');
+          if (p.includes('증정')) tags.push('증정');
+          if (p.includes('오늘드림') || p.includes('드림')) tags.push('오늘드림');
+          if (p.includes('세일')) tags.push('세일');
+          return tags.length ? tags.join(', ') : (it.promotion.trim());
+        })(),
+      });
+
+      row.eachCell((cell, col) => {
+        cell.border = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} };
+        if (col === 4) cell.alignment = { horizontal:'center', vertical:'middle' };
+        if (col === 7 || col === 8) cell.alignment = { horizontal:'right', vertical:'middle' };
+      });
+    });
+
+    const fileName = `${fileNameBase}_${todayKST()}.xlsx`;
+    const buf = await wb.xlsx.writeBuffer();
+    saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fileName);
+    alert(`${fileName} 파일이 다운로드 되었습니다.`);
+  } catch (e) {
+    console.error('Excel download error:', e);
+    alert('엑셀 다운로드 중 오류가 발생했습니다: ' + e.message);
+  }
+}
+
+/* ───────────── 8) DOM 바인딩 ───────────── */
 document.addEventListener('DOMContentLoaded', () => {
-    // DOM 요소 참조
-    const searchBtn = document.getElementById('searchBtn');
-    const rankingTable = document.getElementById('rankingTable').getElementsByTagName('tbody')[0];
-    const categorySelect = document.getElementById('category');
-    const productSearchBtn = document.getElementById('productSearchBtn');
-    const productSearchInput = document.getElementById('productSearchInput');
-    const productSearchTable = document.getElementById('productSearchTable').getElementsByTagName('tbody')[0];
-    const startDateInput = document.getElementById('startDate');
-    const endDateInput = document.getElementById('endDate');
-    const productSearchDownloadBtn = document.getElementById('productSearchDownloadBtn');
-    const downloadExcelBtn = document.getElementById('downloadExcelBtn');
-    const showCapturesBtn = document.getElementById('showCapturesBtn');
-    const captureListModal = document.getElementById('captureListModal');
-    const captureListContainer = document.getElementById('captureListContainer');
+  // 요소 캐시
+  const $rankingTBody   = document.querySelector('#rankingTable tbody');
+  const $searchTBody    = document.querySelector('#productSearchTable tbody');
+  const $searchBtn      = document.getElementById('searchBtn');
+  const $productBtn     = document.getElementById('productSearchBtn');
+  const $keywordInput   = document.getElementById('productSearchInput');
+  const $category       = document.getElementById('category');
+  const $startDate      = document.getElementById('startDate');
+  const $endDate        = document.getElementById('endDate');
+  const $dlSearchBtn    = document.getElementById('productSearchDownloadBtn');
+  const $dlRankingBtn   = document.getElementById('downloadExcelBtn');
+  const $showCaptures   = document.getElementById('showCapturesBtn');
+  const $loadingOverlay = document.getElementById('loadingOverlay');
 
-    // 초기 시간 표시 업데이트
-    fetchLastCrawlTime();
+  // 초기 날짜 설정 & 자정 갱신
+  const setCurrentDate = () => {
+    const d = todayKST();
+    if ($startDate) $startDate.value = d;
+    if ($endDate)   $endDate.value   = d;
+  };
+  setCurrentDate();
 
-    // 주기적으로 시간 업데이트 (5분마다)
-    setInterval(() => {
-        fetchLastCrawlTime();
-    }, 5 * 60 * 1000); // 5분
+  (function scheduleMidnight() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setDate(now.getDate() + 1);
+    next.setHours(0, 0, 0, 0);
+    setTimeout(() => { setCurrentDate(); scheduleMidnight(); }, next - now);
+  })();
 
-    // 날짜 관련 함수 - 현재 한국 시간 기준으로 날짜 설정
-    function setCurrentDate() {
-        // 현재 날짜 객체 생성
-        const now = new Date();
-        
-        // 현재 날짜 포맷팅
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const formattedDate = `${year}-${month}-${day}`;
-        
-        console.log('현재 날짜 설정:', formattedDate);
-        
-        // 날짜 입력 필드 업데이트
-        const startDateEl = document.getElementById('startDate');
-        const endDateEl = document.getElementById('endDate');
-        
-        if (startDateEl) startDateEl.value = formattedDate;
-        if (endDateEl) endDateEl.value = formattedDate;
+  // 크롤링 시간 표시(초기 + 5분 주기)
+  fetchLastCrawlTime();
+  setInterval(fetchLastCrawlTime, 5 * 60 * 1000);
+
+  // 캡처 버튼(현재는 막기만 함)
+  $showCaptures?.addEventListener('click', (e) => { e?.preventDefault(); return false; });
+
+  // 랭킹 조회
+  $searchBtn?.addEventListener('click', async (e) => {
+    e?.preventDefault();
+    if (isLoading) return;
+
+    try {
+      isLoading = true;
+      $searchBtn.disabled = true;
+      $rankingTBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:#888;font-size:18px;">조회 중..</td></tr>`;
+      const data = await apiFetchRanking({ category: $category.value, startDate: $startDate.value || '', endDate: $endDate.value || '' });
+      rankingData = data;
+      if (!data.length) return renderRankingError($rankingTBody, '선택한 날짜에 해당하는 데이터가 없습니다.');
+      renderRanking(data, { tbody: $rankingTBody });
+    } catch (err) {
+      console.error(err);
+      rankingData = [];
+      renderRankingError($rankingTBody, err.message);
+    } finally {
+      isLoading = false;
+      $searchBtn.disabled = false;
+      $searchBtn.textContent = '랭킹 데이터';
     }
-    
-    // 초기 날짜 설정
-    setCurrentDate();
-    
-    // 자정에 날짜가 자동으로 변경되도록 타이머 설정
-    function scheduleNextMidnightUpdate() {
-        const now = new Date();
-        
-        // 다음 자정 시간 계산 (로컬 시간 기준)
-        const nextMidnight = new Date(now);
-        nextMidnight.setDate(nextMidnight.getDate() + 1);
-        nextMidnight.setHours(0, 0, 0, 0);
-        
-        // 다음 자정까지 남은 시간 (밀리초)
-        const timeUntilMidnight = nextMidnight - now;
-        
-        console.log(`다음 자정까지 ${Math.floor(timeUntilMidnight / 1000 / 60)} 분 남음`);
-        
-        // 자정에 날짜 업데이트 타이머 설정
-        setTimeout(() => {
-            // 날짜 업데이트
-            setCurrentDate();
-            
-            // 다음 자정 업데이트 스케줄링
-            scheduleNextMidnightUpdate();
-            
-            console.log('자정이 지나 날짜가 업데이트되었습니다.');
-        }, timeUntilMidnight);
+  });
+
+  // 제품명 검색(버튼)
+  $productBtn?.addEventListener('click', async (e) => {
+    e?.preventDefault();
+    if (isLoading) return;
+
+    const keyword = $keywordInput.value.trim();
+    if (!keyword) return alert('검색어를 입력해주세요.');
+
+    try {
+      isLoading = true;
+      $productBtn.disabled = true;
+      $loadingOverlay && ($loadingOverlay.style.display = 'flex');
+      $searchTBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;">검색 중...</td></tr>`;
+
+      const data = await apiSearchProduct({ keyword, category: $category.value, startDate: $startDate.value, endDate: $endDate.value });
+      searchResultData = data;
+      renderSearchResults(data, { tbody: $searchTBody, keywordInput: $keywordInput });
+    } catch (err) {
+      console.error(err);
+      searchResultData = [];
+      $searchTBody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:red;padding:20px;">${err.message}</td></tr>`;
+    } finally {
+      isLoading = false;
+      $productBtn.disabled = false;
+      $loadingOverlay && ($loadingOverlay.style.display = 'none');
     }
-    
-    // 자정 업데이트 스케줄링 시작
-    scheduleNextMidnightUpdate();
+  });
 
-    // API 엔드포인트 함수들
-    async function fetchLastCrawlTime() {
-        try {
-            const response = await fetch(`${BASE_URL}/api/last-crawl-time`);
-            if (!response.ok) throw new Error('Server response was not ok');
-            const data = await response.json();
-            if (data.success) {
-                const lastCrawlTime = data.lastCrawlTime || '정보 없음';
-                updateTimeDisplay(lastCrawlTime);
-            } else {
-                updateTimeDisplay('서버 응답 오류');
-            }
-        } catch (error) {
-            console.error('마지막 크롤링 시간 가져오기 실패:', error);
-            updateTimeDisplay('서버 연결 오류');
-        }
-    }
+  // 제품명 검색(Enter)
+  $keywordInput?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $productBtn?.click(); }
+  });
 
-    // 캡처 목록 보기 버튼 클릭 이벤트
-    showCapturesBtn.addEventListener('click', function(e) {
-        if (e) e.preventDefault();
-        
-        // 캡처 목록 모달을 열고 필터 UI 먼저 표시
-        showCaptureFilterUI();
-        
-        // 초기 캡처 목록 불러오기 (전체 카테고리)
-        loadCapturesFromServer('전체', null, null);
-        
-        return false;
-    });
+  // 엑셀 다운로드(검색 결과)
+  $dlSearchBtn?.addEventListener('click', (e) => {
+    e?.preventDefault(); e?.stopPropagation();
+    if (!searchResultData.length) return alert('먼저 제품명 검색을 실행해주세요.');
+    downloadExcel(searchResultData, '올리브영_제품검색결과');
+    return false;
+  });
 
-    // 캡처 필터 UI 표시 함수
-    function showCaptureFilterUI() {
-        const captureListModal = document.getElementById('captureListModal');
-        if (captureListModal) captureListModal.style.display = 'block';
-        const filterEl = document.getElementById('captureFilterContainer');
-        if (!filterEl) return;
-        filterEl.style.display = 'block';
-        
-        // 날짜 입력 필드 생성
-        const dateFilterDiv = document.createElement('div');
-        dateFilterDiv.style.marginBottom = '10px';
-        dateFilterDiv.innerHTML = `
-            <input type="date" id="startDate" style="margin-right: 10px;">
-            <input type="date" id="endDate" style="margin-right: 10px;">
-            <button onclick="applyDateFilter()" style="padding: 5px 10px;">적용</button>
-        `;
-        
-        // 필터 UI 컨테이너에 추가
-        const filterContainer = document.getElementById('filterContainer');
-        filterContainer.innerHTML = ''; // 기존 필터 초기화
-        filterContainer.appendChild(dateFilterDiv);
-    }
+  // 엑셀 다운로드(랭킹)
+  $dlRankingBtn?.addEventListener('click', (e) => {
+    e?.preventDefault(); e?.stopPropagation();
+    if (!rankingData.length) return alert('먼저 랭킹 데이터를 조회해주세요.');
+    downloadExcel(rankingData, '올리브영_랭킹데이터');
+    return false;
+  });
 
-    // 서버에서 캡처 목록 불러오기
-    function loadCapturesFromServer(category, startDate, endDate) {
-        // 로딩 메시지 표시
-        captureListContainer.innerHTML = '<div style="text-align: center; padding: 20px;">캡처 목록을 불러오는 중...</div>';
-        
-        // API URL 생성
-        let url = `${BASE_URL}/api/captures`;
-        const params = [];
-        
-        if (category) {
-            params.push(`category=${encodeURIComponent(category)}`);
-        }
-        
-        if (startDate) {
-            params.push(`startDate=${encodeURIComponent(startDate)}`);
-        }
-        
-        if (endDate) {
-            params.push(`endDate=${encodeURIComponent(endDate)}`);
-        }
-        
-        if (params.length > 0) {
-            url += '?' + params.join('&');
-        }
-        
-        // 서버에서 캡처 목록 가져오기
-        fetch(url)
-            .then(response => response.json())
-            .then(response => {
-                if (response.success) {
-                    capturesList = response.data;
-                    showCaptureList();
-                } else {
-                    throw new Error(response.error || '데이터 로드 실패');
-                }
-            })
-            .catch(error => {
-                console.error('캡처 목록 로드 실패:', error);
-                capturesList = [];
-                showCaptureList();
-            });
-    }
+  // (옵션) 캡처 목록 초기 로드 – 외부 구현이 있을 때만 호출
+  if (typeof loadCapturesFromServer === 'function') {
+    try { loadCapturesFromServer(); } catch {}
+  }
 
-    // 캡처 목록 표시 함수
-    function showCaptureList() {
-        captureListContainer.innerHTML = '';
-        if (!capturesList || capturesList.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.style.width = '100%';
-            emptyMessage.style.textAlign = 'center';
-            emptyMessage.style.padding = '50px 0';
-            emptyMessage.style.fontSize = '18px';
-            emptyMessage.style.color = '#666';
-            emptyMessage.style.gridColumn = '1 / -1';
-            emptyMessage.innerHTML = '저장된 캡처가 없습니다.';
-            captureListContainer.appendChild(emptyMessage);
-            return;
-        }
-        // 날짜별로 그룹화
-        const capturesByDate = {};
-        capturesList.forEach(capture => {
-            const date = capture.date;
-            if (!capturesByDate[date]) capturesByDate[date] = [];
-            capturesByDate[date].push(capture);
-        });
-        // 날짜별로 정렬 (최신 날짜 먼저)
-        const sortedDates = Object.keys(capturesByDate).sort((a, b) => b.localeCompare(a));
-        // 날짜별로 캡처 목록 표시
-        sortedDates.forEach(dateStr => {
-            // 날짜 헤더 추가 (상단에 한 번만)
-            const dateHeader = document.createElement('div');
-            dateHeader.className = 'capture-date-header';
-            dateHeader.style.gridColumn = '1 / -1';
-            dateHeader.style.borderBottom = '2px solid #007BFF';
-            dateHeader.style.padding = '10px 5px';
-            dateHeader.style.marginTop = '20px';
-            dateHeader.style.marginBottom = '15px';
-            dateHeader.style.fontSize = '18px';
-            dateHeader.style.fontWeight = 'bold';
-            dateHeader.style.color = '#007BFF';
-            dateHeader.innerHTML = dateStr;
-            captureListContainer.appendChild(dateHeader);
-            // 해당 날짜의 캡처들 표시 (카테고리 상관없이 모두)
-            capturesByDate[dateStr].forEach(capture => {
-                const captureItem = document.createElement('div');
-                const categoryName = capture.category.replace('_', ' ');
-                const imageUrl = `${BASE_URL}${capture.imageUrl}`;
-                const timeStr = capture.time || '';
-                captureItem.innerHTML = `
-                    <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
-                        <div style="padding: 10px; background-color: #f8f9fa; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <span style="font-weight: bold; margin-right: 10px; font-size: 16px;">${timeStr}</span>
-                                <span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${categoryName}</span>
-                            </div>
-                            <div>
-                                <button onclick="downloadImage('${capture.imageUrl}')" style="background: #4CAF50; color: white; border: none; border-radius: 3px; padding: 5px 10px; cursor: pointer; text-decoration: none; font-size: 12px;">다운로드</button>
-                            </div>
-                        </div>
-                        <div style="padding: 10px; text-align: center;">
-                            <img src="${imageUrl}" alt="캡처 이미지" style="max-width: 100%; cursor: pointer;" onclick="showFullImage('${imageUrl}')">
-                        </div>
-                    </div>
-                `;
-                captureListContainer.appendChild(captureItem);
-            });
-        });
-    }
-
-    // 모달 닫기 함수
-    window.closeCaptureListModal = function() {
-        captureListModal.style.display = 'none';
-    };
-
-    // 캡처 목록에서 캡처 삭제 함수
-    window.deleteCapture = function(captureId) {
-        if (confirm('이 캡처를 삭제하시겠습니까?')) {
-            fetch(`${BASE_URL}/api/captures/${captureId}`, {
-                method: 'DELETE'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // 현재 적용된 필터 상태 가져오기
-                    const category = document.getElementById('captureCategory')?.value || '전체';
-                    const startDate = document.getElementById('captureStartDate')?.value || '';
-                    const endDate = document.getElementById('captureEndDate')?.value || '';
-                    
-                    // 필터 상태 유지하면서 캡처 목록 다시 불러오기
-                    loadCapturesFromServer(category, startDate, endDate);
-                } else {
-                    throw new Error(data.error || '삭제 실패');
-                }
-            })
-            .catch(error => {
-                console.error('캡처 삭제 중 오류 발생:', error);
-                alert('캡처를 삭제하는데 실패했습니다.');
-            });
-        }
-    };
-
-    // 전체 이미지 보기 함수
-    window.showFullImage = function(imageUrl) {
-        const overlay = document.createElement('div');
-        overlay.style.position = 'fixed';
-        overlay.style.top = '0';
-        overlay.style.left = '0';
-        overlay.style.width = '100%';
-        overlay.style.height = '100%';
-        overlay.style.backgroundColor = 'rgba(0,0,0,0.9)';
-        overlay.style.display = 'flex';
-        overlay.style.justifyContent = 'center';
-        overlay.style.alignItems = 'center';
-        overlay.style.zIndex = '9999';
-        overlay.style.cursor = 'zoom-out';
-        
-        const img = document.createElement('img');
-        img.src = imageUrl;
-        img.style.maxWidth = '90%';
-        img.style.maxHeight = '90%';
-        img.style.objectFit = 'contain';
-        img.style.border = '1px solid #ddd';
-        img.style.borderRadius = '5px';
-        img.style.boxShadow = '0 0 20px rgba(255,255,255,0.2)';
-        
-        overlay.appendChild(img);
-        document.body.appendChild(overlay);
-        
-        overlay.addEventListener('click', function() {
-            document.body.removeChild(overlay);
-        });
-    };
-    
-    // 이미지 다운로드 함수
-    window.downloadImage = function(imageUrl) {
-        console.log('다운로드 시도:', imageUrl);
-        
-        // 파일명 추출
-        const filename = imageUrl.split('/').pop();
-        
-        // 새 창에서 다운로드 API 호출
-        window.open(`${BASE_URL}/api/download/${filename}`, '_blank');
-    };
-
-    // 이전 이벤트 제거
-    searchBtn.onclick = null;
-    
-    // 랭킹 버튼 클릭 이벤트 처리
-    searchBtn.addEventListener('click', function(e) {
-        // 이벤트 기본 동작 방지
-        if (e) e.preventDefault();
-        
-        // 데이터 가져오기
-        fetchRankingData();
-        
-        // 기본 동작 차단
-        return false;
-    });
-    
-    // 제품명 검색 버튼 클릭 이벤트 처리
-    productSearchBtn.addEventListener('click', function(e) {
-        // 이벤트 기본 동작 방지
-        if (e) e.preventDefault();
-        
-        // 제품명 검색 실행
-        searchProductByName();
-        
-        // 기본 동작 차단
-        return false;
-    });
-    
-    // 제품명 엑셀 다운로드 버튼 클릭 이벤트
-    productSearchDownloadBtn.addEventListener('click', function(e) {
-        if (e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-        
-        if (searchResultData.length === 0) {
-            alert('먼저 제품명 검색을 실행해주세요.');
-            return;
-        }
-        
-        downloadExcel(searchResultData, '올리브영_제품검색결과');
-        return false;
-    });
-    
-    // 랭킹 엑셀 다운로드 버튼 클릭 이벤트
-    downloadExcelBtn.addEventListener('click', function(e) {
-        if (e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-        
-        if (rankingData.length === 0) {
-            alert('먼저 랭킹 데이터를 조회해주세요.');
-            return;
-        }
-        
-        downloadExcel(rankingData, '올리브영_랭킹데이터');
-        return false;
-    });
-    
-    // 엑셀 다운로드 함수
-    async function downloadExcel(data, fileName) {
-        try {
-            // ExcelJS가 로드되지 않았을 경우에 대한 처리
-            if (typeof ExcelJS === 'undefined') {
-                console.error('ExcelJS library is not loaded');
-                alert('엑셀 라이브러리가 로드되지 않았습니다. 페이지를 새로고침한 후 다시 시도해주세요.');
-                return;
-            }
-            
-            // FileSaver가 로드되지 않았을 경우에 대한 처리
-            if (typeof saveAs === 'undefined') {
-                console.error('FileSaver library is not loaded');
-                alert('파일 저장 라이브러리가 로드되지 않았습니다. 페이지를 새로고침한 후 다시 시도해주세요.');
-                return;
-            }
-            
-            console.log('엑셀 다운로드 시작', data.length + '개 항목');
-            
-            // 데이터 정렬: 날짜 내림차순, 시간 내림차순 (순위는 신경쓰지 않음)
-            const sortedData = [...data].sort((a, b) => {
-                // 날짜 내림차순 (최신 날짜가 위)
-                const dateCompare = (b.date || '').localeCompare(a.date || '');
-                if (dateCompare !== 0) return dateCompare;
-
-                // 시간 내림차순 (최신 시간이 위)
-                const timeCompare = (b.time || '').localeCompare(a.time || '');
-                if (timeCompare !== 0) return timeCompare;
-
-                // 순위는 신경쓰지 않음
-                return 0;
-            });
-            
-            // ExcelJS 워크북 생성
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Sheet1');
-            
-            // 헤더 설정
-            worksheet.columns = [
-                { header: '날짜', key: 'date', width: 12 },
-                { header: '시간', key: 'time', width: 8 },
-                { header: '카테고리', key: 'category', width: 15 },
-                { header: '순위', key: 'rank', width: 8, style: { numFmt: '0', alignment: { horizontal: 'center' } } },
-                { header: '브랜드', key: 'brand', width: 20 },
-                { header: '제품명', key: 'name', width: 50 },
-                { header: '소비자가', key: 'originalPrice', width: 12, style: { numFmt: '#,##0"원"', alignment: { horizontal: 'right' } } },
-                { header: '판매가', key: 'salePrice', width: 12, style: { numFmt: '#,##0"원"', alignment: { horizontal: 'right' } } },
-                { header: '행사', key: 'promotion', width: 25 }
-            ];
-            
-            // 헤더 스타일 설정
-            worksheet.getRow(1).eachCell(cell => {
-                cell.font = { bold: true };
-                cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFE0E0E0' }
-                };
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-                cell.alignment = { vertical: 'middle', horizontal: 'center' };
-            });
-            
-            // 데이터 추가
-            sortedData.forEach(item => {
-                // 가격에서 숫자만 추출하는 함수
-                const extractNumber = (price) => {
-                    if (!price || price === '없음') return null;
-                    const num = parseInt(price.toString().replace(/[^0-9]/g, ''));
-                    return isNaN(num) ? null : num;
-                };
-                
-                // 순위를 숫자로 변환
-                const rankNum = parseInt(item.rank) || null;
-                
-                // 가격 데이터 변환
-                const originalPrice = extractNumber(item.originalPrice);
-                const salePrice = extractNumber(item.salePrice);
-                
-                // 행사 정보 가공
-                let formattedPromotion = '';
-                if (item.promotion && item.promotion !== '없음' && item.promotion !== '-') {
-                    const promotion = item.promotion.toLowerCase();
-                    const promotionList = [];
-                    
-                    if (promotion.includes('쿠폰')) promotionList.push('쿠폰');
-                    if (promotion.includes('증정')) promotionList.push('증정');
-                    if (promotion.includes('세일')) promotionList.push('세일');
-                    if (promotion.includes('오늘드림') || promotion.includes('드림')) promotionList.push('오늘드림');
-                    
-                    formattedPromotion = promotionList.length > 0 ? promotionList.join(', ') : item.promotion.trim();
-                }
-                
-                // 행 추가
-                const row = worksheet.addRow({
-                    date: item.date || '',
-                    time: item.time || '',
-                    category: item.category || '',
-                    rank: rankNum,
-                    brand: item.brand || '',
-                    name: item.name || '',
-                    originalPrice: originalPrice || '없음',
-                    salePrice: salePrice || '없음',
-                    promotion: formattedPromotion || '-'
-                });
-                
-                // 셀 스타일 적용
-                row.eachCell((cell, colNumber) => {
-                    cell.border = {
-                        top: { style: 'thin' },
-                        left: { style: 'thin' },
-                        bottom: { style: 'thin' },
-                        right: { style: 'thin' }
-                    };
-                    
-                    // 컬럼별 특수 스타일 적용
-                    switch(colNumber) {
-                        case 4: // 순위
-                            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                            if (typeof cell.value === 'number') {
-                                cell.numFmt = '0';
-                            }
-                            break;
-                        case 7: // 소비자가
-                        case 8: // 판매가
-                            cell.alignment = { horizontal: 'right', vertical: 'middle' };
-                            if (typeof cell.value === 'number') {
-                                cell.numFmt = '#,##0"원"';
-                            }
-                            break;
-                        default:
-                            cell.alignment = { vertical: 'middle' };
-                    }
-                });
-            });
-            
-            // FileSaver.js를 사용하여 엑셀 파일 다운로드
-            const today = new Date().toISOString().split('T')[0];
-            const excelFileName = `${fileName}_${today}.xlsx`;
-            
-            // 엑셀 파일 생성
-            workbook.xlsx.writeBuffer().then(buffer => {
-                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                saveAs(blob, excelFileName);
-                alert(`${excelFileName} 파일이 다운로드 되었습니다.`);
-            });
-            
-        } catch (error) {
-            console.error('Excel download error:', error);
-            alert('엑셀 다운로드 중 오류가 발생했습니다: ' + error.message);
-        }
-    }
-    
-    // Enter 키로 검색 가능하도록 설정
-    productSearchInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            searchProductByName();
-        }
-    });
-    
-    // 제품명으로 검색하는 함수
-    async function searchProductByName() {
-        const searchTerm = productSearchInput.value.trim();
-        if (searchTerm === '') {
-            alert('검색어를 입력해주세요.');
-            return;
-        }
-        if (isLoading) return;
-        try {
-            isLoading = true;
-            productSearchBtn.disabled = true;
-            // 로딩 오버레이 표시
-            document.getElementById('loadingOverlay').style.display = 'flex';
-            // 로딩 표시
-            productSearchTable.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align: center; padding: 20px;">
-                        검색 중...
-                    </td>
-                </tr>
-            `;
-            const category = categorySelect.value;
-            const startDate = startDateInput.value;
-            const endDate = endDateInput.value;
-            // yearMonth 파라미터 추가 (startDate 기준)
-            let url = `${BASE_URL}/api/search?keyword=${encodeURIComponent(searchTerm)}&startDate=${startDate}&endDate=${endDate}&category=${encodeURIComponent(category)}`;
-            if (startDate) url += `&yearMonth=${startDate.slice(0, 7)}`;
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Cache-Control': 'no-cache'
-                }
-            });
-            if (!response.ok) {
-                throw new Error(`서버 오류: ${response.status}`);
-            }
-            const result = await response.json();
-            if (!result.success) {
-                throw new Error(result.error || '검색 실패');
-            }
-            // 전역 데이터 저장
-            searchResultData = result.data;
-            // 검색 결과 표시
-            displaySearchResults(result.data);
-        } catch (error) {
-            console.error('Search Error:', error);
-            // 에러 표시
-            productSearchTable.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align: center; color: red; padding: 20px;">
-                        ${error.message}
-                    </td>
-                </tr>
-            `;
-            // 검색 결과 데이터 초기화
-            searchResultData = [];
-        } finally {
-            isLoading = false;
-            productSearchBtn.disabled = false;
-            // 로딩 오버레이 숨기기
-            document.getElementById('loadingOverlay').style.display = 'none';
-        }
-    }
-    
-    // 검색 결과 표시 함수 - 제품명 전체 표시
-    function displaySearchResults(data) {
-        productSearchTable.innerHTML = '';
-        
-        // 현재 시간 표시 업데이트는 제거 (크롤링 시간만 표시)
-        
-        if (!data || data.length === 0) {
-            productSearchTable.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align: center; padding: 20px;">
-                        검색 결과가 없습니다.
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-        
-        // 데이터 정렬: 날짜 내림차순, 시간 내림차순 (순위, 카테고리 등은 신경쓰지 않음)
-        const sortedData = [...data].sort((a, b) => {
-            // 날짜 내림차순 (최신 날짜가 위)
-            const dateCompare = (b.date || '').localeCompare(a.date || '');
-            if (dateCompare !== 0) return dateCompare;
-
-            // 시간 내림차순 (최신 시간이 위)
-            const timeCompare = (b.time || '').localeCompare(a.time || '');
-            if (timeCompare !== 0) return timeCompare;
-
-            // 그 외는 신경쓰지 않음
-            return 0;
-        });
-        
-        // 검색어 가져오기
-        const searchTerm = productSearchInput.value.trim();
-        
-        sortedData.forEach((product, index) => {
-            // 행사 정보 포맷팅
-            let promotionDisplay = '';
-            
-            // 행사 정보를 개별 태그로 분리하여 표시
-            if (product.promotion && product.promotion !== '없음' && product.promotion !== '-') {
-                const promotion = product.promotion.toLowerCase();
-                const promotions = promotion.split(',').map(p => p.trim());
-                
-                promotions.forEach(p => {
-                    // 쿠폰 체크
-                    if (p.includes('쿠폰')) {
-                        promotionDisplay += `<span style="display: inline-block; background-color: #96D165; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">쿠폰</span>`;
-                    }
-                    
-                    // 증정 체크
-                    if (p.includes('증정')) {
-                        promotionDisplay += `<span style="display: inline-block; background-color: #82CAFA; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">증정</span>`;
-                    }
-                    
-                    // 오늘드림 체크
-                    if (p.includes('오늘드림') || p.includes('드림')) {
-                        promotionDisplay += `<span style="display: inline-block; background-color: #F574B8; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">오늘드림</span>`;
-                    }
-                    
-                    // 세일 체크
-                    if (p.includes('세일')) {
-                        promotionDisplay += `<span style="display: inline-block; background-color: #FF6B6B; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">세일</span>`;
-                    }
-                });
-                
-                // 기타 행사가 있는 경우 (위 조건에 해당하지 않는 경우)
-                if (!promotionDisplay && product.promotion.trim()) {
-                    promotionDisplay = `<span style="display: inline-block; background-color: #ADB5BD; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">${product.promotion}</span>`;
-                }
-            }
-            
-            if (!promotionDisplay) {
-                promotionDisplay = `<span style="color: #999; font-size: 12px;">-</span>`;
-            }
-            
-            const row = productSearchTable.insertRow();
-            const date = product.date || new Date().toISOString().split('T')[0];
-            
-            // 날짜와 시간을 한 줄로 표시
-            const dateTimeStr = product.time ? `${date} ${product.time}` : date;
-            
-            // 제품명 길이 제한 제거 - 전체 표시
-            const displayName = product.name || '';
-            
-            // 검색어 강조 표시 (제품명에만 적용)
-            let highlightedName = displayName;
-            if (searchTerm && product.name) {
-                // 대소문자 구분 없이 검색 (case insensitive)
-                const regex = new RegExp(searchTerm, 'gi');
-                highlightedName = displayName.replace(regex, match => 
-                    `<span style="color: #0066CC; font-weight: bold;">${match}</span>`
-                );
-            }
-            
-            row.innerHTML = `
-                <td style="width: 140px; text-align: center; font-weight: bold; color: #333;">${dateTimeStr}</td>
-                <td style="width: 120px; text-align: center;"><span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${product.category || '전체'}</span></td>
-                <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
-                <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
-                <td style="min-width: 400px; text-align: left; white-space: normal; word-break: break-word;">${highlightedName}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px;">${formatPrice(product.originalPrice)}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${formatPrice(product.salePrice || product.price)}</td>
-                <td style="width: 180px; text-align: left;">${promotionDisplay}</td>
-            `;
-        });
-    }
-    
-    // 랭킹 데이터 가져오기 함수
-    async function fetchRankingData() {
-        if (isLoading) return;
-
-        try {
-            isLoading = true;
-            searchBtn.disabled = true;
-
-            // '조회 중..' 메시지 표시
-            rankingTable.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align: center; padding: 20px; color: #888; font-size: 18px;">조회 중..</td>
-                </tr>
-            `;
-
-            const category = categorySelect.value;
-            // 선택된 날짜 값 가져오기 (선택하지 않았다면 빈 문자열)
-            const startDate = startDateInput.value || '';
-            const endDate = endDateInput.value || '';
-            
-            console.log('요청 날짜 범위:', startDate, endDate);
-            
-            // URL 매개변수 생성
-            let url = `${BASE_URL}/api/ranking?category=${category}`;
-            if (startDate) url += `&startDate=${startDate}`;
-            if (endDate) url += `&endDate=${endDate}`;
-            // yearMonth 파라미터 추가 (startDate 기준)
-            if (startDate) url += `&yearMonth=${startDate.slice(0, 7)}`;
-
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Cache-Control': 'no-cache'
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`서버 오류: ${response.status}`);
-            }
-            
-            const result = await response.json();
-
-            if (!result.success) {
-                throw new Error(result.error || '데이터 로드 실패');
-            }
-
-            // 전역 데이터 저장
-            rankingData = result.data;
-            
-            // 데이터가 없는 경우 메시지 표시
-            if (result.data.length === 0) {
-                displayRankingError('선택한 날짜에 해당하는 데이터가 없습니다.');
-                rankingData = [];
-                return;
-            }
-            
-            // 테이블에 데이터 표시
-            displayRankingData(result.data, category);
-            
-            // 마지막 크롤링 시간 가져오기 (랭킹 데이터 업데이트마다 다시 가져오지는 않음)
-            // fetchLastCrawlTime(); // 제거: 크롤링 시에만 업데이트되도록
-
-        } catch (error) {
-            console.error('Error:', error);
-            displayRankingError(error.message);
-            // 랭킹 데이터 초기화
-            rankingData = [];
-        } finally {
-            isLoading = false;
-            searchBtn.disabled = false;
-            searchBtn.textContent = '랭킹 데이터';
-        }
-    }
-
-    // 랭킹 데이터 표시 - 제품명 전체 표시
-    function displayRankingData(data, category) {
-        rankingTable.innerHTML = '';
-        
-        // 시간 업데이트 제거 (크롤링 시간만 표시)
-        
-        if (!data || data.length === 0) {
-            rankingTable.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align: center; padding: 20px;">
-                        데이터가 없습니다.
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        // 데이터 정렬: 날짜 내림차순, 시간 내림차순 (순위는 신경쓰지 않음)
-        const sortedData = [...data].sort((a, b) => {
-            // 날짜 내림차순 (최신 날짜가 위)
-            const dateCompare = (b.date || '').localeCompare(a.date || '');
-            if (dateCompare !== 0) return dateCompare;
-
-            // 시간 내림차순 (최신 시간이 위)
-            const timeCompare = (b.time || '').localeCompare(a.time || '');
-            if (timeCompare !== 0) return timeCompare;
-
-            // 순위는 신경쓰지 않음
-            return 0;
-        });
-
-        sortedData.forEach((product, index) => {
-            // 행사 정보 포맷팅
-            let promotionDisplay = '';
-            
-            // 행사 정보를 개별 태그로 분리하여 표시
-            if (product.promotion && product.promotion !== '없음' && product.promotion !== '-') {
-                const promotion = product.promotion.toLowerCase();
-                const promotions = promotion.split(',').map(p => p.trim());
-                
-                promotions.forEach(p => {
-                    // 쿠폰 체크
-                    if (p.includes('쿠폰')) {
-                        promotionDisplay += `<span style="display: inline-block; background-color: #96D165; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">쿠폰</span>`;
-                    }
-                    
-                    // 증정 체크
-                    if (p.includes('증정')) {
-                        promotionDisplay += `<span style="display: inline-block; background-color: #82CAFA; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">증정</span>`;
-                    }
-                    
-                    // 오늘드림 체크
-                    if (p.includes('오늘드림') || p.includes('드림')) {
-                        promotionDisplay += `<span style="display: inline-block; background-color: #F574B8; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">오늘드림</span>`;
-                    }
-                    
-                    // 세일 체크
-                    if (p.includes('세일')) {
-                        promotionDisplay += `<span style="display: inline-block; background-color: #FF6B6B; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">세일</span>`;
-                    }
-                });
-                
-                // 기타 행사가 있는 경우 (위 조건에 해당하지 않는 경우)
-                if (!promotionDisplay && product.promotion.trim()) {
-                    promotionDisplay = `<span style="display: inline-block; background-color: #ADB5BD; color: white; padding: 4px 12px; border-radius: 20px; margin-right: 5px; font-size: 12px; font-weight: bold;">${product.promotion}</span>`;
-                }
-            }
-            
-            if (!promotionDisplay) {
-                promotionDisplay = `<span style="color: #999; font-size: 12px;">-</span>`;
-            }
-            
-            const row = rankingTable.insertRow();
-            
-            // 날짜와 시간을 한 줄로 표시
-            const dateTimeStr = product.time ? `${product.date}<br>${product.time}` : product.date;
-            
-            // 제품명 길이 제한 제거 - 전체 표시
-            const displayName = product.name || '';
-            
-            // 판매가 셀에 더 큰 글자 크기와 강조 적용
-            row.innerHTML = `
-                <td style="width: 140px; text-align: center; font-weight: bold; color: #333; white-space: pre-line;">${dateTimeStr}</td>
-                <td style="width: 120px; text-align: center;"><span style="background-color: #12B886; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">${product.category || '전체'}</span></td>
-                <td style="width: 60px; text-align: center;">${product.rank || (index + 1)}</td>
-                <td style="width: 120px; text-align: left; font-weight: bold; color: #333;">${product.brand || ''}</td>
-                <td style="min-width: 400px; text-align: left; white-space: normal; word-break: break-word;">${displayName}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px;">${formatPrice(product.originalPrice)}</td>
-                <td style="width: 85px; text-align: left; padding-left: 15px; font-weight: bold; color: #333; font-size: 0.85rem;">${formatPrice(product.salePrice || product.price)}</td>
-                <td style="width: 180px; text-align: left;">${promotionDisplay}</td>
-            `;
-        });
-
-        // 테이블 헤더도 동일한 스타일 적용
-        const tableHeader = document.querySelector('#rankingTable thead tr') || document.querySelector('#productSearchTable thead tr');
-        if (tableHeader) {
-            tableHeader.innerHTML = `
-                <th style="width: 140px; text-align: center;">날짜/시간</th>
-                <th style="width: 120px; text-align: center;">카테고리</th>
-                <th style="width: 60px; text-align: left;">순위</th>
-                <th style="width: 120px; text-align: left;">브랜드</th>
-                <th style="min-width: 400px; text-align: left;">제품명</th>
-                <th style="width: 85px; text-align: left;">소비자가</th>
-                <th style="width: 85px; text-align: left;">판매가</th>
-                <th style="width: 180px; text-align: left;">행사</th>
-            `;
-        }
-    }
-
-    // 랭킹 에러 표시
-    function displayRankingError(message) {
-        rankingTable.innerHTML = `
-            <tr>
-                <td colspan="8" style="text-align: center; color: red; padding: 20px;">
-                    ${message}
-                </td>
-            </tr>
-        `;
-    }
-
-    // 버튼 호버 효과 추가
-    const buttons = document.querySelectorAll('.button-container button');
-    buttons.forEach(button => {
-        button.addEventListener('mouseover', function() {
-            this.style.transform = 'translateY(-3px)';
-            this.style.boxShadow = '0 6px 8px rgba(0,0,0,0.2)';
-        });
-        
-        button.addEventListener('mouseout', function() {
-            this.style.transform = '';
-            this.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-        });
-        
-        button.addEventListener('mousedown', function() {
-            this.style.transform = 'translateY(1px)';
-            this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-        });
-        
-        button.addEventListener('mouseup', function() {
-            this.style.transform = 'translateY(-3px)';
-            this.style.boxShadow = '0 6px 8px rgba(0,0,0,0.2)';
-        });
-    });
-
-    // 초기 캡처 목록 로드 (숨겨둠)
-    loadCapturesFromServer();
+  // 버튼 호버 효과(디자인)
+  document.querySelectorAll('.button-container button').forEach((btn) => {
+    btn.addEventListener('mouseover', function(){ this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 8px rgba(0,0,0,.2)'; });
+    btn.addEventListener('mouseout',  function(){ this.style.transform='';            this.style.boxShadow='0 4px 6px rgba(0,0,0,.1)'; });
+    btn.addEventListener('mousedown', function(){ this.style.transform='translateY(1px)';  this.style.boxShadow='0 2px 4px rgba(0,0,0,.1)'; });
+    btn.addEventListener('mouseup',   function(){ this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 8px rgba(0,0,0,.2)'; });
+  });
 });
-
