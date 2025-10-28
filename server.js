@@ -390,12 +390,27 @@ async function captureOliveyoungMainRanking(timeStr) {
       await driver.wait(until.elementLocated(By.css('body')), 20000);
       await driver.sleep(3000);
 
+      // 상품 리스트가 실제로 로드될 때까지 대기
+      try {
+        await driver.wait(
+          until.elementLocated(By.css('ul.cate_prd_list')), 
+          15000
+        );
+        console.log(`${category} 상품 리스트 로드 완료`);
+      } catch (e) {
+        console.log(`${category} 상품 리스트 대기 시간 초과, 페이지 상태 확인 진행`);
+      }
+      
       await driver.wait(async () => (await driver.executeScript('return document.readyState')) === 'complete', 15000);
       await driver.sleep(2000);
-
+      
+      // 올리브영 페이지의 실제 DOM 구조에 맞춘 셀렉터
       const checkSelectors = [
-        '.TabsConts', '.prd_info', '.best_list', '.product_list', '.best_item',
-        '.item', '.product_item', '.ranking_list', '.list_item'
+        'ul.cate_prd_list',           // 메인 상품 리스트
+        'ul.cate_prd_list > li',      // 개별 상품 아이템
+        '.prd_info',                  // 상품 정보
+        '.prd_name',                  // 상품명
+        '.tx_name'                    // 상품명 (대체)
       ];
 
       let found = false;
